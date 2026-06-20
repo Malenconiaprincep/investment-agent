@@ -16,6 +16,7 @@ export const reportWriterAgent = new Agent({
   ## 同业对比
   ## 近期公告
   ## 相关资讯
+  （必须使用 Prompt 中「相关资讯（Markdown）」区块的内容，保留 [标题](url) 超链接格式，不要改成纯文本列表）
   ## 笔记库要点
   ## 数据来源与时效
   ## 风险提示

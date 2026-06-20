@@ -181,6 +181,16 @@ a {
   padding-bottom: 0.35rem;
 }
 
+.report-markdown .wmde-markdown a {
+  color: #6eb6ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.report-markdown .wmde-markdown a:hover {
+  color: #9dccff;
+}
+
 .report-markdown .wmde-markdown table {
   display: table;
   width: 100%;

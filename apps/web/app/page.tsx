@@ -131,6 +131,8 @@ export default function HomePage() {
           };
           setResult(finalResult);
           setStreamingReport(event.report);
+          setLoading(false);
+          setCurrentStep(null);
         }
       });
 
@@ -198,7 +200,7 @@ export default function HomePage() {
         ))}
       </div>
 
-      {loading && (
+      {loading && !result && (
         <div className="loading">
           <div>Workflow 执行中（SSE）…</div>
           <div className="step-progress">

@@ -1,6 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { emitResearchStreamEvent } from '../../api/research-stream-context.js';
+import { formatNewsMarkdown } from '../../data/market/format-report-news.js';
 import { enrichMarketDataWithIwencai } from '../../data/market/iwencai-fallback.js';
 import { searchResearchNotes } from '../../data/rag/search-notes.js';
 import { getStockBasic } from '../../data/market/services.js';
@@ -201,6 +202,7 @@ const preparePromptStep = createStep({
     bundle: z.unknown(),
   }),
   execute: async ({ inputData }) => {
+    const newsMarkdown = formatNewsMarkdown(inputData.news);
     const prompt = `请根据以下结构化数据撰写 A 股投研 Markdown 研报。
 
 标的：${inputData.target.name}（${inputData.target.symbol} / ${inputData.target.tsCode}）
@@ -217,8 +219,11 @@ ${JSON.stringify(inputData.financial, null, 2)}
 === 公告 ===
 ${JSON.stringify(inputData.announcements, null, 2)}
 
-=== 新闻 ===
+=== 新闻（原始 JSON） ===
 ${JSON.stringify(inputData.news, null, 2)}
+
+=== 相关资讯（Markdown，「相关资讯」章节请原样使用，保留超链接） ===
+${newsMarkdown}
 
 === 同业对比 ===
 ${JSON.stringify(inputData.peers, null, 2)}

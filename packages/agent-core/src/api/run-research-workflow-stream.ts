@@ -3,6 +3,7 @@ import 'dotenv/config';
 import type { WorkflowStreamEvent } from '@mastra/core/stream';
 import { saveResearchReport } from '../data/reports/store.js';
 import { mastra } from '../mastra/index.js';
+import { disconnectIwencaiMcp } from '../mastra/mcp/iwencai.js';
 import {
   emitResearchStreamEvent,
   withResearchStreamEmitter,
@@ -116,6 +117,7 @@ export async function runResearchWorkflowStream(
       };
     } finally {
       unwatch();
+      await disconnectIwencaiMcp().catch(() => {});
     }
   });
 }

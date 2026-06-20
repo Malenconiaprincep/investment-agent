@@ -18,6 +18,7 @@ export const searchNewsTool = createTool({
         datetime: z.string(),
         title: z.string(),
         source: z.string().nullable(),
+        url: z.string().nullable().optional(),
       }),
     ),
     count: z.number(),
