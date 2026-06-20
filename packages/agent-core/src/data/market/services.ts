@@ -6,6 +6,7 @@ import {
   fetchNews,
   fetchStockSnapshot,
 } from './free/eastmoney.js';
+import { fetchNewsBrowser } from './free/news-browser.js';
 import { fetchDailyKlines } from './free/tencent.js';
 import { buildMeta } from './meta.js';
 import { toSymbol, toTsCode } from './symbols.js';
@@ -147,13 +148,30 @@ export async function searchNews(symbol: string, days = 7) {
   const code = toSymbol(tsCode);
 
   const basic = await fetchStockSnapshot(code);
-  const { data, cached } = await fetchNews(code, basic.data.name, days);
 
-  return {
-    tsCode,
-    stockName: basic.data.name,
-    items: data,
-    count: data.length,
-    ...buildMeta('eastmoney', cached && basic.cached),
-  };
+  try {
+    const { data, cached } = await fetchNews(code, basic.data.name, days);
+    return {
+      tsCode,
+      stockName: basic.data.name,
+      items: data,
+      count: data.length,
+      fetchMethod: 'http' as const,
+      ...buildMeta('eastmoney', cached && basic.cached),
+    };
+  } catch (httpError) {
+    const { data } = await fetchNewsBrowser(code, days);
+    const message =
+      httpError instanceof Error ? httpError.message : String(httpError);
+
+    return {
+      tsCode,
+      stockName: basic.data.name,
+      items: data,
+      count: data.length,
+      fetchMethod: 'browser' as const,
+      httpError: message,
+      ...buildMeta('eastmoney', false),
+    };
+  }
 }

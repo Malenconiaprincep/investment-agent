@@ -1,6 +1,5 @@
 import { getCached, setCached } from '../cache.js';
-import { safeFetch } from '../../../lib/safe-fetch.js';
-import { FREE_ALLOWED_HOSTS, freeFetchJson, toMarketCode, toSecId } from './http.js';
+import { freeFetchJson, toMarketCode, toSecId } from './http.js';
 
 const TTL_MS = {
   snapshot: 30 * 60 * 1000,
@@ -49,13 +48,16 @@ type AnnouncementResponse = {
   };
 };
 
-type NewsResponse = {
-  result?: {
-    cmsArticleWebOld?: Array<{
-      date?: string;
-      title?: string;
-      mediaName?: string;
-    }>;
+type NewsBulletinResponse = {
+  gszx?: {
+    data?: {
+      items?: Array<{
+        title?: string;
+        showDateTime?: number;
+        url?: string;
+        summary?: string;
+      }>;
+    };
   };
 };
 
@@ -219,60 +221,42 @@ function mapAnnouncements(json: AnnouncementResponse, cutoff: Date) {
     }));
 }
 
-export async function fetchNews(symbol: string, stockName: string, days: number) {
+export async function fetchNews(symbol: string, _stockName: string, days: number) {
   const cacheKey = `em:news:${symbol}:${days}`;
-  const cached = getCached<ReturnType<typeof mapNews>>(cacheKey);
+  const cached = getCached<ReturnType<typeof mapNewsBulletin>>(cacheKey);
   if (cached) return { data: cached, cached: true as const };
 
-  const param = encodeURIComponent(
-    JSON.stringify({
-      uid: '',
-      keyword: stockName || symbol,
-      type: ['cmsArticleWebOld'],
-      client: 'web',
-      clientType: 'web',
-      clientVersion: 'curr',
-      pageIndex: 1,
-      pageSize: 20,
-    }),
+  const code = toMarketCode(symbol);
+  const json = await freeFetchJson<NewsBulletinResponse>(
+    `https://emweb.securities.eastmoney.com/PC_HSF10/NewsBulletin/PageAjax?code=${code}`,
   );
 
-  const response = await safeFetch(
-    `https://search-api-web.eastmoney.com/search/jsonp?param=${param}`,
-    {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        Referer: 'https://www.eastmoney.com/',
-      },
-    },
-    { allowedHosts: FREE_ALLOWED_HOSTS },
-  );
-
-  const rawText = await response.text();
-  const jsonText = rawText.replace(/^[^(]+\(/, '').replace(/\);?\s*$/, '');
-  const json = JSON.parse(jsonText) as NewsResponse;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
-  const data = mapNews(json, cutoff);
+  const data = mapNewsBulletin(json, cutoff);
   setCached(cacheKey, data, TTL_MS.news);
   return { data, cached: false as const };
 }
 
-function mapNews(json: NewsResponse, cutoff: Date) {
-  const list = json.result?.cmsArticleWebOld ?? [];
+function mapNewsBulletin(json: NewsBulletinResponse, cutoff: Date) {
+  const list = json.gszx?.data?.items ?? [];
 
   return list
     .filter((item) => {
-      if (!item.date) return true;
-      return new Date(item.date) >= cutoff;
+      if (!item.showDateTime) {
+        return true;
+      }
+      return new Date(item.showDateTime) >= cutoff;
     })
     .slice(0, 10)
     .map((item) => ({
-      datetime: String(item.date ?? ''),
-      title: String(item.title ?? '').replace(/<\/?em>/g, ''),
-      source: item.mediaName != null ? String(item.mediaName) : null,
+      datetime: item.showDateTime
+        ? new Date(item.showDateTime).toISOString()
+        : '',
+      title: String(item.title ?? ''),
+      source: null as string | null,
+      url: item.url != null ? String(item.url) : null,
     }));
 }
 
