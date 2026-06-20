@@ -15,7 +15,8 @@
     "eval": "tsx src/eval/run.ts",
     "eval:workflow": "tsx src/eval/workflow-run.ts",
     "research": "tsx src/cli/research.ts",
-    "research:json": "tsx src/cli/research-json.ts"
+    "research:json": "tsx src/cli/research-json.ts",
+    "research:stream": "tsx src/cli/research-stream.ts"
   },
   "dependencies": {
     "@mastra/core": "^1.45.0",

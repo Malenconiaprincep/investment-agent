@@ -1,5 +1,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { emitResearchStreamEvent } from '../../api/research-stream-context.js';
 import { searchResearchNotes } from '../../data/rag/search-notes.js';
 import { getStockBasic } from '../../data/market/services.js';
 import {
@@ -230,9 +231,16 @@ const writeReportStep = createStep({
   }),
   execute: async ({ inputData, mastra }) => {
     const agent = mastra.getAgent('reportWriterAgent');
-    const response = await agent.generate(inputData.prompt);
+    const stream = await agent.stream(inputData.prompt);
+    let text = '';
+
+    for await (const chunk of stream.textStream) {
+      text += chunk;
+      emitResearchStreamEvent({ type: 'token', text: chunk });
+    }
+
     return {
-      text: response.text ?? '',
+      text,
       bundle: inputData.bundle,
     };
   },

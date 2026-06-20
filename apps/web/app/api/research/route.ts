@@ -1,13 +1,10 @@
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
-
-const execFileAsync = promisify(execFile);
 
 const bodySchema = z
   .object({
@@ -25,6 +22,10 @@ function getAgentCoreRoot() {
   return path.resolve(process.cwd(), '../../packages/agent-core');
 }
 
+function encodeSSE(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export async function POST(request: Request) {
   try {
     const json: unknown = await request.json();
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
     }
 
     const agentCoreRoot = getAgentCoreRoot();
-    const args = ['exec', 'tsx', 'src/cli/research-json.ts'];
+    const tsxBin = path.join(agentCoreRoot, 'node_modules/.bin/tsx');
+    const scriptPath = path.join(agentCoreRoot, 'src/cli/research-stream.ts');
+    const args = [scriptPath];
 
     if (parsed.data.symbol) {
       args.push(parsed.data.symbol);
@@ -46,29 +49,67 @@ export async function POST(request: Request) {
       args.push(parsed.data.query);
     }
 
-    const startedAt = Date.now();
-
-    const { stdout, stderr } = await execFileAsync('pnpm', args, {
+    const child = spawn(tsxBin, args, {
       cwd: agentCoreRoot,
       env: process.env,
-      maxBuffer: 16 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    if (stderr?.trim()) {
-      console.warn('[research]', stderr.trim());
-    }
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(': stream-open\n\n'));
 
-    const result = JSON.parse(stdout) as Record<string, unknown>;
-    const elapsedMs = Date.now() - startedAt;
+        child.stdout.on('data', (chunk: Buffer) => {
+          controller.enqueue(new Uint8Array(chunk));
+        });
 
-    return NextResponse.json({ ...result, elapsedMs });
+        child.stderr.on('data', (chunk: Buffer) => {
+          const text = chunk.toString().trim();
+          if (text) {
+            console.warn('[research]', text);
+          }
+        });
+
+        child.on('error', (error) => {
+          const message =
+            error instanceof Error ? error.message : '子进程启动失败';
+          controller.enqueue(
+            encoder.encode(encodeSSE('error', { type: 'error', message })),
+          );
+          controller.close();
+        });
+
+        child.on('close', (code) => {
+          if (code !== 0 && code !== null) {
+            controller.enqueue(
+              encoder.encode(
+                encodeSSE('error', {
+                  type: 'error',
+                  message: `Workflow 退出码 ${code}`,
+                }),
+              ),
+            );
+          }
+          controller.close();
+        });
+      },
+      cancel() {
+        child.kill('SIGTERM');
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message.includes('JSON')
-          ? 'Workflow 返回格式异常'
-          : error.message
-        : '服务器错误';
+      error instanceof Error ? error.message : '服务器错误';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

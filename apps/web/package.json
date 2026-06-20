@@ -9,10 +9,10 @@
     "start": "next start --port 3000"
   },
   "dependencies": {
+    "@uiw/react-markdown-preview": "^5.2.1",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-markdown": "^10.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

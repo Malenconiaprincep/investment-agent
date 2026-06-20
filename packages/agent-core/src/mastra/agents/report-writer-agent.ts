@@ -21,6 +21,10 @@ export const reportWriterAgent = new Agent({
   ## 风险提示
   ## 待人工核实
   ## 免责声明（须写明不构成投资建议）
+- 表格使用标准 GFM Markdown，每行单独换行，例如：
+  | 指标 | 数值 |
+  | --- | --- |
+  | ROE | 10.57% |
 - 数据来源章节须列出各数据的 dataSource、asOf、cached
 - 笔记库要点须引用 file 字段；无笔记时说明「笔记库无相关命中」
 - 不提供买卖建议`,
