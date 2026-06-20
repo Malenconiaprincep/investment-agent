@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter @investment-agent/agent-core dev",
     "chat": "pnpm --filter @investment-agent/agent-core chat",
+    "ingest": "pnpm --filter @investment-agent/agent-core ingest",
+    "eval": "pnpm --filter @investment-agent/agent-core eval",
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev"
   },

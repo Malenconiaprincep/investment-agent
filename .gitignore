@@ -12,6 +12,9 @@ pino-detection.js
 packages/agent-core/pino-detection.js
 packages/agent-core/mastra.db
 packages/agent-core/mastra.db-*
+packages/agent-core/src/data/*.db
+packages/agent-core/src/data/*.db-*
+packages/agent-core/src/mastra/public/
 
 # Build
 dist/
