@@ -67,4 +67,4 @@ pnpm eval market-research-report
 
 ## 下一步：Phase 3
 
-多 Agent 协作或工作流编排。
+多 Agent 协作与 Workflow 编排，见 [phase3-learning.md](phase3-learning.md)。

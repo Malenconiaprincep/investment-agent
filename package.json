@@ -8,6 +8,8 @@
     "chat": "pnpm --filter @investment-agent/agent-core chat",
     "ingest": "pnpm --filter @investment-agent/agent-core ingest",
     "eval": "pnpm --filter @investment-agent/agent-core eval",
+    "eval:workflow": "pnpm --filter @investment-agent/agent-core eval:workflow",
+    "research": "pnpm --filter @investment-agent/agent-core research",
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev"
   },
