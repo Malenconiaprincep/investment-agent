@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import { saveResearchReport } from '../data/reports/store.js';
 import { mastra } from '../mastra/index.js';
 
 export type ResearchWorkflowInput = {
@@ -15,6 +16,7 @@ export type ResearchWorkflowOutput = {
   symbol: string;
   name: string;
   workflowCompletedAt: string;
+  reportId?: string;
 };
 
 export async function runResearchWorkflow(
@@ -32,5 +34,11 @@ export async function runResearchWorkflow(
     throw new Error(message);
   }
 
-  return result.result;
+  const output = result.result;
+  const saved = await saveResearchReport(output);
+
+  return {
+    ...output,
+    reportId: saved.id,
+  };
 }

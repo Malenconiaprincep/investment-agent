@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { readSSEStream } from '@/lib/sse';
@@ -13,6 +14,7 @@ type ResearchResult = {
   name: string;
   workflowCompletedAt: string;
   elapsedMs: number;
+  reportId?: string;
 };
 
 type StreamEvent =
@@ -29,6 +31,7 @@ type StreamEvent =
       name: string;
       workflowCompletedAt: string;
       elapsedMs: number;
+      reportId: string;
     }
   | { type: 'error'; message: string };
 
@@ -124,6 +127,7 @@ export default function HomePage() {
             name: event.name || metaName,
             workflowCompletedAt: event.workflowCompletedAt,
             elapsedMs: event.elapsedMs,
+            reportId: event.reportId,
           };
           setResult(finalResult);
           setStreamingReport(event.report);
@@ -228,6 +232,11 @@ export default function HomePage() {
             质检 {result.passed ? 'PASS' : 'FAIL'}
           </span>
           <span>耗时 {(result.elapsedMs / 1000).toFixed(1)}s</span>
+          {result.reportId && (
+            <Link href={`/history/${result.reportId}`} className="saved-link">
+              已保存 · 查看历史
+            </Link>
+          )}
         </div>
       )}
 

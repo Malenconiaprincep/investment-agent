@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 import type { WorkflowStreamEvent } from '@mastra/core/stream';
+import { saveResearchReport } from '../data/reports/store.js';
 import { mastra } from '../mastra/index.js';
 import {
   emitResearchStreamEvent,
@@ -25,6 +26,7 @@ export type ResearchStreamEvent =
       name: string;
       workflowCompletedAt: string;
       elapsedMs: number;
+      reportId: string;
     }
   | { type: 'error'; message: string };
 
@@ -93,6 +95,7 @@ export async function runResearchWorkflowStream(
 
       const output = result.result;
       const elapsedMs = Date.now() - startedAt;
+      const saved = await saveResearchReport({ ...output, elapsedMs });
 
       onEvent({
         type: 'done',
@@ -104,9 +107,13 @@ export async function runResearchWorkflowStream(
         name: output.name,
         workflowCompletedAt: output.workflowCompletedAt,
         elapsedMs,
+        reportId: saved.id,
       });
 
-      return output;
+      return {
+        ...output,
+        reportId: saved.id,
+      };
     } finally {
       unwatch();
     }
