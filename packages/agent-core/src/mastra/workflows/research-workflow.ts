@@ -1,6 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { emitResearchStreamEvent } from '../../api/research-stream-context.js';
+import { enrichMarketDataWithIwencai } from '../../data/market/iwencai-fallback.js';
 import { searchResearchNotes } from '../../data/rag/search-notes.js';
 import { getStockBasic } from '../../data/market/services.js';
 import {
@@ -75,6 +76,7 @@ const fetchMarketDataStep = createStep({
     news: z.unknown(),
     peers: z.unknown(),
     fetchErrors: z.array(z.string()),
+    iwencaiFallbacks: z.array(z.string()),
     fetchedAt: z.string(),
   }),
   execute: async ({ inputData, getStepResult }) => {
@@ -107,14 +109,25 @@ const fetchMarketDataStep = createStep({
       }
     });
 
-    return {
-      target,
+    const enriched = await enrichMarketDataWithIwencai({
+      symbol,
+      name: target.name,
       quote: data.quote,
       financial: data.financial,
       announcements: data.announcements,
       news: data.news,
+      fetchErrors,
+    });
+
+    return {
+      target,
+      quote: enriched.quote,
+      financial: enriched.financial,
+      announcements: enriched.announcements,
+      news: enriched.news,
       peers: data.peers,
       fetchErrors,
+      iwencaiFallbacks: enriched.iwencaiFallbacks,
       fetchedAt: new Date().toISOString(),
     };
   },
@@ -131,6 +144,7 @@ const searchNotesStep = createStep({
     news: z.unknown(),
     peers: z.unknown(),
     fetchErrors: z.array(z.string()),
+    iwencaiFallbacks: z.array(z.string()),
     fetchedAt: z.string(),
   }),
   outputSchema: z.object({
@@ -141,6 +155,7 @@ const searchNotesStep = createStep({
     news: z.unknown(),
     peers: z.unknown(),
     fetchErrors: z.array(z.string()),
+    iwencaiFallbacks: z.array(z.string()),
     fetchedAt: z.string(),
     notes: z.array(
       z.object({
@@ -170,6 +185,7 @@ const preparePromptStep = createStep({
     news: z.unknown(),
     peers: z.unknown(),
     fetchErrors: z.array(z.string()),
+    iwencaiFallbacks: z.array(z.string()),
     fetchedAt: z.string(),
     notes: z.array(
       z.object({
@@ -190,6 +206,7 @@ const preparePromptStep = createStep({
 标的：${inputData.target.name}（${inputData.target.symbol} / ${inputData.target.tsCode}）
 行业：${inputData.target.industry ?? '未知'}
 采集时间：${inputData.fetchedAt}
+问财补充字段：${inputData.iwencaiFallbacks.length > 0 ? inputData.iwencaiFallbacks.join('、') : '无'}
 
 === 行情数据 ===
 ${JSON.stringify(inputData.quote, null, 2)}
@@ -208,6 +225,9 @@ ${JSON.stringify(inputData.peers, null, 2)}
 
 === 采数异常（如有） ===
 ${JSON.stringify(inputData.fetchErrors, null, 2)}
+
+=== 问财补充说明 ===
+${inputData.iwencaiFallbacks.length > 0 ? '标注 dataSource=iwencai 的字段来自问财 MCP，须在「数据来源与时效」中单独说明。' : '无'}
 
 === 笔记库检索 ===
 ${JSON.stringify(inputData.notes, null, 2)}

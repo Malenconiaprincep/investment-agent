@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Tool } from '@mastra/core/tools';
+import { noopObserve } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { DATA_DIR } from '../config/paths.js';
 
@@ -15,6 +16,7 @@ export const IWENCAI_CORE_TOOLS = [
 const SERVER_NAME = 'iwencai';
 
 let client: MCPClient | null = null;
+let cachedCoreTools: Record<string, Tool> | null = null;
 
 function resolveIwencaiServerPath(): string {
   const configured = process.env.IWENCAI_MCP_SERVER_PATH?.trim();
@@ -98,6 +100,7 @@ export async function loadIwencaiCoreTools(): Promise<Record<string, Tool>> {
       return {};
     }
 
+    cachedCoreTools = core;
     console.info(
       `[iwencai-mcp] 已加载 ${Object.keys(core).length} 个核心工具: ${Object.keys(core).join(', ')}`,
     );
@@ -107,6 +110,51 @@ export async function loadIwencaiCoreTools(): Promise<Record<string, Tool>> {
     console.warn(`[iwencai-mcp] 加载失败，将仅使用本地行情工具: ${message}`);
     return {};
   }
+}
+
+function normalizeIwencaiToolResult(raw: unknown): unknown {
+  if (raw == null || typeof raw !== 'object') {
+    return raw;
+  }
+
+  if ('content' in raw) {
+    const content = (raw as { content?: Array<{ type: string; text?: string }> })
+      .content;
+    const text = content?.find((part) => part.type === 'text')?.text;
+    if (text) {
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        return text;
+      }
+    }
+  }
+
+  return raw;
+}
+
+export async function getIwencaiCoreToolMap(): Promise<Record<string, Tool>> {
+  if (cachedCoreTools) {
+    return cachedCoreTools;
+  }
+  return loadIwencaiCoreTools();
+}
+
+/** Workflow / 脚本直接调用问财 MCP 工具（不经 LLM） */
+export async function callIwencaiCoreTool(
+  toolName: (typeof IWENCAI_CORE_TOOLS)[number],
+  input: { query: string; page?: string; limit?: string; timeout?: number },
+): Promise<unknown> {
+  const tools = await getIwencaiCoreToolMap();
+  const key = `${SERVER_NAME}_${toolName}`;
+  const tool = tools[key];
+
+  if (!tool?.execute) {
+    throw new Error(`问财工具不可用: ${key}`);
+  }
+
+  const raw = await tool.execute(input, { observe: noopObserve });
+  return normalizeIwencaiToolResult(raw);
 }
 
 /** 注册到 Mastra.mcpServers，供 Studio「MCP Servers」页展示 */
@@ -135,4 +183,5 @@ export async function disconnectIwencaiMcp(): Promise<void> {
 
   await client.disconnect();
   client = null;
+  cachedCoreTools = null;
 }
