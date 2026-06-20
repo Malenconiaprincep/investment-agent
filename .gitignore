@@ -16,6 +16,9 @@ packages/agent-core/src/data/*.db
 packages/agent-core/src/data/*.db-*
 packages/agent-core/src/mastra/public/
 
+# Third-party MCP servers (clone via pnpm setup:iwencai)
+packages/agent-core/vendor/
+
 # Build
 dist/
 .next/
