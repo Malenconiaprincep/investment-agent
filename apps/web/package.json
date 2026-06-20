@@ -1,0 +1,9 @@
+{
+  "name": "@investment-agent/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Investment research agent web UI (Phase 4)",
+  "scripts": {
+    "dev": "echo 'Web UI 将在 Phase 4 实现。当前请使用根目录 pnpm dev 启动 Mastra Studio。'"
+  }
+}

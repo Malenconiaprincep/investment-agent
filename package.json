@@ -1,0 +1,15 @@
+{
+  "name": "investment-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A-share investment research agent powered by Mastra",
+  "scripts": {
+    "dev": "pnpm --filter @investment-agent/agent-core dev",
+    "chat": "pnpm --filter @investment-agent/agent-core chat",
+    "build": "pnpm -r build",
+    "web:dev": "pnpm --filter @investment-agent/web dev"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
