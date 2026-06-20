@@ -1,0 +1,349 @@
+import { getCached, setCached } from '../cache.js';
+import { safeFetch } from '../../../lib/safe-fetch.js';
+import { FREE_ALLOWED_HOSTS, freeFetchJson, toMarketCode, toSecId } from './http.js';
+
+const TTL_MS = {
+  snapshot: 30 * 60 * 1000,
+  profile: 24 * 60 * 60 * 1000,
+  financial: 24 * 60 * 60 * 1000,
+  announcements: 6 * 60 * 60 * 1000,
+  news: 60 * 60 * 1000,
+  industry: 24 * 60 * 60 * 1000,
+} as const;
+
+type SnapshotResponse = {
+  data?: {
+    f57?: string;
+    f58?: string;
+    f127?: string;
+    f162?: number;
+    f167?: number;
+  };
+};
+
+type CompanySurveyResponse = {
+  jbzl?: Array<{
+    SECURITY_NAME_ABBR?: string;
+    INDUSTRYCSRC1?: string;
+    PROVINCE?: string;
+    TRADE_MARKET?: string;
+  }>;
+  fxxg?: Array<{ LISTING_DATE?: string }>;
+};
+
+type FinancialResponse = {
+  bgq?: Array<{
+    REPORT_DATE?: string;
+    NOTICE_DATE?: string;
+    TOTAL_OPERATE_INCOME?: number;
+    NETPROFIT?: number;
+    ROE?: number;
+    DEBT_ASSET_RATIO?: number;
+    SALE_NPR?: number;
+  }>;
+};
+
+type AnnouncementResponse = {
+  data?: {
+    list?: Array<{ notice_date?: string; title?: string }>;
+  };
+};
+
+type NewsResponse = {
+  result?: {
+    cmsArticleWebOld?: Array<{
+      date?: string;
+      title?: string;
+      mediaName?: string;
+    }>;
+  };
+};
+
+type IndustryListResponse = {
+  data?: {
+    diff?: Record<string, { f12?: string; f14?: string }>;
+  };
+};
+
+type IndustryPeersResponse = {
+  data?: {
+    diff?: Array<{
+      f12?: string;
+      f14?: string;
+      f9?: number;
+      f23?: number;
+      f20?: number;
+    }>;
+  };
+};
+
+export async function fetchStockSnapshot(symbol: string) {
+  const cacheKey = `em:snapshot:${symbol}`;
+  const cached = getCached<ReturnType<typeof mapSnapshot>>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const secid = toSecId(symbol);
+  const json = await freeFetchJson<SnapshotResponse>(
+    `https://push2delay.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f57,f58,f127,f162,f167`,
+  );
+
+  if (!json.data?.f57) {
+    throw new Error(`未找到股票: ${symbol}`);
+  }
+
+  const data = mapSnapshot(symbol, json.data);
+  setCached(cacheKey, data, TTL_MS.snapshot);
+  return { data, cached: false as const };
+}
+
+function mapSnapshot(
+  symbol: string,
+  raw: NonNullable<SnapshotResponse['data']>,
+) {
+  return {
+    symbol: String(raw.f57 ?? symbol),
+    name: String(raw.f58 ?? ''),
+    industry: raw.f127 != null ? String(raw.f127) : null,
+    pe: raw.f162 != null ? Number(raw.f162) / 100 : null,
+    pb: raw.f167 != null ? Number(raw.f167) / 100 : null,
+  };
+}
+
+export async function fetchCompanyProfile(symbol: string) {
+  const cacheKey = `em:profile:${symbol}`;
+  const cached = getCached<ReturnType<typeof mapProfile>>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const code = toMarketCode(symbol);
+  const json = await freeFetchJson<CompanySurveyResponse>(
+    `https://emweb.securities.eastmoney.com/PC_HSF10/CompanySurvey/PageAjax?code=${code}`,
+  );
+
+  const data = mapProfile(json);
+  setCached(cacheKey, data, TTL_MS.profile);
+  return { data, cached: false as const };
+}
+
+function mapProfile(json: CompanySurveyResponse) {
+  const basic = json.jbzl?.[0];
+  const issue = json.fxxg?.[0];
+
+  return {
+    area: basic?.PROVINCE != null ? String(basic.PROVINCE) : null,
+    industryDetail:
+      basic?.INDUSTRYCSRC1 != null ? String(basic.INDUSTRYCSRC1) : null,
+    market: basic?.TRADE_MARKET != null ? String(basic.TRADE_MARKET) : null,
+    listDate:
+      issue?.LISTING_DATE != null
+        ? String(issue.LISTING_DATE).slice(0, 10).replace(/-/g, '')
+        : null,
+  };
+}
+
+export async function fetchLatestFinancial(symbol: string) {
+  const cacheKey = `em:financial:${symbol}`;
+  const cached = getCached<ReturnType<typeof mapFinancial>>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const code = toMarketCode(symbol);
+  const json = await freeFetchJson<FinancialResponse>(
+    `https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/DBFXAjaxNew?type=0&code=${code}`,
+  );
+
+  const row = json.bgq?.[0];
+  if (!row) {
+    throw new Error(`暂无财务数据: ${symbol}`);
+  }
+
+  const data = mapFinancial(row);
+  setCached(cacheKey, data, TTL_MS.financial);
+  return { data, cached: false as const };
+}
+
+function mapFinancial(row: NonNullable<FinancialResponse['bgq']>[number]) {
+  return {
+    endDate:
+      row.REPORT_DATE != null
+        ? String(row.REPORT_DATE).slice(0, 10).replace(/-/g, '')
+        : null,
+    annDate:
+      row.NOTICE_DATE != null
+        ? String(row.NOTICE_DATE).slice(0, 10).replace(/-/g, '')
+        : null,
+    revenue:
+      row.TOTAL_OPERATE_INCOME != null
+        ? Number(row.TOTAL_OPERATE_INCOME)
+        : null,
+    netProfit: row.NETPROFIT != null ? Number(row.NETPROFIT) : null,
+    roe: row.ROE != null ? Number(row.ROE) : null,
+    debtRatio:
+      row.DEBT_ASSET_RATIO != null ? Number(row.DEBT_ASSET_RATIO) : null,
+    grossMargin: row.SALE_NPR != null ? Number(row.SALE_NPR) : null,
+    revenueYoy: null as number | null,
+    netProfitYoy: null as number | null,
+  };
+}
+
+export async function fetchAnnouncements(symbol: string, days: number) {
+  const cacheKey = `em:ann:${symbol}:${days}`;
+  const cached = getCached<ReturnType<typeof mapAnnouncements>>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const json = await freeFetchJson<AnnouncementResponse>(
+    `https://np-anotice-stock.eastmoney.com/api/security/ann?sr=-1&page_size=15&page_index=1&ann_type=A&client_source=web&stock_list=${symbol}`,
+  );
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  const data = mapAnnouncements(json, cutoff);
+  setCached(cacheKey, data, TTL_MS.announcements);
+  return { data, cached: false as const };
+}
+
+function mapAnnouncements(json: AnnouncementResponse, cutoff: Date) {
+  const list = json.data?.list ?? [];
+
+  return list
+    .filter((item) => {
+      if (!item.notice_date) return true;
+      return new Date(item.notice_date) >= cutoff;
+    })
+    .slice(0, 15)
+    .map((item) => ({
+      annDate:
+        item.notice_date != null
+          ? String(item.notice_date).slice(0, 10).replace(/-/g, '')
+          : '',
+      title: String(item.title ?? ''),
+    }));
+}
+
+export async function fetchNews(symbol: string, stockName: string, days: number) {
+  const cacheKey = `em:news:${symbol}:${days}`;
+  const cached = getCached<ReturnType<typeof mapNews>>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const param = encodeURIComponent(
+    JSON.stringify({
+      uid: '',
+      keyword: stockName || symbol,
+      type: ['cmsArticleWebOld'],
+      client: 'web',
+      clientType: 'web',
+      clientVersion: 'curr',
+      pageIndex: 1,
+      pageSize: 20,
+    }),
+  );
+
+  const response = await safeFetch(
+    `https://search-api-web.eastmoney.com/search/jsonp?param=${param}`,
+    {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Referer: 'https://www.eastmoney.com/',
+      },
+    },
+    { allowedHosts: FREE_ALLOWED_HOSTS },
+  );
+
+  const rawText = await response.text();
+  const jsonText = rawText.replace(/^[^(]+\(/, '').replace(/\);?\s*$/, '');
+  const json = JSON.parse(jsonText) as NewsResponse;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  const data = mapNews(json, cutoff);
+  setCached(cacheKey, data, TTL_MS.news);
+  return { data, cached: false as const };
+}
+
+function mapNews(json: NewsResponse, cutoff: Date) {
+  const list = json.result?.cmsArticleWebOld ?? [];
+
+  return list
+    .filter((item) => {
+      if (!item.date) return true;
+      return new Date(item.date) >= cutoff;
+    })
+    .slice(0, 10)
+    .map((item) => ({
+      datetime: String(item.date ?? ''),
+      title: String(item.title ?? '').replace(/<\/?em>/g, ''),
+      source: item.mediaName != null ? String(item.mediaName) : null,
+    }));
+}
+
+async function findIndustryBoard(industryName: string): Promise<string | null> {
+  const cacheKey = `em:board:${industryName}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached) return cached;
+
+  const keyword = industryName.replace(/[ⅠⅡⅢⅣⅤ\d\s]/g, '').slice(0, 4);
+  if (!keyword) return null;
+
+  const json = await freeFetchJson<IndustryListResponse>(
+    'https://push2delay.eastmoney.com/api/qt/clist/get?pn=1&pz=500&fs=m:90+t:2&fields=f12,f14',
+  );
+
+  const diff = json.data?.diff ?? {};
+  const boards = Object.values(diff);
+
+  const match =
+    boards.find((item) => String(item.f14 ?? '').includes(keyword)) ??
+    boards.find((item) => keyword.includes(String(item.f14 ?? '').slice(0, 2)));
+
+  if (!match?.f12) return null;
+
+  const boardCode = String(match.f12);
+  setCached(cacheKey, boardCode, TTL_MS.industry);
+  return boardCode;
+}
+
+export async function fetchIndustryPeers(
+  industryName: string,
+  excludeSymbol: string,
+  limit: number,
+) {
+  const boardCode = await findIndustryBoard(industryName);
+  if (!boardCode) {
+    return { peers: [], cached: false as const };
+  }
+
+  const cacheKey = `em:peers:${boardCode}:${limit}`;
+  const cached = getCached<ReturnType<typeof mapPeers>>(cacheKey);
+  if (cached) return { peers: cached, cached: true as const };
+
+  const json = await freeFetchJson<IndustryPeersResponse>(
+    `https://push2delay.eastmoney.com/api/qt/clist/get?pn=1&pz=${limit + 5}&fs=b:${boardCode}&fields=f12,f14,f9,f23,f20`,
+  );
+
+  const peers = mapPeers(json, excludeSymbol, limit);
+  setCached(cacheKey, peers, TTL_MS.industry);
+  return { peers, cached: false as const };
+}
+
+function mapPeers(
+  json: IndustryPeersResponse,
+  excludeSymbol: string,
+  limit: number,
+) {
+  const diff = json.data?.diff ?? [];
+
+  return diff
+    .filter((item) => String(item.f12) !== excludeSymbol)
+    .slice(0, limit)
+    .map((item) => ({
+      symbol: String(item.f12 ?? ''),
+      name: String(item.f14 ?? ''),
+      roe: null as number | null,
+      debtRatio: null as number | null,
+      revenueYoy: null as number | null,
+      pe: item.f9 != null ? Number(item.f9) : null,
+      pb: item.f23 != null ? Number(item.f23) : null,
+      marketCap: item.f20 != null ? Number(item.f20) : null,
+      endDate: null as string | null,
+    }));
+}

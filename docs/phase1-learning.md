@@ -20,7 +20,7 @@ flowchart TB
 
 | 模块 | 作用 | 何时用 |
 |------|------|--------|
-| `safeFetch` | 域名白名单 + 超时 + HTTP 状态检查 | Phase 2 接 Tushare/外部 API |
+| `safeFetch` | 域名白名单 + 超时 + HTTP 状态检查 | 接东方财富/腾讯等外部 API |
 | `retryWithBackoff` | 指数退避重试 | 网络抖动、429/503 |
 | `zodValidate` | 运行时数据校验 | Tool 入参/出参、API 响应 |
 
@@ -83,4 +83,4 @@ pnpm eval time-beijing # 跑单条
 
 ## 下一步：Phase 2
 
-接入 Tushare 真实 A 股数据，把 `get-mock-stock-quote` 替换为真实行情/财报 Tool。
+接入东方财富/腾讯真实 A 股数据，把 `get-mock-stock-quote` 替换为真实行情/财报 Tool。
