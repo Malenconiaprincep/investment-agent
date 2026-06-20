@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./research": "./src/api/run-research-workflow.ts"
+  },
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
@@ -11,7 +14,8 @@
     "ingest": "tsx src/scripts/ingest-notes.ts",
     "eval": "tsx src/eval/run.ts",
     "eval:workflow": "tsx src/eval/workflow-run.ts",
-    "research": "tsx src/cli/research.ts"
+    "research": "tsx src/cli/research.ts",
+    "research:json": "tsx src/cli/research-json.ts"
   },
   "dependencies": {
     "@mastra/core": "^1.45.0",

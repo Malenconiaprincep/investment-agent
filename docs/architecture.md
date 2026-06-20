@@ -45,5 +45,4 @@ flowchart LR
 - **Phase 0**（当前）：Hello Agent + 2 个演示 Tool
 - **Phase 1**：Tool 基建、Memory、RAG、Eval
 - **Phase 2**：东方财富/腾讯真实 A 股数据
-- **Phase 3**（当前）：五步 Research Workflow（`researchWorkflow`）
-- **Phase 4**：Next.js 投研 UI
+- **Phase 4**（当前）：Next.js 投研 UI（`pnpm web:dev`）

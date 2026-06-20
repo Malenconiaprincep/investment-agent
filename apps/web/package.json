@@ -2,8 +2,23 @@
   "name": "@investment-agent/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Investment research agent web UI (Phase 4)",
+  "description": "Investment research agent web UI",
   "scripts": {
-    "dev": "echo 'Web UI 将在 Phase 4 实现。当前请使用根目录 pnpm dev 启动 Mastra Studio。'"
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000"
+  },
+  "dependencies": {
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^6.0.3"
   }
 }
