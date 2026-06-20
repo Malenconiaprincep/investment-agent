@@ -8,6 +8,7 @@ export function SiteNav() {
       </Link>
       <div className="site-nav-links">
         <Link href="/">生成研报</Link>
+        <Link href="/screen">选股 / 板块</Link>
         <Link href="/history">历史记录</Link>
       </div>
     </nav>

@@ -1,0 +1,132 @@
+import 'dotenv/config';
+
+import type { WorkflowStreamEvent } from '@mastra/core/stream';
+import { saveScreeningSession } from '../data/screening/store.js';
+import { mastra } from '../mastra/index.js';
+import { disconnectIwencaiMcp } from '../mastra/mcp/iwencai.js';
+import type { SectorScreenWorkflowInput } from '../mastra/workflows/sector-screen-workflow.js';
+import {
+  emitScreenStreamEvent,
+  withScreenStreamEmitter,
+} from './screen-stream-context.js';
+import type { ScreenStreamEvent } from './screen-stream-types.js';
+
+export type { ScreenStreamEvent } from './screen-stream-types.js';
+
+const STEP_LABELS: Record<string, string> = {
+  'discover-hot-market': '扫描热点',
+  'fetch-sectors': '板块筛选',
+  'fetch-candidates': '候选股筛选',
+  'enrich-basics': '补全基本信息',
+  summarize: '轮动摘要',
+  'quality-check': '质量检查',
+};
+
+function mapWorkflowChunk(chunk: WorkflowStreamEvent): ScreenStreamEvent[] {
+  const events: ScreenStreamEvent[] = [];
+
+  if (chunk.type === 'workflow-step-start') {
+    events.push({
+      type: 'step',
+      step: chunk.payload.id,
+      label: STEP_LABELS[chunk.payload.id] ?? chunk.payload.id,
+    });
+  }
+
+  if (chunk.type === 'workflow-step-result') {
+    const output = chunk.payload.output as Record<string, unknown> | undefined;
+    if (chunk.payload.id === 'discover-hot-market' && output) {
+      events.push({
+        type: 'hotNews',
+        query: String(output.query ?? ''),
+        mode: (output.mode as 'auto' | 'manual') ?? 'auto',
+        hotThemes: (output.hotThemes as string[]) ?? [],
+        hotNews: (output.hotNews as Array<{
+          title: string;
+          datetime: string;
+          url: string | null;
+        }>) ?? [],
+      });
+    }
+    if (chunk.payload.id === 'fetch-sectors' && output?.sectors) {
+      events.push({
+        type: 'sectors',
+        sectors: output.sectors as Array<{
+          name: string;
+          reason: string;
+          dataSource: string;
+        }>,
+      });
+    }
+    if (chunk.payload.id === 'enrich-basics' && output?.candidates) {
+      events.push({
+        type: 'candidates',
+        candidates: output.candidates as Array<{
+          symbol: string;
+          name: string;
+          thesis: string;
+          dataSource: string;
+        }>,
+      });
+    }
+  }
+
+  return events;
+}
+
+export async function runSectorScreenStream(
+  input: SectorScreenWorkflowInput,
+  onEvent: (event: ScreenStreamEvent) => void,
+) {
+  return withScreenStreamEmitter(onEvent, async () => {
+    const startedAt = Date.now();
+    const workflow = mastra.getWorkflow('sectorScreenWorkflow');
+    const run = await workflow.createRun();
+
+    const unwatch = run.watch((chunk) => {
+      for (const event of mapWorkflowChunk(chunk)) {
+        onEvent(event);
+      }
+    });
+
+    try {
+      const result = await run.start({ inputData: input });
+
+      if (result.status !== 'success') {
+        const message =
+          result.status === 'failed'
+            ? (result.error?.message ?? 'Workflow 执行失败')
+            : `Workflow 状态: ${result.status}`;
+        throw new Error(message);
+      }
+
+      const output = result.result;
+      const elapsedMs = Date.now() - startedAt;
+      const saved = await saveScreeningSession({ ...output, elapsedMs });
+
+      onEvent({
+        type: 'done',
+        query: output.query,
+        sectors: output.sectors,
+        candidates: output.candidates,
+        rotationSummary: output.rotationSummary,
+        hotNews: output.hotNews ?? [],
+        hotThemes: output.hotThemes ?? [],
+        mode: output.mode ?? 'auto',
+        passed: output.passed,
+        missingSections: output.missingSections,
+        missingKeywords: output.missingKeywords,
+        screenedAt: output.screenedAt,
+        elapsedMs,
+        sessionId: saved.id,
+      });
+
+      return { ...output, sessionId: saved.id };
+    } finally {
+      unwatch();
+      await disconnectIwencaiMcp().catch(() => {});
+    }
+  });
+}
+
+export { emitScreenStreamEvent };

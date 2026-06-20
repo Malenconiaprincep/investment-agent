@@ -5,7 +5,7 @@ import { noopObserve } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { DATA_DIR } from '../config/paths.js';
 
-/** 首批接入的问财 MCP 核心工具（不含选股/宏观等扩展能力） */
+/** 投研 Agent 核心工具 */
 export const IWENCAI_CORE_TOOLS = [
   'hithink_market_query',
   'hithink_finance_query',
@@ -13,10 +13,25 @@ export const IWENCAI_CORE_TOOLS = [
   'announcement_search',
 ] as const;
 
+/** 板块轮动 / 选股 Workflow 工具 */
+export const IWENCAI_SCREEN_TOOLS = [
+  'hithink_sector_selector',
+  'hithink_astock_selector',
+  'hithink_industry_query',
+] as const;
+
+export const IWENCAI_ALL_TOOLS = [
+  ...IWENCAI_CORE_TOOLS,
+  ...IWENCAI_SCREEN_TOOLS,
+] as const;
+
+export type IwencaiToolName = (typeof IWENCAI_ALL_TOOLS)[number];
+
 const SERVER_NAME = 'iwencai';
 
 let client: MCPClient | null = null;
 let cachedCoreTools: Record<string, Tool> | null = null;
+let cachedAllTools: Record<string, Tool> | null = null;
 
 function resolveIwencaiServerPath(): string {
   const configured = process.env.IWENCAI_MCP_SERVER_PATH?.trim();
@@ -67,11 +82,12 @@ export function getIwencaiMcpClient(): MCPClient {
   return client;
 }
 
-function pickCoreTools(
+function pickTools(
   tools: Record<string, Tool>,
+  allowedNames: readonly string[],
 ): Record<string, Tool> {
   const allowed = new Set(
-    IWENCAI_CORE_TOOLS.map((name) => `${SERVER_NAME}_${name}`),
+    allowedNames.map((name) => `${SERVER_NAME}_${name}`),
   );
   const picked: Record<string, Tool> = {};
 
@@ -84,7 +100,10 @@ function pickCoreTools(
   return picked;
 }
 
-export async function loadIwencaiCoreTools(): Promise<Record<string, Tool>> {
+async function loadIwencaiToolsSubset(
+  allowedNames: readonly string[],
+  label: string,
+): Promise<Record<string, Tool>> {
   if (!isIwencaiMcpConfigured()) {
     console.warn('[iwencai-mcp] IWENCAI_API_KEY 未设置，跳过问财 MCP 工具');
     return {};
@@ -93,23 +112,35 @@ export async function loadIwencaiCoreTools(): Promise<Record<string, Tool>> {
   try {
     const mcp = getIwencaiMcpClient();
     const tools = await mcp.listTools();
-    const core = pickCoreTools(tools);
+    const picked = pickTools(tools, allowedNames);
 
-    if (Object.keys(core).length === 0) {
-      console.warn('[iwencai-mcp] 未找到核心工具，请检查 MCP Server');
+    if (Object.keys(picked).length === 0) {
+      console.warn(`[iwencai-mcp] 未找到 ${label} 工具，请检查 MCP Server`);
       return {};
     }
 
-    cachedCoreTools = core;
     console.info(
-      `[iwencai-mcp] 已加载 ${Object.keys(core).length} 个核心工具: ${Object.keys(core).join(', ')}`,
+      `[iwencai-mcp] 已加载 ${Object.keys(picked).length} 个${label}工具: ${Object.keys(picked).join(', ')}`,
     );
-    return core;
+    return picked;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[iwencai-mcp] 加载失败，将仅使用本地行情工具: ${message}`);
+    console.warn(`[iwencai-mcp] ${label}工具加载失败: ${message}`);
     return {};
   }
+}
+
+export async function loadIwencaiCoreTools(): Promise<Record<string, Tool>> {
+  const core = await loadIwencaiToolsSubset(IWENCAI_CORE_TOOLS, '核心');
+  cachedCoreTools = core;
+  return core;
+}
+
+export async function loadIwencaiScreenTools(): Promise<Record<string, Tool>> {
+  return loadIwencaiToolsSubset(
+    [...IWENCAI_CORE_TOOLS, ...IWENCAI_SCREEN_TOOLS],
+    '选股',
+  );
 }
 
 function normalizeIwencaiToolResult(raw: unknown): unknown {
@@ -140,12 +171,31 @@ export async function getIwencaiCoreToolMap(): Promise<Record<string, Tool>> {
   return loadIwencaiCoreTools();
 }
 
+async function getIwencaiAllToolMap(): Promise<Record<string, Tool>> {
+  if (cachedAllTools) {
+    return cachedAllTools;
+  }
+
+  if (!isIwencaiMcpConfigured()) {
+    return {};
+  }
+
+  try {
+    const mcp = getIwencaiMcpClient();
+    const tools = await mcp.listTools();
+    cachedAllTools = pickTools(tools, IWENCAI_ALL_TOOLS);
+    return cachedAllTools;
+  } catch {
+    return {};
+  }
+}
+
 /** Workflow / 脚本直接调用问财 MCP 工具（不经 LLM） */
-export async function callIwencaiCoreTool(
-  toolName: (typeof IWENCAI_CORE_TOOLS)[number],
+export async function callIwencaiTool(
+  toolName: IwencaiToolName,
   input: { query: string; page?: string; limit?: string; timeout?: number },
 ): Promise<unknown> {
-  const tools = await getIwencaiCoreToolMap();
+  const tools = await getIwencaiAllToolMap();
   const key = `${SERVER_NAME}_${toolName}`;
   const tool = tools[key];
 
@@ -155,6 +205,14 @@ export async function callIwencaiCoreTool(
 
   const raw = await tool.execute(input, { observe: noopObserve });
   return normalizeIwencaiToolResult(raw);
+}
+
+/** @deprecated 使用 callIwencaiTool */
+export async function callIwencaiCoreTool(
+  toolName: (typeof IWENCAI_CORE_TOOLS)[number],
+  input: { query: string; page?: string; limit?: string; timeout?: number },
+): Promise<unknown> {
+  return callIwencaiTool(toolName, input);
 }
 
 /** 注册到 Mastra.mcpServers，供 Studio「MCP Servers」页展示 */
@@ -184,4 +242,5 @@ export async function disconnectIwencaiMcp(): Promise<void> {
   await client.disconnect();
   client = null;
   cachedCoreTools = null;
+  cachedAllTools = null;
 }
