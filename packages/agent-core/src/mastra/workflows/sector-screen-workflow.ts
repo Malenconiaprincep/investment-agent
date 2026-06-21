@@ -84,9 +84,9 @@ const candidateDiamondSchema = z
 const factorScoreSchema = z
   .object({
     total: z.number(),
-    shortTermScore: z.number(),
-    trendScore: z.number(),
-    outlook: z.enum(['short-bullish', 'trend-bullish', 'neutral', 'weak']),
+    longTermScore: z.number(),
+    stabilityScore: z.number(),
+    outlook: z.enum(['long-bullish', 'long-watch', 'neutral', 'weak']),
     outlookLabel: z.string(),
     factors: z.array(
       z.object({
@@ -97,9 +97,9 @@ const factorScoreSchema = z
         detail: z.string().optional(),
       }),
     ),
-    ret1dPct: z.number().nullable(),
-    ret5dPct: z.number().nullable(),
     ret20dPct: z.number().nullable(),
+    ret60dPct: z.number().nullable(),
+    ret120dPct: z.number().nullable(),
   })
   .optional();
 
@@ -393,7 +393,7 @@ const scanDiamondsStep = createStep({
 
 const scoreFactorsStep = createStep({
   id: 'score-factors',
-  description: '因子打分：隔日动量 + 趋势',
+  description: '因子打分：2月+长线趋势',
   inputSchema: z.object({
     parsed: parsedQuerySchema,
     sectors: z.array(sectorSchema),
@@ -422,7 +422,7 @@ const scoreFactorsStep = createStep({
     const { candidates, dropped } = await scoreAndRankCandidates({
       candidates: inputData.candidates as ScreeningCandidateWithDiamond[],
       limit: inputData.parsed.maxCandidates,
-      minTotal: 42,
+      minTotal: 48,
     });
 
     const enriched = candidates.map((item) => ({
@@ -440,7 +440,7 @@ const scoreFactorsStep = createStep({
     if (enriched.length > 0) {
       const top = enriched[0].factorScore!;
       fetchErrors.push(
-        `factor: ${enriched.length} 只通过因子筛选（隔日${top.shortTermScore}/趋势${top.trendScore}，${dropped} 只淘汰）`,
+        `factor: ${enriched.length} 只通过长线因子（趋势${top.longTermScore}，${dropped} 只淘汰）`,
       );
     } else {
       fetchErrors.push('factor: 因子打分无结果，保留原候选顺序');
@@ -487,7 +487,7 @@ const summarizeStep = createStep({
     const agent = mastra.getAgent('sectorRotationAgent');
     const prompt = `请根据以下问财板块/选股结果撰写板块轮动 Markdown 摘要。
 
-选股模式：${inputData.parsed.mode === 'auto' ? '热点因子选股（隔日动量+趋势）' : '用户指定主题'}
+选股模式：${inputData.parsed.mode === 'auto' ? '热点长线选股（2月+趋势）' : '用户指定主题'}
 主题说明：${inputData.parsed.query}
 ${inputData.parsed.asOfDate ? `历史回放日：${inputData.parsed.asOfDate}` : ''}
 
@@ -497,7 +497,7 @@ ${JSON.stringify(inputData.parsed.hotNews.slice(0, 8), null, 2)}
 === 板块 ===
 ${JSON.stringify(inputData.sectors, null, 2)}
 
-=== 候选股（含因子得分：隔日动量/趋势） ===
+=== 候选股（含长线因子：60/120日趋势） ===
 ${JSON.stringify(inputData.candidates, null, 2)}
 
 === 钻石信号推荐 ===

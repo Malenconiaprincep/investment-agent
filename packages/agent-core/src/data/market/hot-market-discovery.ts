@@ -128,28 +128,24 @@ function buildStockQueries(input: {
   asOfDate?: string;
   newsSymbols: NewsMentionedSymbol[];
 }): string[] {
-  const screenDateHint =
-    input.isReplay && input.asOfDate
-      ? formatAsOfDateLabel(input.asOfDate)
-      : '今日';
   const queries: string[] = [];
 
   for (const theme of input.themes.slice(0, 3)) {
     queries.push(
-      `${theme}相关A股，均线多头排列，5日涨幅靠前${input.excludeHint}`,
+      `${theme}相关A股，60日涨幅靠前，站上MA60${input.excludeHint}`,
     );
     queries.push(
-      `${theme}概念，MACD金叉，主力净流入${input.excludeHint}`,
+      `${theme}概念，MA20上穿MA60，中期趋势向上${input.excludeHint}`,
     );
     queries.push(
-      `${theme}相关，10日涨幅靠前，${screenDateHint}涨幅小于7%${input.excludeHint}`,
+      `${theme}相关，120日涨幅靠前，均线多头${input.excludeHint}`,
     );
   }
 
   if (queries.length === 0) {
-    queries.push(`A股，均线多头排列，MACD金叉，5日涨幅前30${input.excludeHint}`);
-    queries.push(`A股，10日涨幅靠前，${screenDateHint}涨幅小于7%${input.excludeHint}`);
-    queries.push(`A股，连续3日主力净流入${input.excludeHint}`);
+    queries.push(`A股，60日涨幅前30，MA60上方，均线多头${input.excludeHint}`);
+    queries.push(`A股，120日涨幅靠前，MA20大于MA60${input.excludeHint}`);
+    queries.push(`A股，中期趋势向上，60日均线向上${input.excludeHint}`);
   }
 
   if (input.newsSymbols.length > 0) {
@@ -157,7 +153,7 @@ function buildStockQueries(input: {
       .slice(0, 6)
       .map((item) => item.symbol)
       .join('、');
-    queries.push(`${codeHint}${input.excludeHint}，均线多头`);
+    queries.push(`${codeHint}${input.excludeHint}，60日线趋势向上`);
   }
 
   return [...new Set(queries)];
@@ -405,21 +401,21 @@ function buildMarketQueries(input: {
   if (input.themeHint) {
     return {
       sectorQuery: input.isReplay
-        ? `${input.themeHint}概念板块，${screenDateHint}涨幅靠前，5日涨幅靠前${input.excludeHint}`
-        : `${input.themeHint}概念板块，5日涨幅靠前，均线多头${input.excludeHint}`,
+        ? `${input.themeHint}概念板块，60日涨幅靠前${input.excludeHint}`
+        : `${input.themeHint}概念板块，60日涨幅靠前，MA60上方${input.excludeHint}`,
       stockQuery: input.isReplay
-        ? `${input.themeHint}相关A股，${screenDateHint}均线多头排列${input.excludeHint}`
-        : `${input.themeHint}相关A股，均线多头排列，MACD金叉${input.excludeHint}`,
+        ? `${input.themeHint}相关A股，${screenDateHint}MA60上方${input.excludeHint}`
+        : `${input.themeHint}相关A股，60日涨幅靠前，MA20大于MA60${input.excludeHint}`,
     };
   }
 
   return {
     sectorQuery: input.isReplay
-      ? `${screenDateHint}A股概念板块，5日涨幅排名前10${input.excludeHint}`
-      : `A股概念板块，5日涨幅排名前10，均线多头${input.excludeHint}`,
+      ? `${screenDateHint}A股概念板块，60日涨幅排名前10${input.excludeHint}`
+      : `A股概念板块，60日涨幅排名前10，均线多头${input.excludeHint}`,
     stockQuery: input.isReplay
-      ? `${screenDateHint}A股，均线多头排列，5日涨幅前20${input.excludeHint}`
-      : `A股，均线多头排列，MACD金叉，5日涨幅前20${input.excludeHint}`,
+      ? `${screenDateHint}A股，MA60上方，60日涨幅前20${input.excludeHint}`
+      : `A股，120日涨幅靠前，MA60上方，中期趋势向上${input.excludeHint}`,
   };
 }
 
@@ -525,8 +521,8 @@ export async function discoverAutoScreenContext(options?: {
   return {
     ...baseContext,
     query: themeHint
-      ? `因子选股：${themeHint}（隔日动量+趋势）`
-      : '因子选股：热点趋势+隔日动量',
+      ? `长线选股：${themeHint}（2月+趋势）`
+      : '长线选股：热点+中期趋势',
     mode: 'auto' as const,
   };
 }

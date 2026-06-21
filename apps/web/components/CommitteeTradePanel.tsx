@@ -205,7 +205,7 @@ export function CommitteeTradePanel({ tradePlans }: CommitteeTradePanelProps) {
     <section className="section">
       <h2 className="section-title">K 线交易信号</h2>
       <p className="muted">
-        基于钻石信号、动量 Checklist 与 MA20 规则预计算；绿箭头为买入点，红箭头为卖出点，虚线为入场参考与止损。
+        基于钻石信号与均线规则；绿箭头为历史买点，红箭头为卖出参考。长线视角：建议持有 2 月以上，破 MA60 再考虑减仓。
       </p>
       <div className="committee-trade-grid">
         {tradePlans.map((plan) => (

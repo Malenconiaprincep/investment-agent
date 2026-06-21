@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
@@ -23,13 +23,13 @@ type Candidate = {
   dataSource: string;
   factorScore?: {
     total: number;
-    shortTermScore: number;
-    trendScore: number;
-    outlook: 'short-bullish' | 'trend-bullish' | 'neutral' | 'weak';
+    longTermScore: number;
+    stabilityScore: number;
+    outlook: 'long-bullish' | 'long-watch' | 'neutral' | 'weak';
     outlookLabel: string;
-    ret1dPct: number | null;
-    ret5dPct: number | null;
     ret20dPct: number | null;
+    ret60dPct: number | null;
+    ret120dPct: number | null;
   } | null;
   diamond?: {
     strength: 'red' | 'blue';
@@ -178,7 +178,7 @@ const COMMITTEE_STEPS = [
   '核对报告',
 ];
 
-export default function ScreenPage() {
+function ScreenPageContent() {
   const searchParams = useSearchParams();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [queryOverride, setQueryOverride] = useState('');
@@ -434,7 +434,7 @@ export default function ScreenPage() {
     <main className="page page--screen">
       <PageHeader
         title="智能选股"
-        description={`结合热点新闻与技术面因子，筛选隔日动量强、趋势向上的候选股（均线多头、MACD、量能、5日涨幅等）；触发钻石信号优先推荐。结果自动保存，可在选股记录查看表现。`}
+        description={`结合热点与 2 个月及以上趋势因子选股：MA60/MA120 多头、60/120 日涨幅、回撤可控；适合低频持有，非短线隔日。结果自动保存。`}
       />
 
       <div className="screen-stack">
@@ -695,10 +695,12 @@ export default function ScreenPage() {
                       <div className="candidate-card-stats">
                         {c.factorScore && (
                           <span className="muted">
-                            隔日 {c.factorScore.shortTermScore} · 趋势{' '}
-                            {c.factorScore.trendScore}
-                            {c.factorScore.ret5dPct != null
-                              ? ` · 5日 ${c.factorScore.ret5dPct}%`
+                            趋势 {c.factorScore.longTermScore}
+                            {c.factorScore.ret60dPct != null
+                              ? ` · 60日 ${c.factorScore.ret60dPct}%`
+                              : ''}
+                            {c.factorScore.ret120dPct != null
+                              ? ` · 120日 ${c.factorScore.ret120dPct}%`
                               : ''}
                           </span>
                         )}
@@ -798,5 +800,13 @@ export default function ScreenPage() {
         <p className="disclaimer">仅供学习研究，不构成投资建议。数据来自公开行情与新闻接口。</p>
       </div>
     </main>
+  );
+}
+
+export default function ScreenPage() {
+  return (
+    <Suspense fallback={<div className="list-loading">加载中…</div>}>
+      <ScreenPageContent />
+    </Suspense>
   );
 }

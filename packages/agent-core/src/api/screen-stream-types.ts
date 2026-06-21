@@ -1,20 +1,20 @@
+export type ScreeningCandidateFactor = {
+  total: number;
+  longTermScore: number;
+  stabilityScore: number;
+  outlook: 'long-bullish' | 'long-watch' | 'neutral' | 'weak';
+  outlookLabel: string;
+  ret20dPct: number | null;
+  ret60dPct: number | null;
+  ret120dPct: number | null;
+};
+
 export type ScreeningCandidateDiamond = {
   strength: 'red' | 'blue';
   score: number;
   tradeDate: string;
   close: number;
   reasons: string[];
-};
-
-export type ScreeningCandidateFactor = {
-  total: number;
-  shortTermScore: number;
-  trendScore: number;
-  outlook: 'short-bullish' | 'trend-bullish' | 'neutral' | 'weak';
-  outlookLabel: string;
-  ret1dPct: number | null;
-  ret5dPct: number | null;
-  ret20dPct: number | null;
 };
 
 export type ScreeningStreamCandidate = {

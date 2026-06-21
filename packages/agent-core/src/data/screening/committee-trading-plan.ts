@@ -170,7 +170,7 @@ export async function buildCommitteeTradePlan(input: {
       ? diamond?.close ?? latestClose
       : null;
 
-  const targetHint = `硬止损 -${MOMENTUM_STOP_LOSS_PCT * 100}% · 破 MA20 离场 · 移动止盈回撤 ${MOMENTUM_TRAILING_STOP_PCT * 100}%`;
+  const targetHint = `建议持有 2 月+ · 破 MA60 减仓 · 硬止损 -${MOMENTUM_STOP_LOSS_PCT * 100}% · 移动止盈回撤 ${MOMENTUM_TRAILING_STOP_PCT * 100}%`;
 
   return {
     symbol: input.symbol,

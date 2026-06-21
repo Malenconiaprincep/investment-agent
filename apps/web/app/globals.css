@@ -1302,6 +1302,16 @@ a:hover {
   border-radius: 999px;
 }
 
+.factor-outlook--long-bullish {
+  color: #5b9cf5;
+  background: rgba(91, 156, 245, 0.14);
+}
+
+.factor-outlook--long-watch {
+  color: #5cb87a;
+  background: rgba(92, 184, 122, 0.14);
+}
+
 .factor-outlook--short-bullish {
   color: #5cb87a;
   background: rgba(92, 184, 122, 0.14);
