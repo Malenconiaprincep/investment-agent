@@ -16,6 +16,13 @@ export type ScreeningSessionRecord = {
     name: string;
     thesis: string;
     dataSource: string;
+    diamond?: {
+      strength: 'red' | 'blue';
+      score: number;
+      tradeDate: string;
+      close: number;
+      reasons: string[];
+    } | null;
   }>;
   rotationSummary: string;
   hotNews: HotNewsItem[];

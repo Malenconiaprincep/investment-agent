@@ -212,9 +212,14 @@ export async function fetchIwencaiSectors(query: string, limit = 5) {
 export async function fetchIwencaiSectorsWithFallback(
   query: string,
   limit = 5,
+  options?: { allowFallback?: boolean },
 ) {
   let result = await fetchIwencaiSectors(query, limit);
-  if (result.sectors.length === 0 && query !== FALLBACK_SECTOR_QUERY) {
+  if (
+    options?.allowFallback !== false &&
+    result.sectors.length === 0 &&
+    query !== FALLBACK_SECTOR_QUERY
+  ) {
     const fallback = await fetchIwencaiSectors(FALLBACK_SECTOR_QUERY, limit);
     if (fallback.sectors.length > 0) {
       return { ...fallback, usedFallback: true as const };
@@ -250,9 +255,10 @@ export async function fetchIwencaiCandidatesWithFallback(
   query: string,
   sectorHint: string | undefined,
   limit = 10,
+  options?: { allowFallback?: boolean },
 ) {
   let result = await fetchIwencaiCandidates(query, sectorHint, limit);
-  if (result.candidates.length === 0) {
+  if (options?.allowFallback !== false && result.candidates.length === 0) {
     const fallbackQuery = sectorHint
       ? `${sectorHint}板块，主力净流入前20，排除ST`
       : FALLBACK_STOCK_QUERY;

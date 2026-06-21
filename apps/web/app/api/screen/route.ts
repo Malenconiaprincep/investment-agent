@@ -11,6 +11,11 @@ export const maxDuration = 180;
 const bodySchema = z.object({
   query: z.string().optional(),
   maxCandidates: z.number().int().min(1).max(20).optional(),
+  lookbackDays: z.number().int().min(1).max(30).optional(),
+  asOfDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'asOfDate 须为 YYYY-MM-DD')
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -25,12 +30,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const userQuery = parsed.data.query?.trim();
-    const args = userQuery ? [userQuery] : [];
+    const payload = {
+      maxCandidates: parsed.data.maxCandidates ?? 10,
+      lookbackDays: parsed.data.lookbackDays ?? 14,
+      ...(parsed.data.query?.trim()
+        ? { query: parsed.data.query.trim() }
+        : {}),
+      ...(parsed.data.asOfDate ? { asOfDate: parsed.data.asOfDate } : {}),
+    };
 
     const stream = createAgentCoreSSEStream(
       'sector-screen-stream.ts',
-      args,
+      ['--json', JSON.stringify(payload)],
       'screen',
     );
 

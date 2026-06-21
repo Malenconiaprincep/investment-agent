@@ -28,6 +28,37 @@ function barsFromQuote(quotes: OhlcvBar[]): OhlcvBar[] {
   return quotes.filter((q) => q.close != null);
 }
 
+/** 在「最新在前」K 线中找到 asOfDate 当日或之前最近一根 */
+export function findBarIndexForAsOfDate(
+  bars: OhlcvBar[],
+  asOfDate: string,
+): number {
+  const target = asOfDate.replace(/-/g, '');
+  let bestIndex = -1;
+  let bestTradeDate = '';
+
+  for (let i = 0; i < bars.length; i++) {
+    const tradeDate = bars[i].tradeDate.replace(/-/g, '');
+    if (tradeDate <= target && tradeDate > bestTradeDate) {
+      bestTradeDate = tradeDate;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
+export function detectDiamondSignalAtDate(
+  symbol: string,
+  name: string,
+  bars: OhlcvBar[],
+  asOfDate: string,
+): DiamondSignalResult | null {
+  const index = findBarIndexForAsOfDate(bars, asOfDate);
+  if (index < 0) return null;
+  return detectDiamondSignal(symbol, name, bars.slice(index));
+}
+
 /**
  * 钻石信号（无未来函数）：基于已收盘 K 线
  * 红钻：趋势 + 放量 + MACD 金叉 + 突破
@@ -129,4 +160,19 @@ export async function scanDiamondSignal(
 ): Promise<DiamondSignalResult | null> {
   const data = await getDailyQuote(symbol, klineDays);
   return detectDiamondSignal(symbol, name, barsFromQuote(data.quotes));
+}
+
+/** asOfDate 为空则检测最新；否则检测该历史交易日是否触发钻石信号 */
+export async function scanDiamondSignalAtDate(
+  symbol: string,
+  name: string,
+  asOfDate?: string,
+  klineDays = 90,
+): Promise<DiamondSignalResult | null> {
+  const data = await getDailyQuote(symbol, klineDays);
+  const bars = barsFromQuote(data.quotes);
+  if (!asOfDate) {
+    return detectDiamondSignal(symbol, name, bars);
+  }
+  return detectDiamondSignalAtDate(symbol, name, bars, asOfDate);
 }

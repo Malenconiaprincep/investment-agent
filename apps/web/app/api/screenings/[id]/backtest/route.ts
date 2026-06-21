@@ -16,7 +16,7 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const { searchParams } = new URL(request.url);
-    const days = searchParams.get('days') ?? '5';
+    const days = searchParams.get('days') ?? 'auto';
     const args = ['backtest', id, days];
 
     const stdout = await runAgentCoreScreeningsJson(args);

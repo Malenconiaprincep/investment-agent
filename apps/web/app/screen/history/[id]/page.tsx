@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
@@ -43,17 +43,26 @@ type ScreeningDetail = {
 
 type BacktestResult = {
   holdDays: number;
+  mode: 'to-today' | 'fixed';
   avgReturnPct: number | null;
   candidates: Array<{
     symbol: string;
     name: string;
     baselineDate: string | null;
     baselineClose: number | null;
+    latestDate: string | null;
     latestClose: number | null;
     returnPct: number | null;
     error?: string;
   }>;
 };
+
+const HOLD_OPTIONS = [
+  { label: '入选至今', value: 'auto' },
+  { label: '5 日', value: '5' },
+  { label: '10 日', value: '10' },
+  { label: '20 日', value: '20' },
+] as const;
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -63,6 +72,11 @@ function formatTime(iso: string) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatTradeDate(tradeDate: string | null) {
+  if (!tradeDate || tradeDate.length < 8) return '—';
+  return `${tradeDate.slice(0, 4)}-${tradeDate.slice(4, 6)}-${tradeDate.slice(6, 8)}`;
 }
 
 function formatPct(value: number | null) {
@@ -75,6 +89,7 @@ export default function ScreeningHistoryDetailPage() {
   const params = useParams<{ id: string }>();
   const [session, setSession] = useState<ScreeningDetail | null>(null);
   const [backtest, setBacktest] = useState<BacktestResult | null>(null);
+  const [holdPeriod, setHoldPeriod] = useState<string>('auto');
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,27 +121,43 @@ export default function ScreeningHistoryDetailPage() {
     void loadSession();
   }, [params.id]);
 
-  async function loadBacktest() {
-    if (!params.id) return;
+  const loadBacktest = useCallback(
+    async (days: string) => {
+      if (!params.id) return;
 
-    setBacktestLoading(true);
-    try {
-      const response = await fetch(
-        `/api/screenings/${params.id}/backtest?days=5`,
-      );
-      const data: unknown = await response.json();
+      setBacktestLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `/api/screenings/${params.id}/backtest?days=${encodeURIComponent(days)}`,
+        );
+        const data: unknown = await response.json();
 
-      if (!response.ok) {
-        throw new Error((data as { error?: string }).error ?? '计算失败');
+        if (!response.ok) {
+          throw new Error((data as { error?: string }).error ?? '计算失败');
+        }
+
+        setBacktest(data as BacktestResult);
+        setHoldPeriod(days);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '事后验证失败');
+      } finally {
+        setBacktestLoading(false);
       }
+    },
+    [params.id],
+  );
 
-      setBacktest(data as BacktestResult);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '事后验证失败');
-    } finally {
-      setBacktestLoading(false);
+  useEffect(() => {
+    if (session && session.candidates.length > 0) {
+      void loadBacktest('auto');
     }
-  }
+  }, [session, loadBacktest]);
+
+  const backtestCaption =
+    backtest?.mode === 'fixed' && backtest.holdDays > 0
+      ? `自选股基准价起持有 ${backtest.holdDays} 个交易日，组合平均涨跌`
+      : '自选股基准价至最新收盘，组合平均涨跌';
 
   return (
     <main className="page">
@@ -174,10 +205,10 @@ export default function ScreeningHistoryDetailPage() {
 
           {session.hotNews.length > 0 && (
             <section className="section">
-              <h2 className="section-title">热点新闻</h2>
+              <h2 className="section-title">当时热点新闻</h2>
               <ul className="sector-list">
                 {session.hotNews.map((item) => (
-                  <li key={item.title}>
+                  <li key={item.title + item.datetime}>
                     {item.url ? (
                       <a
                         href={item.url}
@@ -188,6 +219,12 @@ export default function ScreeningHistoryDetailPage() {
                       </a>
                     ) : (
                       item.title
+                    )}
+                    {item.datetime && (
+                      <span className="muted">
+                        {' '}
+                        · {formatTime(item.datetime)}
+                      </span>
                     )}
                   </li>
                 ))}
@@ -236,21 +273,29 @@ export default function ScreeningHistoryDetailPage() {
           <section className="section">
             <div className="section-toolbar">
               <h2 className="section-title">入选后表现</h2>
-              {!backtest && (
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  disabled={backtestLoading || session.candidates.length === 0}
-                  onClick={loadBacktest}
-                >
-                  {backtestLoading ? '计算中…' : '查看近 5 日涨跌'}
-                </button>
-              )}
+              <div className="section-toolbar-actions">
+                {HOLD_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`button button-secondary ${holdPeriod === option.value ? 'button--active' : ''}`}
+                    disabled={backtestLoading || session.candidates.length === 0}
+                    onClick={() => void loadBacktest(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {backtestLoading && !backtest && (
+              <p className="muted">正在计算涨跌幅…</p>
+            )}
+
             {backtest && (
               <>
                 <p className="muted">
-                  自选股当日附近收盘价至最新收盘，组合平均涨跌{' '}
+                  {backtestCaption}{' '}
                   <strong>{formatPct(backtest.avgReturnPct)}</strong>
                 </p>
                 <table className="candidate-table">
@@ -258,8 +303,10 @@ export default function ScreeningHistoryDetailPage() {
                     <tr>
                       <th>代码</th>
                       <th>名称</th>
+                      <th>基准日</th>
                       <th>基准价</th>
-                      <th>最新价</th>
+                      <th>对比日</th>
+                      <th>对比价</th>
                       <th>涨跌幅</th>
                     </tr>
                   </thead>
@@ -268,9 +315,9 @@ export default function ScreeningHistoryDetailPage() {
                       <tr key={item.symbol}>
                         <td>{item.symbol}</td>
                         <td>{item.name}</td>
-                        <td>
-                          {item.baselineClose?.toFixed(2) ?? '—'}
-                        </td>
+                        <td>{formatTradeDate(item.baselineDate)}</td>
+                        <td>{item.baselineClose?.toFixed(2) ?? '—'}</td>
+                        <td>{formatTradeDate(item.latestDate)}</td>
                         <td>{item.latestClose?.toFixed(2) ?? '—'}</td>
                         <td
                           className={

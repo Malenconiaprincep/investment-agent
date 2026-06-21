@@ -15,12 +15,22 @@ import { getStockBasic } from '../../data/market/services.js';
 import { emitScreenStreamEvent } from '../../api/screen-stream-context.js';
 import { isIwencaiMcpConfigured } from '../mcp/iwencai.js';
 import { checkSectorScreenQuality } from './sector-screen/quality.js';
+import {
+  scanScreeningCandidatesDiamonds,
+  type ScreeningCandidateWithDiamond,
+} from '../../data/screening/diamond-scan.js';
 
 const workflowInputSchema = z.object({
   /** 可选；留空则根据热门新闻 + 板块自动选股 */
   query: z.string().optional(),
   maxCandidates: z.number().int().min(1).max(20).optional().default(10),
   excludeSt: z.boolean().optional().default(true),
+  lookbackDays: z.number().int().min(1).max(30).optional().default(14),
+  /** YYYY-MM-DD；历史回放模式 */
+  asOfDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 const hotNewsSchema = z.object({
@@ -38,6 +48,8 @@ const parsedQuerySchema = z.object({
   hotNews: z.array(hotNewsSchema),
   hotThemes: z.array(z.string()),
   mode: z.enum(['auto', 'manual']),
+  lookbackDays: z.number(),
+  asOfDate: z.string().optional(),
 });
 
 const sectorSchema = z.object({
@@ -46,12 +58,24 @@ const sectorSchema = z.object({
   dataSource: z.string(),
 });
 
+const candidateDiamondSchema = z
+  .object({
+    strength: z.enum(['red', 'blue']),
+    score: z.number(),
+    tradeDate: z.string(),
+    close: z.number(),
+    reasons: z.array(z.string()),
+  })
+  .nullable()
+  .optional();
+
 const candidateSchema = z.object({
   symbol: z.string(),
   name: z.string(),
   thesis: z.string(),
   dataSource: z.string(),
   industry: z.string().nullable().optional(),
+  diamond: candidateDiamondSchema,
 });
 
 const discoverHotMarketStep = createStep({
@@ -68,6 +92,8 @@ const discoverHotMarketStep = createStep({
     const ctx = await discoverAutoScreenContext({
       userQuery: userQuery || undefined,
       excludeSt: inputData.excludeSt ?? true,
+      lookbackDays: inputData.lookbackDays ?? 14,
+      asOfDate: inputData.asOfDate,
     });
 
     return {
@@ -79,6 +105,8 @@ const discoverHotMarketStep = createStep({
       hotNews: ctx.hotNews,
       hotThemes: ctx.hotThemes,
       mode: ctx.mode,
+      lookbackDays: ctx.lookbackDays,
+      asOfDate: ctx.asOfDate,
     };
   },
 });
@@ -107,7 +135,9 @@ const fetchSectorsStep = createStep({
     let industrySummary: string | null = null;
 
     try {
-      const result = await fetchIwencaiSectorsWithFallback(parsed.sectorQuery, 5);
+      const result = await fetchIwencaiSectorsWithFallback(parsed.sectorQuery, 5, {
+        allowFallback: !parsed.asOfDate,
+      });
       sectors = result.sectors;
       sectorRaw = result.raw;
       if (result.usedFallback) {
@@ -168,6 +198,7 @@ const fetchCandidatesStep = createStep({
         inputData.parsed.stockQuery,
         sectorHint,
         inputData.parsed.maxCandidates,
+        { allowFallback: !inputData.parsed.asOfDate },
       );
       candidates = result.candidates;
       candidateRaw = result.raw;
@@ -180,7 +211,7 @@ const fetchCandidatesStep = createStep({
       );
     }
 
-    if (candidates.length === 0 && inputData.sectorRaw) {
+    if (candidates.length === 0 && !inputData.parsed.asOfDate && inputData.sectorRaw) {
       const fromSectorRaw = parseCandidatesFromIwencai(
         inputData.sectorRaw,
         inputData.parsed.maxCandidates,
@@ -253,9 +284,9 @@ const enrichBasicsStep = createStep({
   },
 });
 
-const summarizeStep = createStep({
-  id: 'summarize',
-  description: '板块轮动 Agent 生成摘要',
+const scanDiamondsStep = createStep({
+  id: 'scan-diamonds',
+  description: '候选池钻石信号检测',
   inputSchema: z.object({
     parsed: parsedQuerySchema,
     sectors: z.array(sectorSchema),
@@ -265,15 +296,64 @@ const summarizeStep = createStep({
     bundle: z.unknown(),
   }),
   outputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+  }),
+  execute: async ({ inputData }) => {
+    const fetchErrors = [...inputData.fetchErrors];
+    const { candidates, diamondPicks } = await scanScreeningCandidatesDiamonds({
+      candidates: inputData.candidates as ScreeningCandidateWithDiamond[],
+      asOfDate: inputData.parsed.asOfDate,
+    });
+
+    if (diamondPicks.length > 0) {
+      fetchErrors.push(
+        `diamond: ${diamondPicks.length} 只候选触发钻石信号（${inputData.parsed.asOfDate ? '历史回放日' : '最新'}）`,
+      );
+    }
+
+    return {
+      parsed: inputData.parsed,
+      sectors: inputData.sectors,
+      candidates,
+      diamondPicks,
+      industrySummary: inputData.industrySummary,
+      fetchErrors,
+      bundle: inputData.bundle,
+    };
+  },
+});
+
+const summarizeStep = createStep({
+  id: 'summarize',
+  description: '板块轮动 Agent 生成摘要',
+  inputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+  }),
+  outputSchema: z.object({
     query: z.string(),
     sectors: z.array(sectorSchema),
     candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
     rotationSummary: z.string(),
     fetchErrors: z.array(z.string()),
     industrySummary: z.string().nullable(),
     hotNews: z.array(hotNewsSchema),
     hotThemes: z.array(z.string()),
     mode: z.enum(['auto', 'manual']),
+    lookbackDays: z.number(),
+    asOfDate: z.string().optional(),
   }),
   execute: async ({ inputData, mastra }) => {
     const agent = mastra.getAgent('sectorRotationAgent');
@@ -281,6 +361,7 @@ const summarizeStep = createStep({
 
 选股模式：${inputData.parsed.mode === 'auto' ? '热点自动扫描' : '用户指定主题'}
 主题说明：${inputData.parsed.query}
+${inputData.parsed.asOfDate ? `历史回放日：${inputData.parsed.asOfDate}` : ''}
 
 === 热点新闻（自动扫描） ===
 ${JSON.stringify(inputData.parsed.hotNews.slice(0, 8), null, 2)}
@@ -290,6 +371,9 @@ ${JSON.stringify(inputData.sectors, null, 2)}
 
 === 候选股 ===
 ${JSON.stringify(inputData.candidates, null, 2)}
+
+=== 钻石信号推荐 ===
+${JSON.stringify(inputData.diamondPicks, null, 2)}
 
 === 行业背景 ===
 ${inputData.industrySummary ?? '无'}
@@ -330,12 +414,15 @@ iwencai / eastmoney
       query: inputData.parsed.query,
       sectors: inputData.sectors,
       candidates: inputData.candidates,
+      diamondPicks: inputData.diamondPicks,
       rotationSummary,
       fetchErrors: inputData.fetchErrors,
       industrySummary: inputData.industrySummary,
       hotNews: inputData.parsed.hotNews,
       hotThemes: inputData.parsed.hotThemes,
       mode: inputData.parsed.mode,
+      lookbackDays: inputData.parsed.lookbackDays,
+      asOfDate: inputData.parsed.asOfDate,
     };
   },
 });
@@ -347,17 +434,21 @@ const qualityCheckStep = createStep({
     query: z.string(),
     sectors: z.array(sectorSchema),
     candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
     rotationSummary: z.string(),
     fetchErrors: z.array(z.string()),
     industrySummary: z.string().nullable(),
     hotNews: z.array(hotNewsSchema),
     hotThemes: z.array(z.string()),
     mode: z.enum(['auto', 'manual']),
+    lookbackDays: z.number(),
+    asOfDate: z.string().optional(),
   }),
   outputSchema: z.object({
     query: z.string(),
     sectors: z.array(sectorSchema),
     candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
     rotationSummary: z.string(),
     fetchErrors: z.array(z.string()),
     hotNews: z.array(hotNewsSchema),
@@ -367,27 +458,33 @@ const qualityCheckStep = createStep({
     missingSections: z.array(z.string()),
     missingKeywords: z.array(z.string()),
     screenedAt: z.string(),
+    lookbackDays: z.number(),
+    asOfDate: z.string().optional(),
   }),
   execute: async ({ inputData }) => {
     const quality = checkSectorScreenQuality(inputData);
+    const screenedAt = inputData.asOfDate
+      ? `${inputData.asOfDate}T15:00:00.000+08:00`
+      : new Date().toISOString();
     return {
       ...inputData,
       passed: quality.passed,
       missingSections: quality.missingSections,
       missingKeywords: quality.missingKeywords,
-      screenedAt: new Date().toISOString(),
+      screenedAt,
     };
   },
 });
 
 export const sectorScreenWorkflow = createWorkflow({
   id: 'sector-screen-workflow',
-  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 摘要',
+  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 钻石 → 摘要',
   inputSchema: workflowInputSchema,
   outputSchema: z.object({
     query: z.string(),
     sectors: z.array(sectorSchema),
     candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
     rotationSummary: z.string(),
     fetchErrors: z.array(z.string()),
     hotNews: z.array(hotNewsSchema),
@@ -397,12 +494,14 @@ export const sectorScreenWorkflow = createWorkflow({
     missingSections: z.array(z.string()),
     missingKeywords: z.array(z.string()),
     screenedAt: z.string(),
+    asOfDate: z.string().optional(),
   }),
 })
   .then(discoverHotMarketStep)
   .then(fetchSectorsStep)
   .then(fetchCandidatesStep)
   .then(enrichBasicsStep)
+  .then(scanDiamondsStep)
   .then(summarizeStep)
   .then(qualityCheckStep)
   .commit();
@@ -416,6 +515,26 @@ export type SectorScreenWorkflowOutput = {
     name: string;
     thesis: string;
     dataSource: string;
+    diamond?: {
+      strength: 'red' | 'blue';
+      score: number;
+      tradeDate: string;
+      close: number;
+      reasons: string[];
+    } | null;
+  }>;
+  diamondPicks: Array<{
+    symbol: string;
+    name: string;
+    thesis: string;
+    dataSource: string;
+    diamond?: {
+      strength: 'red' | 'blue';
+      score: number;
+      tradeDate: string;
+      close: number;
+      reasons: string[];
+    } | null;
   }>;
   rotationSummary: string;
   fetchErrors: string[];

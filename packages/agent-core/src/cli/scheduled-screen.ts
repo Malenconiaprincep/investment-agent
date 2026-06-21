@@ -23,7 +23,7 @@ async function main() {
     elapsedMs?: number;
   } = {};
 
-  await runSectorScreenStream({ maxCandidates: 10, excludeSt: true }, (event) => {
+  await runSectorScreenStream({ maxCandidates: 10, excludeSt: true, lookbackDays: 14 }, (event) => {
     if (event.type === 'done') {
       outcome.query = event.query;
       outcome.passed = event.passed;

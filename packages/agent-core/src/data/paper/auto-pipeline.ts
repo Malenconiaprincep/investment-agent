@@ -209,7 +209,7 @@ export async function runPaperAutoPipeline(options?: {
     let candidates: Array<{ symbol: string; name: string }> = [];
 
     try {
-      await runSectorScreenStream({ maxCandidates: 10, excludeSt: true }, (event) => {
+      await runSectorScreenStream({ maxCandidates: 10, excludeSt: true, lookbackDays: 14 }, (event) => {
         if (event.type === 'done') {
           screeningOutcome.passed = event.passed;
           screeningOutcome.sessionId = event.sessionId;

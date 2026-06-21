@@ -9,7 +9,7 @@ import {
   emitScreenStreamEvent,
   withScreenStreamEmitter,
 } from './screen-stream-context.js';
-import type { ScreenStreamEvent } from './screen-stream-types.js';
+import type { ScreenStreamEvent, ScreeningStreamCandidate } from './screen-stream-types.js';
 
 export type { ScreenStreamEvent } from './screen-stream-types.js';
 
@@ -18,6 +18,7 @@ const STEP_LABELS: Record<string, string> = {
   'fetch-sectors': '筛选板块',
   'fetch-candidates': '筛选候选股',
   'enrich-basics': '补充信息',
+  'scan-diamonds': '钻石信号检测',
   summarize: '生成摘要',
   'quality-check': '核对结果',
 };
@@ -58,15 +59,12 @@ function mapWorkflowChunk(chunk: WorkflowStreamEvent): ScreenStreamEvent[] {
         }>,
       });
     }
-    if (chunk.payload.id === 'enrich-basics' && output?.candidates) {
+    if (chunk.payload.id === 'scan-diamonds' && output?.candidates) {
+      const candidates = output.candidates as ScreeningStreamCandidate[];
       events.push({
         type: 'candidates',
-        candidates: output.candidates as Array<{
-          symbol: string;
-          name: string;
-          thesis: string;
-          dataSource: string;
-        }>,
+        candidates,
+        diamondPicks: (output.diamondPicks as ScreeningStreamCandidate[]) ?? [],
       });
     }
   }
@@ -109,6 +107,7 @@ export async function runSectorScreenStream(
         query: output.query,
         sectors: output.sectors,
         candidates: output.candidates,
+        diamondPicks: output.diamondPicks ?? [],
         rotationSummary: output.rotationSummary,
         hotNews: output.hotNews ?? [],
         hotThemes: output.hotThemes ?? [],
@@ -117,6 +116,7 @@ export async function runSectorScreenStream(
         missingSections: output.missingSections,
         missingKeywords: output.missingKeywords,
         screenedAt: output.screenedAt,
+        asOfDate: output.asOfDate,
         elapsedMs,
         sessionId: saved.id,
       });

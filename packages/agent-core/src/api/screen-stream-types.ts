@@ -1,3 +1,19 @@
+export type ScreeningCandidateDiamond = {
+  strength: 'red' | 'blue';
+  score: number;
+  tradeDate: string;
+  close: number;
+  reasons: string[];
+};
+
+export type ScreeningStreamCandidate = {
+  symbol: string;
+  name: string;
+  thesis: string;
+  dataSource: string;
+  diamond?: ScreeningCandidateDiamond | null;
+};
+
 export type ScreenStreamEvent =
   | { type: 'step'; step: string; label: string }
   | { type: 'token'; text: string }
@@ -14,23 +30,15 @@ export type ScreenStreamEvent =
     }
   | {
       type: 'candidates';
-      candidates: Array<{
-        symbol: string;
-        name: string;
-        thesis: string;
-        dataSource: string;
-      }>;
+      candidates: ScreeningStreamCandidate[];
+      diamondPicks: ScreeningStreamCandidate[];
     }
   | {
       type: 'done';
       query: string;
       sectors: Array<{ name: string; reason: string; dataSource: string }>;
-      candidates: Array<{
-        symbol: string;
-        name: string;
-        thesis: string;
-        dataSource: string;
-      }>;
+      candidates: ScreeningStreamCandidate[];
+      diamondPicks: ScreeningStreamCandidate[];
       rotationSummary: string;
       hotNews: Array<{ title: string; datetime: string; url: string | null }>;
       hotThemes: string[];
@@ -41,5 +49,6 @@ export type ScreenStreamEvent =
       screenedAt: string;
       elapsedMs: number;
       sessionId: string;
+      asOfDate?: string;
     }
   | { type: 'error'; message: string };

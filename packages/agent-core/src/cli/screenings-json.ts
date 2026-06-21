@@ -66,12 +66,16 @@ async function main() {
       process.exit(1);
     }
 
-    const holdDays = Number(process.argv[4] ?? 5);
+    const holdArg = process.argv[4];
+    const holdDays =
+      !holdArg || holdArg === 'auto' || holdArg === '0'
+        ? 0
+        : Number(holdArg);
     const result = await computeScreeningBacktest({
       screeningId: session.id,
       screenedAt: session.createdAt,
       candidates: session.candidates,
-      holdDays: Number.isFinite(holdDays) ? holdDays : 5,
+      holdDays: Number.isFinite(holdDays) && holdDays >= 0 ? holdDays : 0,
     });
     process.stdout.write(JSON.stringify(result));
     return;

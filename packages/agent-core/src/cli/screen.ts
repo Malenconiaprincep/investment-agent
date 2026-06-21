@@ -5,8 +5,8 @@ import { runSectorScreenStream } from '../api/run-sector-screen-stream.js';
 async function main() {
   const queryArg = process.argv.slice(2).join(' ').trim();
   const input = queryArg
-    ? { query: queryArg, maxCandidates: 10, excludeSt: true }
-    : { maxCandidates: 10, excludeSt: true };
+    ? { query: queryArg, maxCandidates: 10, excludeSt: true, lookbackDays: 14 }
+    : { maxCandidates: 10, excludeSt: true, lookbackDays: 14 };
   let summary = '';
 
   await runSectorScreenStream(input, (event) => {
