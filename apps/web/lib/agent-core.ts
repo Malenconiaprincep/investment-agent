@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
@@ -13,79 +13,146 @@ type TsxRunner = {
   argsPrefix: string[];
 };
 
-function firstExistingDir(dirs: string[]): string | null {
-  for (const dir of dirs) {
-    if (existsSync(path.join(dir, 'package.json'))) {
-      return dir;
+const AGENT_CORE_PKG = '@investment-agent/agent-core';
+const WEB_PKG = '@investment-agent/web';
+
+function readPackageName(dir: string): string | null {
+  const pkgPath = path.join(dir, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string };
+    return pkg.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 向上查找满足条件的目录 */
+function findUp(startDirs: string[], match: (dir: string) => boolean): string | null {
+  for (const start of startDirs) {
+    if (!start) continue;
+    let dir = path.resolve(start);
+    for (let i = 0; i < 12; i++) {
+      if (match(dir)) return dir;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
   }
   return null;
 }
 
+function findRepoRoot(): string | null {
+  return findUp([process.cwd(), moduleDir], (dir) =>
+    existsSync(path.join(dir, 'pnpm-workspace.yaml')),
+  );
+}
+
+function findPackageRoot(packageName: string, extraStarts: string[] = []): string | null {
+  const repo = findRepoRoot();
+  const starts = [
+    ...extraStarts,
+    process.cwd(),
+    moduleDir,
+    repo ? path.join(repo, 'apps/web') : '',
+    repo ? path.join(repo, 'packages/agent-core') : '',
+    repo ?? '',
+  ].filter(Boolean);
+
+  return findUp(starts, (dir) => readPackageName(dir) === packageName);
+}
+
 export function getAgentCoreRoot(): string {
-  if (process.env.AGENT_CORE_ROOT?.trim()) {
-    return process.env.AGENT_CORE_ROOT.trim();
+  const envRoot = process.env.AGENT_CORE_ROOT?.trim();
+  if (envRoot && existsSync(path.join(envRoot, 'package.json'))) {
+    return envRoot;
   }
 
-  const cwd = process.cwd();
-  const fromWebLib = path.resolve(moduleDir, '../../../packages/agent-core');
-
-  const root =
-    firstExistingDir([
-      fromWebLib,
-      path.resolve(cwd, '../../packages/agent-core'),
-      path.resolve(cwd, 'packages/agent-core'),
-      path.resolve(cwd, '../packages/agent-core'),
-    ]) ?? null;
-
-  if (root) {
-    return root;
+  const repo = findRepoRoot();
+  if (repo) {
+    const fromRepo = path.join(repo, 'packages/agent-core');
+    if (existsSync(path.join(fromRepo, 'package.json'))) {
+      return fromRepo;
+    }
   }
+
+  const pkgRoot = findPackageRoot(AGENT_CORE_PKG);
+  if (pkgRoot) return pkgRoot;
 
   throw new Error('未找到 agent-core 包，请检查 monorepo 部署配置');
 }
 
-function resolveTsxCli(searchRoots: string[]): string | null {
+function getWebRoot(): string {
+  const pkgRoot = findPackageRoot(WEB_PKG, [path.resolve(moduleDir, '..')]);
+  if (pkgRoot) return pkgRoot;
+
+  const repo = findRepoRoot();
+  if (repo) {
+    const fromRepo = path.join(repo, 'apps/web');
+    if (existsSync(path.join(fromRepo, 'package.json'))) {
+      return fromRepo;
+    }
+  }
+
+  return path.resolve(moduleDir, '..');
+}
+
+/** 在 pnpm / npm 布局中定位 tsx CLI（Vercel 上不依赖 .bin shell 脚本） */
+function findTsxCliFile(searchRoots: string[]): string | null {
   for (const root of searchRoots) {
-    if (!existsSync(path.join(root, 'package.json'))) continue;
+    if (!root || !existsSync(root)) continue;
+
     try {
       const req = createRequire(path.join(root, 'package.json'));
       const pkgPath = req.resolve('tsx/package.json');
       const cli = path.join(path.dirname(pkgPath), 'dist/cli.mjs');
-      if (existsSync(cli)) {
-        return cli;
-      }
+      if (existsSync(cli)) return cli;
     } catch {
-      // try next root
+      // try filesystem fallbacks
+    }
+
+    const direct = path.join(root, 'node_modules/tsx/dist/cli.mjs');
+    if (existsSync(direct)) return direct;
+
+    const pnpmStore = path.join(root, 'node_modules/.pnpm');
+    if (existsSync(pnpmStore)) {
+      try {
+        for (const entry of readdirSync(pnpmStore)) {
+          if (!entry.startsWith('tsx@')) continue;
+          const cli = path.join(pnpmStore, entry, 'node_modules/tsx/dist/cli.mjs');
+          if (existsSync(cli)) return cli;
+        }
+      } catch {
+        // ignore
+      }
     }
   }
+
+  const repo = findRepoRoot();
+  if (repo) {
+    return findTsxCliFile([repo, path.join(repo, 'apps/web'), path.join(repo, 'packages/agent-core')]);
+  }
+
   return null;
 }
 
 export function getTsxRunner(agentCoreRoot = getAgentCoreRoot()): TsxRunner {
-  const webRoot = path.resolve(moduleDir, '..');
-  const repoRoot = path.resolve(moduleDir, '../../..');
+  const webRoot = getWebRoot();
+  const repo = findRepoRoot();
 
-  const binCandidates = [
-    path.join(agentCoreRoot, 'node_modules/.bin/tsx'),
-    path.join(webRoot, 'node_modules/.bin/tsx'),
-    path.resolve(agentCoreRoot, '../../node_modules/.bin/tsx'),
-    path.join(repoRoot, 'node_modules/.bin/tsx'),
-  ];
+  const cli = findTsxCliFile([
+    webRoot,
+    agentCoreRoot,
+    repo ?? '',
+    process.cwd(),
+  ]);
 
-  for (const bin of binCandidates) {
-    if (existsSync(bin)) {
-      return { bin, argsPrefix: [] };
-    }
-  }
-
-  const cli = resolveTsxCli([agentCoreRoot, webRoot, repoRoot]);
   if (cli) {
     return { bin: process.execPath, argsPrefix: [cli] };
   }
 
   throw new Error(
-    '未找到 tsx。请在仓库根目录执行 pnpm install，或设置 AGENT_CORE_ROOT 指向已安装依赖的 agent-core 目录。',
+    '未找到 tsx。请在 apps/web 安装 tsx 依赖并重新部署，或检查 Vercel outputFileTracingIncludes。',
   );
 }
 
