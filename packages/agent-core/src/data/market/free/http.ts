@@ -5,7 +5,10 @@ export const FREE_ALLOWED_HOSTS = [
   'emweb.securities.eastmoney.com',
   'np-anotice-stock.eastmoney.com',
   'search-api-web.eastmoney.com',
+  'np-listapi.eastmoney.com',
+  'np-weblist.eastmoney.com',
   'web.ifzq.gtimg.cn',
+  'feed.mix.sina.com.cn',
 ];
 
 const DEFAULT_HEADERS = {

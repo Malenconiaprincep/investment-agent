@@ -22,6 +22,19 @@ type Candidate = {
 };
 type HotNewsItem = { title: string; datetime: string; url: string | null };
 
+function formatNewsTime(isoOrLocal: string): string {
+  const ts = Date.parse(isoOrLocal);
+  if (!Number.isFinite(ts)) {
+    return isoOrLocal.slice(0, 16);
+  }
+  return new Date(ts).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function formatCandidateThesis(thesis: string) {
   const parts = thesis.split(/[；;]/).map((p) => p.trim()).filter(Boolean);
   let price: string | undefined;
@@ -470,7 +483,7 @@ export default function ScreenPage() {
                 <h2 className="section-title">今日热点</h2>
                 <ul className="sector-list sector-list--compact">
                   {displayHotNews.slice(0, 6).map((item) => (
-                    <li key={item.title}>
+                    <li key={item.title + item.datetime}>
                       {item.url ? (
                         <a
                           href={item.url}
@@ -481,6 +494,11 @@ export default function ScreenPage() {
                         </a>
                       ) : (
                         item.title
+                      )}
+                      {item.datetime && (
+                        <span className="news-item-time">
+                          {formatNewsTime(item.datetime)}
+                        </span>
                       )}
                     </li>
                   ))}

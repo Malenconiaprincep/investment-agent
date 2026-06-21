@@ -368,6 +368,14 @@ export async function listDiamondSignals(limit = 50): Promise<DiamondSignalRecor
   });
   return result.rows.map((row) => {
     const r = row as Record<string, unknown>;
+    const reasonsRaw = String(r.reasons ?? '[]');
+    let reasons: string[] = [];
+    try {
+      const parsed = JSON.parse(reasonsRaw) as unknown;
+      reasons = Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      reasons = [];
+    }
     return {
       id: String(r.id),
       symbol: String(r.symbol),
@@ -376,7 +384,7 @@ export async function listDiamondSignals(limit = 50): Promise<DiamondSignalRecor
       score: Number(r.score),
       tradeDate: String(r.trade_date),
       close: Number(r.close),
-      reasons: JSON.parse(String(r.reasons)) as string[],
+      reasons,
       createdAt: String(r.created_at),
     };
   });

@@ -28,7 +28,15 @@ export default function SignalsPage() {
       const res = await fetch('/api/signals');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '加载失败');
-      setSignals(data.signals ?? []);
+      const rows = Array.isArray(data.signals) ? data.signals : [];
+      setSignals(
+        rows.map((row: Signal) => ({
+          ...row,
+          reasons: Array.isArray(row.reasons) ? row.reasons : [],
+          close: Number(row.close) || 0,
+          score: Number(row.score) || 0,
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
@@ -121,11 +129,13 @@ export default function SignalsPage() {
                     <span className={`diamond-badge diamond-badge--${s.strength}`}>
                       {s.strength === 'red' ? '红钻' : '蓝钻'}
                     </span>
-                    <span>收盘 {s.close.toFixed(2)}</span>
+                    <span>
+                      收盘 {Number.isFinite(s.close) ? s.close.toFixed(2) : '—'}
+                    </span>
                     <span>评分 {s.score}</span>
                   </div>
                   <ul className="sector-list">
-                    {s.reasons.map((r) => (
+                    {(s.reasons ?? []).map((r) => (
                       <li key={r}>{r}</li>
                     ))}
                   </ul>

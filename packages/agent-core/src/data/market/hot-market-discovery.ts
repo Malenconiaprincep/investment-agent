@@ -1,5 +1,10 @@
 import { callIwencaiTool, isIwencaiMcpConfigured } from '../../mastra/mcp/iwencai.js';
 import { extractNewsEntries } from './format-report-news.js';
+import {
+  fetchEastMoneyColumnNews,
+  fetchEastMoneyFastNews,
+  fetchSinaFinanceRollNews,
+} from './free/market-news-feed.js';
 
 export type HotNewsItem = {
   title: string;
@@ -56,15 +61,48 @@ function scoreNewsTitle(title: string): number {
   if (isNoiseNewsTitle(title)) return -1;
   let score = 0;
   if (HOT_KEYWORD_PATTERN.test(title)) score += 10;
+  if (/A股|沪深|涨停|板块|概念|主力|国补|央行|国务院/.test(title)) score += 8;
+  if (/港股|港元|美股|增持\d/.test(title)) score -= 6;
   if (title.length >= 12 && title.length <= 60) score += 2;
   return score;
 }
 
 /** 按热度关键词排序后再提取主题 */
 export function rankHotNews(news: HotNewsItem[]): HotNewsItem[] {
-  return [...news].sort(
-    (a, b) => scoreNewsTitle(b.title) - scoreNewsTitle(a.title),
-  );
+  return [...news].sort((a, b) => {
+    const timeDiff = parseNewsTime(b.datetime) - parseNewsTime(a.datetime);
+    if (timeDiff !== 0) return timeDiff;
+    return scoreNewsTitle(b.title) - scoreNewsTitle(a.title);
+  });
+}
+
+function parseNewsTime(value: string): number {
+  if (!value) return 0;
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function normalizeHotNewsKey(title: string): string {
+  return title
+    .replace(/【[^】]+】/g, '')
+    .replace(/\s+/g, '')
+    .slice(0, 48);
+}
+
+/** 多源新闻合并去重，优先较新的条目 */
+export function mergeHotNewsSources(lists: HotNewsItem[][]): HotNewsItem[] {
+  const seen = new Set<string>();
+  const merged: HotNewsItem[] = [];
+
+  for (const item of lists.flat()) {
+    if (isNoiseNewsTitle(item.title)) continue;
+    const key = normalizeHotNewsKey(item.title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  return rankHotNews(merged);
 }
 
 /** 从问财 news_search 结果提取新闻标题（复用研报资讯解析） */
@@ -136,8 +174,13 @@ export async function fetchIwencaiHotNews(limit = 15): Promise<{
     throw new Error('问财未配置：请在 .env 设置 IWENCAI_API_KEY');
   }
 
+  const today = new Date().toLocaleDateString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  });
+
   const raw = await callIwencaiTool('news_search', {
-    query: 'A股 今日 热点 板块 涨停 资金',
+    query: `A股 ${today} 热点 板块 涨停 资金`,
     timeout: 60,
   });
 
@@ -148,6 +191,60 @@ export async function fetchIwencaiHotNews(limit = 15): Promise<{
       limit,
     ),
   };
+}
+
+/**
+ * 热点新闻：问财 + 东方财富 7×24/资讯 + 新浪滚动，合并去重。
+ * 实时源失败时不阻断问财；全部失败才抛错。
+ */
+export async function fetchHotNews(limit = 15): Promise<{
+  items: HotNewsItem[];
+  sourcesUsed: string[];
+}> {
+  const lists: HotNewsItem[][] = [];
+  const sourcesUsed: string[] = [];
+
+  const liveResults = await Promise.allSettled([
+    fetchEastMoneyFastNews(limit * 2),
+    fetchEastMoneyColumnNews(limit * 2),
+    fetchSinaFinanceRollNews(limit * 2),
+  ]);
+
+  const liveLabels = ['eastmoney-724', 'eastmoney-news', 'sina-roll'] as const;
+  liveResults.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value.length > 0) {
+      lists.push(result.value);
+      sourcesUsed.push(liveLabels[index]);
+      return;
+    }
+    if (result.status === 'rejected') {
+      const message =
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason);
+      console.warn(`[hot-news] ${liveLabels[index]} failed: ${message}`);
+    }
+  });
+
+  if (isIwencaiMcpConfigured()) {
+    try {
+      const { items } = await fetchIwencaiHotNews(limit * 2);
+      if (items.length > 0) {
+        lists.push(items);
+        sourcesUsed.push('iwencai');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[hot-news] iwencai failed: ${message}`);
+    }
+  }
+
+  const items = mergeHotNewsSources(lists).slice(0, limit);
+  if (items.length === 0) {
+    throw new Error('热点新闻获取失败，请稍后重试');
+  }
+
+  return { items, sourcesUsed };
 }
 
 /**
@@ -165,7 +262,7 @@ export async function discoverAutoScreenContext(options?: {
   const excludeHint = options?.excludeSt !== false ? '，排除ST' : '';
   const userQuery = options?.userQuery?.trim();
 
-  const { items: hotNews } = await fetchIwencaiHotNews(15);
+  const { items: hotNews } = await fetchHotNews(15);
   const hotThemes = extractThemesFromNews(hotNews, 3);
 
   if (userQuery) {
