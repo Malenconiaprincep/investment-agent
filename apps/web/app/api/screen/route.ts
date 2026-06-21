@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     const payload = {
       maxCandidates: parsed.data.maxCandidates ?? 10,
       lookbackDays: parsed.data.lookbackDays ?? 14,
+      excludeSt: true,
       ...(parsed.data.query?.trim()
         ? { query: parsed.data.query.trim() }
         : {}),
@@ -40,8 +41,8 @@ export async function POST(request: Request) {
     };
 
     const stream = createAgentCoreSSEStream(
-      'sector-screen-stream.ts',
-      ['--json', JSON.stringify(payload)],
+      '/stream/screen',
+      payload,
       'screen',
     );
 

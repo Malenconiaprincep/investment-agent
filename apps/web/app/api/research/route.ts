@@ -32,16 +32,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const args: string[] = [];
-    if (parsed.data.symbol) {
-      args.push(parsed.data.symbol);
-    } else if (parsed.data.query) {
-      args.push(parsed.data.query);
-    }
-
     const stream = createAgentCoreSSEStream(
-      'research-stream.ts',
-      args,
+      '/stream/research',
+      parsed.data,
       'research',
     );
 

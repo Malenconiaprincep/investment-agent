@@ -1,4 +1,4 @@
-import { spawnAgentCoreScript } from './agent-core';
+import { getAgentCoreConfig, proxyAgentCoreStream } from './agent-core';
 
 export function encodeSSE(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -12,57 +12,49 @@ export const SSE_RESPONSE_HEADERS = {
 } as const;
 
 export function createAgentCoreSSEStream(
-  scriptName: string,
-  args: string[],
+  path: '/stream/research' | '/stream/screen' | '/stream/committee',
+  body: unknown,
   logPrefix: string,
 ): ReadableStream<Uint8Array> {
-  const child = spawnAgentCoreScript(scriptName, args);
-  const encoder = new TextEncoder();
+  getAgentCoreConfig();
 
   return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(': stream-open\n\n'));
-
-      child.stdout?.on('data', (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
-      });
-
-      child.stderr?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString().trim();
-        if (text) {
-          console.warn(`[${logPrefix}]`, text);
+    async start(controller) {
+      try {
+        const upstream = await proxyAgentCoreStream(path, body);
+        if (!upstream.ok || !upstream.body) {
+          const message = await upstream.text();
+          controller.enqueue(
+            new TextEncoder().encode(
+              encodeSSE('error', {
+                type: 'error',
+                message: message || `agent-core 流式请求失败 (${upstream.status})`,
+              }),
+            ),
+          );
+          controller.close();
+          return;
         }
-      });
 
-      child.on('error', (error) => {
+        const reader = upstream.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) controller.enqueue(value);
+        }
+        controller.close();
+      } catch (error) {
+        console.warn(`[${logPrefix}]`, error);
         controller.enqueue(
-          encoder.encode(
+          new TextEncoder().encode(
             encodeSSE('error', {
               type: 'error',
-              message:
-                error instanceof Error ? error.message : '服务启动失败',
+              message: error instanceof Error ? error.message : '服务连接失败',
             }),
           ),
         );
         controller.close();
-      });
-
-      child.on('close', (code) => {
-        if (code !== 0 && code !== null) {
-          controller.enqueue(
-            encoder.encode(
-              encodeSSE('error', {
-                type: 'error',
-                message: `处理失败（退出码 ${code}）`,
-              }),
-            ),
-          );
-        }
-        controller.close();
-      });
-    },
-    cancel() {
-      child.kill('SIGTERM');
+      }
     },
   });
 }

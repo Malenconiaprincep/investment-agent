@@ -1,38 +1,43 @@
 # Web UI
 
-Next.js 投研界面，面向 toC 用户。
+Next.js 投研界面。业务逻辑在 **agent-core HTTP 服务**，Web 只做 UI 与 API 代理。
 
 ## 本地开发
 
 ```bash
 pnpm install
-# 配置 packages/agent-core/.env（含 DEEPSEEK_API_KEY）
+
+# 1. 配置 packages/agent-core/.env（DEEPSEEK_API_KEY 等）
+# 2. 配置 apps/web/.env.local：
+#    AGENT_CORE_URL=http://127.0.0.1:4000
+#    AGENT_CORE_TOKEN=（可选，与 agent-core 一致）
+
+# 终端 A：启动 agent-core
+pnpm agent:serve
+
+# 终端 B：启动 Web
 pnpm web:dev
 ```
 
 打开 [http://localhost:3000](http://localhost:3000)
 
-## 部署到 Vercel
+## 部署架构
 
-1. 将仓库导入 [Vercel](https://vercel.com/new)
-2. **Root Directory** 设为 `apps/web`（会使用同目录下的 `vercel.json`）
-3. 构建命令默认：`cd ../.. && pnpm --filter @investment-agent/web build`（无需 `setup:iwencai`）
-4. 在 Vercel 项目 **Environment Variables** 中配置（参考 `.env.example`）：
-   - `DEEPSEEK_API_KEY`（必填）
-   - `LIBSQL_URL` + `LIBSQL_AUTH_TOKEN`（推荐，Turso 持久化数据）
-   - `IWENCAI_API_KEY`（选股功能，见下方限制）
-4. 部署完成后访问分配的域名
+| 组件 | 部署位置 | 说明 |
+|------|----------|------|
+| `apps/web` | **Vercel** | 纯 Next.js，体积小，无 Mastra / tsx |
+| `packages/agent-core` | **Railway / VPS / Docker** | HTTP 服务，见 `packages/agent-core` README |
 
-### Vercel 限制说明
+### Vercel 环境变量
 
-| 功能 | Vercel 上 |
-|------|-----------|
-| 单股研报 | 可用（需 Pro 计划以支持较长 `maxDuration`） |
-| 研报/选股历史 | 需配置 Turso（`LIBSQL_URL`），否则数据仅在单次实例 `/tmp` 中临时保存 |
-| 智能选股 | 问财 MCP 依赖 Python 子进程，**标准 Node Serverless 上可能不可用** |
-| 笔记 RAG | 需预先 ingest 并上传向量库到 Turso |
+参考 `.env.example`：
 
-CLI 一键部署（需已 `vercel login`）：
+- `AGENT_CORE_URL`（必填）— agent-core 服务公网地址
+- `AGENT_CORE_TOKEN`（推荐）— 与后端一致的 Bearer Token
+
+Cron 仍由 Vercel 触发 `/api/cron/*`，Web 再转发到 agent-core。
+
+## 一键部署 Web（Vercel CLI）
 
 ```bash
 cd apps/web

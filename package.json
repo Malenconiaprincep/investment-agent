@@ -16,6 +16,8 @@
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev",
     "web:build": "pnpm --filter @investment-agent/web build",
+    "agent:serve": "pnpm --filter @investment-agent/agent-core serve",
+    "dev:all": "pnpm agent:serve & pnpm web:dev",
     "setup:iwencai": "pnpm --filter @investment-agent/agent-core setup:iwencai",
     "watchlist:snapshot": "pnpm --filter @investment-agent/agent-core watchlist:snapshot",
     "watchlist:weekly": "pnpm --filter @investment-agent/agent-core watchlist:weekly",
