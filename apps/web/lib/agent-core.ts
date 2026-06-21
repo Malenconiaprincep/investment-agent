@@ -8,16 +8,6 @@ export function getAgentCoreRoot() {
   return path.resolve(process.cwd(), '../../packages/agent-core');
 }
 
-export async function runAgentCoreJson(args: string[]): Promise<string> {
-  return runAgentCoreScript('reports-json.ts', args);
-}
-
-export async function runAgentCoreScreeningsJson(
-  args: string[],
-): Promise<string> {
-  return runAgentCoreScript('screenings-json.ts', args);
-}
-
 export async function runAgentCoreScript(
   scriptName: string,
   args: string[],
@@ -29,7 +19,7 @@ export async function runAgentCoreScript(
   const { stdout, stderr } = await execFileAsync(tsxBin, [scriptPath, ...args], {
     cwd: agentCoreRoot,
     env: process.env,
-    maxBuffer: 16 * 1024 * 1024,
+    maxBuffer: 32 * 1024 * 1024,
   });
 
   if (stderr?.trim()) {
@@ -37,4 +27,24 @@ export async function runAgentCoreScript(
   }
 
   return stdout;
+}
+
+export async function runAgentCoreJson(args: string[]): Promise<string> {
+  return runAgentCoreScript('reports-json.ts', args);
+}
+
+export async function runAgentCoreScreeningsJson(
+  args: string[],
+): Promise<string> {
+  return runAgentCoreScript('screenings-json.ts', args);
+}
+
+export async function runAgentCoreBatchResearch(
+  symbols: string[],
+): Promise<string> {
+  return runAgentCoreScript('batch-research-json.ts', symbols);
+}
+
+export async function runAgentCoreFeedback(args: string[]): Promise<string> {
+  return runAgentCoreScript('feedback-json.ts', args);
 }

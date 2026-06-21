@@ -4,6 +4,7 @@ import {
   getResearchReport,
   listResearchReports,
 } from '../data/reports/store.js';
+import { getFeedbackSummary } from '../data/feedback/store.js';
 
 async function main() {
   const command = process.argv[2];
@@ -25,7 +26,8 @@ async function main() {
       process.stderr.write(`Report not found: ${id}`);
       process.exit(1);
     }
-    process.stdout.write(JSON.stringify(report));
+    const feedback = await getFeedbackSummary('report', id);
+    process.stdout.write(JSON.stringify({ ...report, feedback }));
     return;
   }
 

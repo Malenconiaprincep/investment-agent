@@ -4,6 +4,13 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+
+type FeedbackSummary = {
+  up: number;
+  down: number;
+  latest: { rating: 1 | -1 } | null;
+};
 
 type ScreeningDetail = {
   id: string;
@@ -22,6 +29,7 @@ type ScreeningDetail = {
   passed: boolean;
   elapsedMs: number | null;
   createdAt: string;
+  feedback?: FeedbackSummary;
   committee: {
     id: string;
     memo: string;
@@ -29,6 +37,20 @@ type ScreeningDetail = {
     elapsedMs: number | null;
     createdAt: string;
   } | null;
+};
+
+type BacktestResult = {
+  holdDays: number;
+  avgReturnPct: number | null;
+  candidates: Array<{
+    symbol: string;
+    name: string;
+    baselineDate: string | null;
+    baselineClose: number | null;
+    latestClose: number | null;
+    returnPct: number | null;
+    error?: string;
+  }>;
 };
 
 function formatTime(iso: string) {
@@ -41,9 +63,17 @@ function formatTime(iso: string) {
   });
 }
 
+function formatPct(value: number | null) {
+  if (value == null) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}
+
 export default function ScreeningHistoryDetailPage() {
   const params = useParams<{ id: string }>();
   const [session, setSession] = useState<ScreeningDetail | null>(null);
+  const [backtest, setBacktest] = useState<BacktestResult | null>(null);
+  const [backtestLoading, setBacktestLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +104,28 @@ export default function ScreeningHistoryDetailPage() {
     void loadSession();
   }, [params.id]);
 
+  async function loadBacktest() {
+    if (!params.id) return;
+
+    setBacktestLoading(true);
+    try {
+      const response = await fetch(
+        `/api/screenings/${params.id}/backtest?days=5`,
+      );
+      const data: unknown = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as { error?: string }).error ?? '计算失败');
+      }
+
+      setBacktest(data as BacktestResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '事后验证失败');
+    } finally {
+      setBacktestLoading(false);
+    }
+  }
+
   return (
     <main className="page">
       <p className="breadcrumb">
@@ -103,6 +155,12 @@ export default function ScreeningHistoryDetailPage() {
               </span>
             )}
           </div>
+
+          <FeedbackButtons
+            targetType="screening"
+            targetId={session.id}
+            initial={session.feedback}
+          />
 
           {session.hotNews.length > 0 && (
             <section className="section">
@@ -164,6 +222,64 @@ export default function ScreeningHistoryDetailPage() {
               </table>
             </section>
           )}
+
+          <section className="section">
+            <div className="section-toolbar">
+              <h2 className="section-title">事后验证</h2>
+              {!backtest && (
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  disabled={backtestLoading || session.candidates.length === 0}
+                  onClick={loadBacktest}
+                >
+                  {backtestLoading ? '计算中…' : '计算 5 日涨跌'}
+                </button>
+              )}
+            </div>
+            {backtest && (
+              <>
+                <p className="muted">
+                  自选股日附近收盘价至最新收盘，平均{' '}
+                  <strong>{formatPct(backtest.avgReturnPct)}</strong>
+                </p>
+                <table className="candidate-table">
+                  <thead>
+                    <tr>
+                      <th>代码</th>
+                      <th>名称</th>
+                      <th>基准价</th>
+                      <th>最新价</th>
+                      <th>涨跌幅</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backtest.candidates.map((item) => (
+                      <tr key={item.symbol}>
+                        <td>{item.symbol}</td>
+                        <td>{item.name}</td>
+                        <td>
+                          {item.baselineClose?.toFixed(2) ?? '—'}
+                        </td>
+                        <td>{item.latestClose?.toFixed(2) ?? '—'}</td>
+                        <td
+                          className={
+                            item.returnPct != null && item.returnPct >= 0
+                              ? 'return-up'
+                              : item.returnPct != null
+                                ? 'return-down'
+                                : undefined
+                          }
+                        >
+                          {item.error ?? formatPct(item.returnPct)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </section>
 
           {session.rotationSummary && (
             <section className="section">

@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
+import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { readSSEStream } from '@/lib/sse';
 
 type ResearchResult = {
@@ -57,6 +58,20 @@ function parseStreamEvent(data: string): StreamEvent {
   return JSON.parse(data) as StreamEvent;
 }
 
+type EvalReport = {
+  ranAt: string;
+  passRate: number;
+  elapsedMs: number;
+  suites: Array<{
+    name: string;
+    total: number;
+    passed: number;
+    failed: number;
+    skipped?: number;
+  }>;
+  failures: Array<{ suite: string; id: string; detail: string }>;
+};
+
 export default function HomePage() {
   const [symbol, setSymbol] = useState('600519');
   const [loading, setLoading] = useState(false);
@@ -64,6 +79,23 @@ export default function HomePage() {
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [streamingReport, setStreamingReport] = useState('');
   const [result, setResult] = useState<ResearchResult | null>(null);
+  const [evalReport, setEvalReport] = useState<EvalReport | null>(null);
+
+  useEffect(() => {
+    async function loadEval() {
+      try {
+        const response = await fetch('/api/eval');
+        const data: unknown = await response.json();
+        if (!response.ok) return;
+        const payload = data as { report: EvalReport | null };
+        setEvalReport(payload.report);
+      } catch {
+        // ignore — eval report is optional
+      }
+    }
+
+    void loadEval();
+  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -186,6 +218,41 @@ export default function HomePage() {
         </Link>
       </div>
 
+      {evalReport && (
+        <section className="eval-card">
+          <div className="eval-card-header">
+            <h2 className="eval-card-title">Eval 摘要</h2>
+            <span className="muted">
+              {new Date(evalReport.ranAt).toLocaleString('zh-CN')}
+            </span>
+          </div>
+          <p className="eval-card-rate">
+            通过率 <strong>{evalReport.passRate}%</strong>
+            <span className="muted">
+              {' '}
+              · {(evalReport.elapsedMs / 1000).toFixed(1)}s
+            </span>
+          </p>
+          <div className="eval-suite-grid">
+            {evalReport.suites.map((suite) => (
+              <div key={suite.name} className="eval-suite">
+                <span className="eval-suite-name">{suite.name}</span>
+                <span>
+                  {suite.passed}/{suite.total}
+                  {suite.skipped ? ` (${suite.skipped} 跳过)` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+          {evalReport.failures.length > 0 && (
+            <p className="muted eval-failures">
+              失败 {evalReport.failures.length} 项 · 运行{' '}
+              <code>pnpm eval:all</code> 更新
+            </p>
+          )}
+        </section>
+      )}
+
       <section id="research" className="section">
         <h2 className="section-title">单股研报</h2>
 
@@ -251,6 +318,10 @@ export default function HomePage() {
             </Link>
           )}
         </div>
+      )}
+
+      {result?.reportId && (
+        <FeedbackButtons targetType="report" targetId={result.reportId} />
       )}
 
       {result && !result.passed && (

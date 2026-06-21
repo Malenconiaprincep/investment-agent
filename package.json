@@ -15,7 +15,8 @@
     "research": "pnpm --filter @investment-agent/agent-core research",
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev",
-    "design:audit": "npx impeccable detect apps/web/app apps/web/components"
+    "design:audit": "npx impeccable detect apps/web/app apps/web/components",
+    "eval:all": "pnpm --filter @investment-agent/agent-core eval:all"
   },
   "engines": {
     "node": ">=22.13.0"

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 
 type ReportDetail = {
   id: string;
@@ -15,6 +16,11 @@ type ReportDetail = {
   missingKeywords: string[];
   elapsedMs: number | null;
   createdAt: string;
+  feedback?: {
+    up: number;
+    down: number;
+    latest: { rating: 1 | -1 } | null;
+  };
 };
 
 function formatTime(iso: string) {
@@ -96,6 +102,12 @@ export default function HistoryDetailPage() {
                 ` · 缺少关键词: ${report.missingKeywords.join(', ')}`}
             </div>
           )}
+
+          <FeedbackButtons
+            targetType="report"
+            targetId={report.id}
+            initial={report.feedback}
+          />
 
           <article className="report">
             <ReportMarkdown source={report.report} />

@@ -1,0 +1,30 @@
+{
+  "ranAt": "2026-06-21T03:31:00.193Z",
+  "elapsedMs": 252480,
+  "passRate": 92.9,
+  "suites": [
+    {
+      "name": "agent",
+      "total": 11,
+      "passed": 11,
+      "failed": 0,
+      "elapsedMs": 252479
+    },
+    {
+      "name": "workflow",
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 1,
+      "elapsedMs": 0
+    },
+    {
+      "name": "screen",
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "elapsedMs": 0
+    }
+  ],
+  "failures": []
+}

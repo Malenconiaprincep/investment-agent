@@ -115,6 +115,16 @@ export default function ScreenPage() {
   const [committeeResult, setCommitteeResult] = useState<CommitteeResult | null>(
     null,
   );
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchResults, setBatchResults] = useState<
+    Array<{
+      symbol: string;
+      name: string;
+      passed: boolean;
+      reportId?: string;
+      error?: string;
+    }>
+  >([]);
 
   async function handleScreenSubmit(event?: React.FormEvent) {
     event?.preventDefault();
@@ -267,6 +277,47 @@ export default function ScreenPage() {
     } finally {
       setCommitteeLoading(false);
       setCommitteeStep(null);
+    }
+  }
+
+  async function handleBatchResearch() {
+    const pool = screenResult?.candidates ?? candidates;
+    const symbols = pool.slice(0, 5).map((c) => c.symbol);
+    if (symbols.length === 0) {
+      setError('暂无候选股可批量生成研报');
+      return;
+    }
+
+    setBatchLoading(true);
+    setError(null);
+    setBatchResults([]);
+
+    try {
+      const response = await fetch('/api/research/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      });
+      const data: unknown = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as { error?: string }).error ?? '批量生成失败');
+      }
+
+      const payload = data as {
+        results: Array<{
+          symbol: string;
+          name: string;
+          passed: boolean;
+          reportId?: string;
+          error?: string;
+        }>;
+      };
+      setBatchResults(payload.results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '未知错误');
+    } finally {
+      setBatchLoading(false);
     }
   }
 
@@ -464,10 +515,49 @@ export default function ScreenPage() {
               >
                 进入投委会分析
               </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={batchLoading}
+                onClick={handleBatchResearch}
+              >
+                {batchLoading
+                  ? '批量生成研报中…'
+                  : `批量生成研报（前 ${Math.min(candidates.length, 5)} 只）`}
+              </button>
               <span className="muted">
                 将对前 {Math.min(candidates.length, 3)} 只候选股做六维度分析
               </span>
             </div>
+          )}
+
+          {batchResults.length > 0 && (
+            <ul className="sector-list batch-results">
+              {batchResults.map((item) => (
+                <li key={item.symbol}>
+                  <strong>
+                    {item.name} ({item.symbol})
+                  </strong>
+                  <span className={`badge ${item.passed ? 'pass' : 'fail'}`}>
+                    {item.passed ? 'PASS' : 'FAIL'}
+                  </span>
+                  {item.error && (
+                    <span className="muted"> — {item.error}</span>
+                  )}
+                  {item.reportId && (
+                    <>
+                      {' '}
+                      <Link
+                        href={`/history/${item.reportId}`}
+                        className="saved-link"
+                      >
+                        查看研报
+                      </Link>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </section>
       )}
