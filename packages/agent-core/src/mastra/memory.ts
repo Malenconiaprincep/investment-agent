@@ -1,11 +1,11 @@
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
-import { DATA_DIR } from './config/paths';
+import { getMastraMemoryUrl } from '../data/libsql-config.js';
 
 export const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: `file:${DATA_DIR}/mastra.db`,
+  url: getMastraMemoryUrl(),
 });
 
 export const agentMemory = new Memory({

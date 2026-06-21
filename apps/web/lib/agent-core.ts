@@ -1,11 +1,58 @@
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-export function getAgentCoreRoot() {
-  return path.resolve(process.cwd(), '../../packages/agent-core');
+export function getAgentCoreRoot(): string {
+  if (process.env.AGENT_CORE_ROOT?.trim()) {
+    return process.env.AGENT_CORE_ROOT.trim();
+  }
+
+  const candidates = [
+    path.resolve(process.cwd(), '../../packages/agent-core'),
+    path.resolve(process.cwd(), 'packages/agent-core'),
+    path.resolve(process.cwd(), '../packages/agent-core'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+  }
+
+  throw new Error('未找到 agent-core 包，请检查 monorepo 部署配置');
+}
+
+export function getTsxBin(agentCoreRoot = getAgentCoreRoot()): string {
+  const local = path.join(agentCoreRoot, 'node_modules/.bin/tsx');
+  if (existsSync(local)) {
+    return local;
+  }
+
+  const root = path.resolve(agentCoreRoot, '../../node_modules/.bin/tsx');
+  if (existsSync(root)) {
+    return root;
+  }
+
+  throw new Error('未找到 tsx，请在 agent-core 中安装依赖');
+}
+
+export function spawnAgentCoreScript(
+  scriptName: string,
+  args: string[] = [],
+  options?: { env?: Record<string, string | undefined> },
+): ChildProcess {
+  const agentCoreRoot = getAgentCoreRoot();
+  const tsxBin = getTsxBin(agentCoreRoot);
+  const scriptPath = path.join(agentCoreRoot, 'src/cli', scriptName);
+
+  return spawn(tsxBin, [scriptPath, ...args], {
+    cwd: agentCoreRoot,
+    env: { ...process.env, ...options?.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 export async function runAgentCoreScript(
@@ -13,7 +60,7 @@ export async function runAgentCoreScript(
   args: string[],
 ): Promise<string> {
   const agentCoreRoot = getAgentCoreRoot();
-  const tsxBin = path.join(agentCoreRoot, 'node_modules/.bin/tsx');
+  const tsxBin = getTsxBin(agentCoreRoot);
   const scriptPath = path.join(agentCoreRoot, 'src/cli', scriptName);
 
   const { stdout, stderr } = await execFileAsync(tsxBin, [scriptPath, ...args], {

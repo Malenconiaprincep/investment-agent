@@ -1,21 +1,39 @@
 # Web UI
 
-Next.js 投研界面，调用 `@investment-agent/agent-core` 的 Research Workflow。
+Next.js 投研界面，面向 toC 用户。
 
-## 启动
-
-确保已配置 `packages/agent-core/.env`（含 `DEEPSEEK_API_KEY`）。
+## 本地开发
 
 ```bash
-# 根目录
 pnpm install
+# 配置 packages/agent-core/.env（含 DEEPSEEK_API_KEY）
 pnpm web:dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，输入 6 位股票代码生成研报。
+打开 [http://localhost:3000](http://localhost:3000)
 
-## 开发说明
+## 部署到 Vercel
 
-- API：`POST /api/research`，body `{ "symbol": "600519" }`
-- 环境变量从 `packages/agent-core/.env` 加载
-- 详见 [docs/phase4-learning.md](../../docs/phase4-learning.md)
+1. 将仓库导入 [Vercel](https://vercel.com/new)
+2. **Root Directory** 设为 `apps/web`（会使用同目录下的 `vercel.json`）
+3. 在 Vercel 项目 **Environment Variables** 中配置（参考 `.env.example`）：
+   - `DEEPSEEK_API_KEY`（必填）
+   - `LIBSQL_URL` + `LIBSQL_AUTH_TOKEN`（推荐，Turso 持久化数据）
+   - `IWENCAI_API_KEY`（选股功能，见下方限制）
+4. 部署完成后访问分配的域名
+
+### Vercel 限制说明
+
+| 功能 | Vercel 上 |
+|------|-----------|
+| 单股研报 | 可用（需 Pro 计划以支持较长 `maxDuration`） |
+| 研报/选股历史 | 需配置 Turso（`LIBSQL_URL`），否则数据仅在单次实例 `/tmp` 中临时保存 |
+| 智能选股 | 问财 MCP 依赖 Python 子进程，**标准 Node Serverless 上可能不可用** |
+| 笔记 RAG | 需预先 ingest 并上传向量库到 Turso |
+
+CLI 一键部署（需已 `vercel login`）：
+
+```bash
+cd apps/web
+vercel --prod
+```

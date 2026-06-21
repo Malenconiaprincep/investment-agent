@@ -1,7 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { DATA_DIR } from '../../mastra/config/paths.js';
-
-const DB_URL = `file:${DATA_DIR}/research-reports.db`;
+import { getPrimaryLibsqlOptions } from '../libsql-config.js';
 
 export type FeedbackTargetType = 'report' | 'screening';
 
@@ -19,7 +17,7 @@ let migrated = false;
 
 async function getDb(): Promise<Client> {
   if (!client) {
-    client = createClient({ url: DB_URL });
+    client = createClient(getPrimaryLibsqlOptions());
   }
 
   if (!migrated) {

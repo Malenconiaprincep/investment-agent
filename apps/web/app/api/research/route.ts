@@ -1,7 +1,9 @@
-import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import {
+  createAgentCoreSSEStream,
+  SSE_RESPONSE_HEADERS,
+} from '@/lib/agent-core-stream';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -18,14 +20,6 @@ const bodySchema = z
     message: '请提供 symbol 或 query',
   });
 
-function getAgentCoreRoot() {
-  return path.resolve(process.cwd(), '../../packages/agent-core');
-}
-
-function encodeSSE(event: string, data: unknown) {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
 export async function POST(request: Request) {
   try {
     const json: unknown = await request.json();
@@ -38,75 +32,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const agentCoreRoot = getAgentCoreRoot();
-    const tsxBin = path.join(agentCoreRoot, 'node_modules/.bin/tsx');
-    const scriptPath = path.join(agentCoreRoot, 'src/cli/research-stream.ts');
-    const args = [scriptPath];
-
+    const args: string[] = [];
     if (parsed.data.symbol) {
       args.push(parsed.data.symbol);
     } else if (parsed.data.query) {
       args.push(parsed.data.query);
     }
 
-    const child = spawn(tsxBin, args, {
-      cwd: agentCoreRoot,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const stream = createAgentCoreSSEStream(
+      'research-stream.ts',
+      args,
+      'research',
+    );
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode(': stream-open\n\n'));
-
-        child.stdout.on('data', (chunk: Buffer) => {
-          controller.enqueue(new Uint8Array(chunk));
-        });
-
-        child.stderr.on('data', (chunk: Buffer) => {
-          const text = chunk.toString().trim();
-          if (text) {
-            console.warn('[research]', text);
-          }
-        });
-
-        child.on('error', (error) => {
-          const message =
-            error instanceof Error ? error.message : '子进程启动失败';
-          controller.enqueue(
-            encoder.encode(encodeSSE('error', { type: 'error', message })),
-          );
-          controller.close();
-        });
-
-        child.on('close', (code) => {
-          if (code !== 0 && code !== null) {
-            controller.enqueue(
-              encoder.encode(
-                encodeSSE('error', {
-                  type: 'error',
-                  message: `Workflow 退出码 ${code}`,
-                }),
-              ),
-            );
-          }
-          controller.close();
-        });
-      },
-      cancel() {
-        child.kill('SIGTERM');
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    });
+    return new Response(stream, { headers: SSE_RESPONSE_HEADERS });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : '服务器错误';

@@ -41,12 +41,12 @@
     "@mastra/rag": "^2.3.0",
     "ai": "^6.0.208",
     "dotenv": "^17.2.2",
+    "tsx": "^4.20.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
     "mastra": "^1.15.0",
-    "tsx": "^4.20.5",
     "typescript": "^6.0.3"
   }
 }
