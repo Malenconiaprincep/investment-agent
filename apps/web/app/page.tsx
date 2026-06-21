@@ -170,31 +170,22 @@ export default function HomePage() {
         description="输入股票代码生成研报，或从热点新闻一键选股，再对候选股做深度分析。"
       />
 
-      <div className="dashboard-grid">
-        <Link href="/#research" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">生成研报</h2>
-          <p className="dashboard-tile-desc">
-            输入 6 位代码，自动采数并生成结构化研报。
-          </p>
-          <span className="dashboard-tile-tag">当前</span>
-        </Link>
+      <div className="dashboard-grid dashboard-grid--compact">
         <Link href="/screen" className="dashboard-tile">
           <h2 className="dashboard-tile-title">智能选股</h2>
           <p className="dashboard-tile-desc">
-            扫描今日热点与强势板块，自动筛选候选股。
+            扫描今日热点与强势板块，自动筛出候选股。
           </p>
         </Link>
-        <Link href="/screen/history" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">选股记录</h2>
-          <p className="dashboard-tile-desc">回看每次选股的板块、候选池与摘要。</p>
+        <Link href="/watchlist" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">我的自选</h2>
+          <p className="dashboard-tile-desc">
+            加入关注后每日跟踪，出现买卖信号会提醒。
+          </p>
         </Link>
         <Link href="/history" className="dashboard-tile">
           <h2 className="dashboard-tile-title">我的研报</h2>
           <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
-        </Link>
-        <Link href="/watchlist" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">我的监控</h2>
-          <p className="dashboard-tile-desc">跟踪自选，每日快照，钻石信号提醒。</p>
         </Link>
       </div>
 

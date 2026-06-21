@@ -54,7 +54,7 @@ export default function ReviewsPage() {
     <main className="page">
       <PageHeader
         title="每周复盘"
-        description="汇总监控池涨跌、钻石信号与模拟账户表现，帮你回顾一周得失。"
+        description="汇总自选池涨跌、信号提醒与模拟账户表现，帮你回顾一周得失。"
       />
 
       <nav className="page-toolbar">
@@ -67,7 +67,7 @@ export default function ReviewsPage() {
           {generating ? '生成中…' : '生成本周复盘'}
         </button>
         <Link href="/watchlist" className="button button-secondary">
-          我的监控
+          我的自选
         </Link>
       </nav>
 
@@ -76,7 +76,7 @@ export default function ReviewsPage() {
 
       {!loading && reviews.length === 0 && (
         <div className="empty-state">
-          暂无周报。加入监控并积累快照后，点击「生成本周复盘」。
+          暂无周报。加入自选并积累快照后，点击「生成本周复盘」。
         </div>
       )}
 

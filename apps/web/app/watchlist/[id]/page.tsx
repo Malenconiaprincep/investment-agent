@@ -97,7 +97,7 @@ export default function WatchlistDetailPage() {
   return (
     <main className="page">
       <p className="breadcrumb">
-        <Link href="/watchlist">← 我的监控</Link>
+        <Link href="/watchlist">← 我的自选</Link>
       </p>
 
       {loading && <div className="list-loading">加载中…</div>}

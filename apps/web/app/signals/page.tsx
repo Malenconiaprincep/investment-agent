@@ -62,8 +62,8 @@ export default function SignalsPage() {
   return (
     <main className="page">
       <PageHeader
-        title="钻石信号"
-        description="基于日 K 收盘：趋势 + 放量 + MACD + 突破 共振时出现。红钻偏强，蓝钻偏温和。"
+        title="信号提醒"
+        description="基于日 K 收盘：趋势、放量、MACD 与突破同时满足时出现。红色偏强，蓝色偏温和。"
       />
 
       <div className="signal-legend">
@@ -78,7 +78,7 @@ export default function SignalsPage() {
           disabled={scanning}
           onClick={() => runScan('watchlist')}
         >
-          {scanning ? '扫描中…' : '扫描监控池'}
+          {scanning ? '扫描中…' : '扫描自选池'}
         </button>
         <button
           type="button"
@@ -89,7 +89,7 @@ export default function SignalsPage() {
           扫描最近选股
         </button>
         <Link href="/watchlist" className="button button-secondary">
-          我的监控
+          我的自选
         </Link>
       </nav>
 
@@ -97,7 +97,7 @@ export default function SignalsPage() {
       {error && <div className="error">{error}</div>}
 
       {!loading && signals.length === 0 && (
-        <div className="empty-state">暂无钻石信号，点击上方按钮扫描。</div>
+        <div className="empty-state">暂无信号，点击上方按钮扫描。</div>
       )}
 
       <div className="history-list">

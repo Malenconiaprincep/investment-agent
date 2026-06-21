@@ -45,7 +45,7 @@ export function AddToWatchlistButton({
   if (done) {
     return (
       <a href="/watchlist" className="button button-secondary">
-        已加入监控 · 查看
+        已加入自选 · 查看
       </a>
     );
   }
@@ -58,7 +58,7 @@ export function AddToWatchlistButton({
         disabled={loading}
         onClick={handleAdd}
       >
-        {loading ? '添加中…' : '加入监控'}
+        {loading ? '添加中…' : '加入自选'}
       </button>
       {error && <span className="muted">{error}</span>}
     </div>

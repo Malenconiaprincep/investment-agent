@@ -3,13 +3,44 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const NAV = [
-  { href: '/', label: '首页' },
-  { href: '/screen', label: '智能选股' },
-  { href: '/watchlist', label: '我的监控' },
-  { href: '/signals', label: '钻石信号' },
-  { href: '/history', label: '我的研报' },
-] as const;
+type NavItem = {
+  href: string;
+  label: string;
+  isActive: (pathname: string) => boolean;
+};
+
+const NAV: NavItem[] = [
+  {
+    href: '/',
+    label: '首页',
+    isActive: (pathname) => pathname === '/',
+  },
+  {
+    href: '/screen',
+    label: '智能选股',
+    isActive: (pathname) =>
+      pathname === '/screen' || pathname.startsWith('/screen/'),
+  },
+  {
+    href: '/watchlist',
+    label: '我的自选',
+    isActive: (pathname) =>
+      pathname === '/watchlist' ||
+      pathname.startsWith('/watchlist/') ||
+      pathname === '/signals' ||
+      pathname.startsWith('/signals/') ||
+      pathname === '/paper' ||
+      pathname.startsWith('/paper/') ||
+      pathname === '/reviews' ||
+      pathname.startsWith('/reviews/'),
+  },
+  {
+    href: '/history',
+    label: '我的研报',
+    isActive: (pathname) =>
+      pathname === '/history' || pathname.startsWith('/history/'),
+  },
+];
 
 export function SiteNav() {
   const pathname = usePathname();
@@ -26,11 +57,7 @@ export function SiteNav() {
 
         <nav className="site-nav" aria-label="主导航">
           {NAV.map((item) => {
-            const active =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
+            const active = item.isActive(pathname);
             return (
               <Link
                 key={item.href}

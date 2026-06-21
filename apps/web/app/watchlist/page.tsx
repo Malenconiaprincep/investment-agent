@@ -48,13 +48,13 @@ export default function WatchlistPage() {
   return (
     <main className="page">
       <PageHeader
-        title="我的监控"
-        description="分析后加入监控池，按日 K 收盘记录行情，出现钻石信号时提示。"
+        title="我的自选"
+        description="分析后加入自选池，按日 K 收盘记录行情，出现信号时会提示。"
       />
 
       <nav className="page-toolbar">
         <Link href="/signals" className="button button-secondary">
-          钻石信号
+          信号提醒
         </Link>
         <Link href="/reviews" className="button button-secondary">
           每周复盘
@@ -64,16 +64,16 @@ export default function WatchlistPage() {
         </Link>
       </nav>
 
-      {loading && <div className="list-loading">加载监控池…</div>}
+      {loading && <div className="list-loading">加载自选…</div>}
       {error && <div className="error">{error}</div>}
 
       {!loading && items.length === 0 && (
         <div className="empty-state">
-          暂无监控股票。在
+          暂无自选股票。在
           <Link href="/">研报</Link>
           或
           <Link href="/screen">选股</Link>
-          结果页点击「加入监控」。
+          结果页点击「加入自选」。
         </div>
       )}
 

@@ -200,6 +200,10 @@ a:hover {
   .dashboard-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+
+  .dashboard-grid--compact {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .dashboard-tile {

@@ -49,7 +49,7 @@ export default function PaperTradingPage() {
 
       <nav className="page-toolbar">
         <Link href="/watchlist" className="button button-secondary">
-          我的监控
+          我的自选
         </Link>
         <Link href="/reviews" className="button button-secondary">
           每周复盘
@@ -82,7 +82,7 @@ export default function PaperTradingPage() {
           {data.positions.length === 0 ? (
             <div className="empty-state">
               暂无持仓。在
-              <Link href="/watchlist">监控详情</Link>
+              <Link href="/watchlist">自选详情</Link>
               页可一键模拟买入。
             </div>
           ) : (
