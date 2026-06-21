@@ -25,6 +25,9 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.7(react@19.2.7)
+      tsx:
+        specifier: ^4.20.5
+        version: 4.22.4
       zod:
         specifier: ^4.4.3
         version: 4.4.3
