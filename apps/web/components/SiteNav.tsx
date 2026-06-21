@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 const NAV = [
   { href: '/', label: '首页' },
   { href: '/screen', label: '智能选股' },
-  { href: '/screen/history', label: '选股记录' },
+  { href: '/watchlist', label: '我的监控' },
+  { href: '/signals', label: '钻石信号' },
   { href: '/history', label: '我的研报' },
 ] as const;
 

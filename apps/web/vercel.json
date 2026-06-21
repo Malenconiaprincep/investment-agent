@@ -3,5 +3,10 @@
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm --filter @investment-agent/web build",
   "framework": "nextjs",
-  "regions": ["hkg1"]
+  "regions": ["hkg1"],
+  "crons": [
+    { "path": "/api/cron/daily-snapshot", "schedule": "30 7 * * 1-5" },
+    { "path": "/api/cron/weekly-review", "schedule": "0 0 * * 1" },
+    { "path": "/api/cron/diamond-scan", "schedule": "35 7 * * 1-5" }
+  ]
 }

@@ -95,3 +95,11 @@ export async function runAgentCoreBatchResearch(
 export async function runAgentCoreFeedback(args: string[]): Promise<string> {
   return runAgentCoreScript('feedback-json.ts', args);
 }
+
+export async function runAgentCoreWatchlistJson(args: string[]): Promise<string> {
+  return runAgentCoreScript('watchlist-json.ts', args);
+}
+
+export async function runAgentCorePaperJson(args: string[]): Promise<string> {
+  return runAgentCoreScript('paper-json.ts', args);
+}

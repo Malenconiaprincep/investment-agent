@@ -26,6 +26,8 @@
     "reports:list": "tsx src/cli/reports-json.ts list",
     "screenings:list": "tsx src/cli/screenings-json.ts list",
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
+    "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
+    "watchlist:weekly": "tsx src/cli/scheduled-weekly-review.ts",
     "research:batch": "tsx src/cli/batch-research-json.ts",
     "setup:iwencai": "test -f vendor/iwencai-mcp/server.py || git clone --depth 1 https://github.com/lorek666/iwencai-mcp.git vendor/iwencai-mcp",
     "test:iwencai-mcp": "tsx src/scripts/test-iwencai-mcp.ts"

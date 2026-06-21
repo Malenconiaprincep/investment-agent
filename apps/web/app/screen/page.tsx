@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QualityBadge } from '@/components/ui/QualityBadge';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
@@ -354,6 +355,9 @@ export default function ScreenPage() {
               查看本次记录
             </Link>
           )}
+          <Link href="/screen/history" className="button button-secondary">
+            选股记录
+          </Link>
         </div>
 
         {showAdvanced && (
@@ -473,9 +477,18 @@ export default function ScreenPage() {
                   <td>{c.name}</td>
                   <td>{c.thesis.slice(0, 80)}</td>
                   <td>
-                    <Link href={`/?symbol=${c.symbol}`} className="saved-link">
-                      生成研报
-                    </Link>
+                    <div className="candidate-chips">
+                      <Link href={`/?symbol=${c.symbol}`} className="saved-link">
+                        生成研报
+                      </Link>
+                      <AddToWatchlistButton
+                        symbol={c.symbol}
+                        name={c.name}
+                        reason={c.thesis.slice(0, 120)}
+                        sourceType="screening"
+                        sourceId={screenResult?.sessionId}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

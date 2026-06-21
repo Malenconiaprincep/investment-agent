@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import {
   formatMissingHint,
   QualityBadge,
@@ -104,6 +105,14 @@ export default function HistoryDetailPage() {
             targetType="report"
             targetId={report.id}
             initial={report.feedback}
+          />
+
+          <AddToWatchlistButton
+            symbol={report.symbol}
+            name={report.name}
+            reason={`研报 ${report.createdAt.slice(0, 10)}`}
+            sourceType="report"
+            sourceId={report.id}
           />
 
           <article className="report">

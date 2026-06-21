@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/QualityBadge';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { readSSEStream } from '@/lib/sse';
 
 type ResearchResult = {
@@ -191,6 +192,10 @@ export default function HomePage() {
           <h2 className="dashboard-tile-title">我的研报</h2>
           <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
         </Link>
+        <Link href="/watchlist" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">我的监控</h2>
+          <p className="dashboard-tile-desc">跟踪自选，每日快照，钻石信号提醒。</p>
+        </Link>
       </div>
 
       <section id="research" className="section">
@@ -259,6 +264,16 @@ export default function HomePage() {
 
       {result?.reportId && (
         <FeedbackButtons targetType="report" targetId={result.reportId} />
+      )}
+
+      {result && (
+        <AddToWatchlistButton
+          symbol={result.symbol}
+          name={result.name}
+          reason="首页生成研报"
+          sourceType="report"
+          sourceId={result.reportId}
+        />
       )}
 
       {result && !result.passed && (

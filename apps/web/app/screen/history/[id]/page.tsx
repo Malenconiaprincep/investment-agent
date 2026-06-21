@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { QualityBadge } from '@/components/ui/QualityBadge';
 
 type FeedbackSummary = {
@@ -155,6 +156,21 @@ export default function ScreeningHistoryDetailPage() {
             targetId={session.id}
             initial={session.feedback}
           />
+
+          {session.candidates.length > 0 && (
+            <div className="candidate-chips">
+              {session.candidates.slice(0, 8).map((c) => (
+                <AddToWatchlistButton
+                  key={c.symbol}
+                  symbol={c.symbol}
+                  name={c.name}
+                  reason={c.thesis.slice(0, 60)}
+                  sourceType="screening"
+                  sourceId={session.id}
+                />
+              ))}
+            </div>
+          )}
 
           {session.hotNews.length > 0 && (
             <section className="section">

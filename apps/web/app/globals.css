@@ -625,6 +625,94 @@ a:hover {
   align-items: center;
 }
 
+.diamond-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.diamond-badge--red {
+  background: color-mix(in srgb, #e07070 20%, transparent);
+  color: #f0abab;
+}
+
+.diamond-badge--blue {
+  background: color-mix(in srgb, #7eb8da 20%, transparent);
+  color: #a8d4ef;
+}
+
+.diamond-card {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.diamond-card--red {
+  border-color: color-mix(in srgb, #e07070 40%, var(--border));
+}
+
+.diamond-card--blue {
+  border-color: color-mix(in srgb, #7eb8da 40%, var(--border));
+}
+
+.signal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.kline-chart {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.chart-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.paper-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.paper-summary strong {
+  display: block;
+  font-size: 1.25rem;
+  margin-top: 0.25rem;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.candidate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .button--active {
   border-color: var(--accent);
   background: var(--accent-muted);
