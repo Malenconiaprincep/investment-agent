@@ -34,9 +34,17 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Impeccable (local per-developer overrides)
+.impeccable/config.local.json
+
+# Claude / Codex local harness (optional reinstall)
+.claude/settings.local.json
+.codex/hooks.json
+
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 

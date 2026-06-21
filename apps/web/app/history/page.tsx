@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { ReportSummary } from '@/app/api/reports/route';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -54,10 +55,20 @@ export default function HistoryPage() {
 
   return (
     <main className="page">
-      <header className="header">
-        <h1>历史研报</h1>
-        <p>Workflow 生成的研报会自动保存到本地 LibSQL，可在此回看。</p>
-      </header>
+      <PageHeader
+        eyebrow="归档"
+        title="历史研报"
+        description="Workflow 生成的研报自动保存到本地 LibSQL，可按代码筛选回看。"
+      />
+
+      <div className="form history-filter">
+        <Link href="/" className="button button-secondary">
+          返回工作台
+        </Link>
+        <Link href="/screen/history" className="button button-secondary">
+          选股历史
+        </Link>
+      </div>
 
       <div className="form history-filter">
         <input
@@ -76,7 +87,7 @@ export default function HistoryPage() {
         </button>
       </div>
 
-      {loading && <div className="loading">加载中…</div>}
+      {loading && <div className="loading-block">加载中…</div>}
       {error && <div className="error">{error}</div>}
 
       {!loading && !error && reports.length === 0 && (

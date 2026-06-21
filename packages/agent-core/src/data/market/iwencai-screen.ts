@@ -17,6 +17,9 @@ export type CandidateItem = {
   dataSource: 'iwencai' | 'eastmoney';
 };
 
+const FALLBACK_SECTOR_QUERY = '今日概念板块涨幅排名前10';
+const FALLBACK_STOCK_QUERY = '今日A股主力净流入前20，排除ST';
+
 function walkValues(node: unknown, out: unknown[]): void {
   if (node == null) return;
   if (Array.isArray(node)) {
@@ -44,6 +47,7 @@ function pickName(obj: Record<string, unknown>): string | null {
     '证券简称',
     '股票简称',
     '板块名称',
+    '指数简称',
     '行业',
   ]) {
     const value = obj[key];
@@ -94,12 +98,21 @@ function rowsFromQuery2Data(data: unknown): Record<string, unknown>[] {
   return rows;
 }
 
+function isStockRow(row: Record<string, unknown>): boolean {
+  const text = JSON.stringify(row);
+  if (/\b[036]\d{5}\b/.test(text) && /股票/.test(text)) return true;
+  return Object.keys(row).some(
+    (key) => key.includes('股票代码') || key.includes('stock_code'),
+  );
+}
+
 export function parseSectorsFromIwencai(data: unknown, limit = 5): SectorItem[] {
   const rows = rowsFromQuery2Data(data);
   const sectors: SectorItem[] = [];
   const seen = new Set<string>();
 
   for (const row of rows) {
+    if (isStockRow(row)) continue;
     const name =
       pickName(row) ??
       Object.values(row).find(
@@ -186,11 +199,28 @@ export async function fetchIwencaiSectors(query: string, limit = 5) {
     limit: String(limit),
   });
 
+  const sectors = parseSectorsFromIwencai(raw, limit);
+
   return {
     raw,
-    sectors: parseSectorsFromIwencai(raw, limit),
+    sectors,
     disclaimer: IWENCAI_DISCLAIMER,
   };
+}
+
+/** 主 query 无结果时，用通用强势板块 query 重试 */
+export async function fetchIwencaiSectorsWithFallback(
+  query: string,
+  limit = 5,
+) {
+  let result = await fetchIwencaiSectors(query, limit);
+  if (result.sectors.length === 0 && query !== FALLBACK_SECTOR_QUERY) {
+    const fallback = await fetchIwencaiSectors(FALLBACK_SECTOR_QUERY, limit);
+    if (fallback.sectors.length > 0) {
+      return { ...fallback, usedFallback: true as const };
+    }
+  }
+  return { ...result, usedFallback: false as const };
 }
 
 export async function fetchIwencaiCandidates(
@@ -213,6 +243,31 @@ export async function fetchIwencaiCandidates(
     candidates: parseCandidatesFromIwencai(raw, limit),
     disclaimer: IWENCAI_DISCLAIMER,
   };
+}
+
+/** 主 query 无结果时，用通用主力净流入 query 重试 */
+export async function fetchIwencaiCandidatesWithFallback(
+  query: string,
+  sectorHint: string | undefined,
+  limit = 10,
+) {
+  let result = await fetchIwencaiCandidates(query, sectorHint, limit);
+  if (result.candidates.length === 0) {
+    const fallbackQuery = sectorHint
+      ? `${sectorHint}板块，主力净流入前20，排除ST`
+      : FALLBACK_STOCK_QUERY;
+    if (fallbackQuery !== query) {
+      const fallback = await fetchIwencaiCandidates(
+        fallbackQuery,
+        sectorHint,
+        limit,
+      );
+      if (fallback.candidates.length > 0) {
+        return { ...fallback, usedFallback: true as const };
+      }
+    }
+  }
+  return { ...result, usedFallback: false as const };
 }
 
 export async function fetchIwencaiIndustryContext(query: string) {

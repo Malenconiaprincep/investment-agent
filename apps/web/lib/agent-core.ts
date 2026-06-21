@@ -9,9 +9,22 @@ export function getAgentCoreRoot() {
 }
 
 export async function runAgentCoreJson(args: string[]): Promise<string> {
+  return runAgentCoreScript('reports-json.ts', args);
+}
+
+export async function runAgentCoreScreeningsJson(
+  args: string[],
+): Promise<string> {
+  return runAgentCoreScript('screenings-json.ts', args);
+}
+
+export async function runAgentCoreScript(
+  scriptName: string,
+  args: string[],
+): Promise<string> {
   const agentCoreRoot = getAgentCoreRoot();
   const tsxBin = path.join(agentCoreRoot, 'node_modules/.bin/tsx');
-  const scriptPath = path.join(agentCoreRoot, 'src/cli/reports-json.ts');
+  const scriptPath = path.join(agentCoreRoot, 'src/cli', scriptName);
 
   const { stdout, stderr } = await execFileAsync(tsxBin, [scriptPath, ...args], {
     cwd: agentCoreRoot,

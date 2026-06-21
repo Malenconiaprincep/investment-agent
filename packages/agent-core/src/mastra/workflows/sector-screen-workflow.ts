@@ -1,9 +1,10 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import {
-  fetchIwencaiCandidates,
+  fetchIwencaiCandidatesWithFallback,
   fetchIwencaiIndustryContext,
-  fetchIwencaiSectors,
+  fetchIwencaiSectorsWithFallback,
+  parseCandidatesFromIwencai,
   type CandidateItem,
   type SectorItem,
 } from '../../data/market/iwencai-screen.js';
@@ -106,9 +107,12 @@ const fetchSectorsStep = createStep({
     let industrySummary: string | null = null;
 
     try {
-      const result = await fetchIwencaiSectors(parsed.sectorQuery, 5);
+      const result = await fetchIwencaiSectorsWithFallback(parsed.sectorQuery, 5);
       sectors = result.sectors;
       sectorRaw = result.raw;
+      if (result.usedFallback) {
+        fetchErrors.push('sectors: 主 query 无结果，已使用强势板块 fallback');
+      }
     } catch (error) {
       fetchErrors.push(
         `sectors: ${error instanceof Error ? error.message : String(error)}`,
@@ -160,17 +164,31 @@ const fetchCandidatesStep = createStep({
     let candidateRaw: unknown = null;
 
     try {
-      const result = await fetchIwencaiCandidates(
+      const result = await fetchIwencaiCandidatesWithFallback(
         inputData.parsed.stockQuery,
         sectorHint,
         inputData.parsed.maxCandidates,
       );
       candidates = result.candidates;
       candidateRaw = result.raw;
+      if (result.usedFallback) {
+        fetchErrors.push('candidates: 主 query 无结果，已使用主力净流入 fallback');
+      }
     } catch (error) {
       fetchErrors.push(
         `candidates: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+
+    if (candidates.length === 0 && inputData.sectorRaw) {
+      const fromSectorRaw = parseCandidatesFromIwencai(
+        inputData.sectorRaw,
+        inputData.parsed.maxCandidates,
+      );
+      if (fromSectorRaw.length > 0) {
+        candidates = fromSectorRaw;
+        fetchErrors.push('candidates: 板块接口返回个股，已转为候选池');
+      }
     }
 
     return {
@@ -286,6 +304,26 @@ ${JSON.stringify(inputData.fetchErrors, null, 2)}
     for await (const chunk of stream.textStream) {
       rotationSummary += chunk;
       emitScreenStreamEvent({ type: 'token', text: chunk });
+    }
+
+    if (!rotationSummary.trim()) {
+      rotationSummary = `## 板块轮动逻辑
+
+问财已返回板块/个股数据，但摘要生成未产出内容。请查看下方结构化候选池与采数异常说明。
+
+## 热门板块解读
+
+${JSON.stringify(inputData.sectors, null, 2)}
+
+## 候选池说明
+
+${JSON.stringify(inputData.candidates, null, 2)}
+
+## 数据来源
+
+iwencai / eastmoney
+
+免责声明：本内容不构成投资建议。`;
     }
 
     return {

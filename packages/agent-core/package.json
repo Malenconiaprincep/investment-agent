@@ -23,6 +23,7 @@
     "committee": "tsx src/cli/committee.ts",
     "committee:stream": "tsx src/cli/committee-stream.ts",
     "reports:list": "tsx src/cli/reports-json.ts list",
+    "screenings:list": "tsx src/cli/screenings-json.ts list",
     "setup:iwencai": "test -f vendor/iwencai-mcp/server.py || git clone --depth 1 https://github.com/lorek666/iwencai-mcp.git vendor/iwencai-mcp",
     "test:iwencai-mcp": "tsx src/scripts/test-iwencai-mcp.ts"
   },

@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { WorkflowPipeline } from '@/components/ui/WorkflowPipeline';
 import { readSSEStream } from '@/lib/sse';
 
 type ResearchResult = {
@@ -36,9 +38,9 @@ type StreamEvent =
   | { type: 'error'; message: string };
 
 const EXAMPLES = [
-  { label: '贵州茅台 600519', symbol: '600519' },
-  { label: '宁德时代 300750', symbol: '300750' },
-  { label: '平安银行 000001', symbol: '000001' },
+  { label: '贵州茅台', symbol: '600519' },
+  { label: '宁德时代', symbol: '300750' },
+  { label: '平安银行', symbol: '000001' },
 ];
 
 const STEP_ORDER = [
@@ -98,25 +100,19 @@ export default function HomePage() {
       await readSSEStream(response, (_eventName, data) => {
         const event = parseStreamEvent(data);
 
-        if (event.type === 'step') {
-          setCurrentStep(event.label);
-        }
-
+        if (event.type === 'step') setCurrentStep(event.label);
         if (event.type === 'meta') {
           metaSymbol = event.symbol;
           metaName = event.name;
         }
-
         if (event.type === 'token') {
           report += event.text;
           setStreamingReport(report);
         }
-
         if (event.type === 'error') {
           streamError = new Error(event.message);
           return;
         }
-
         if (event.type === 'done') {
           finalResult = {
             report: event.report,
@@ -136,9 +132,7 @@ export default function HomePage() {
         }
       });
 
-      if (streamError) {
-        throw streamError;
-      }
+      if (streamError) throw streamError;
 
       if (!finalResult && report) {
         setResult({
@@ -165,61 +159,74 @@ export default function HomePage() {
 
   return (
     <main className="page">
-      <header className="header">
-        <h1>A股投研助手</h1>
-        <p>
-          输入股票代码，触发 Research Workflow，通过 SSE 流式生成 Markdown 研报。
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="工作台"
+        title="A 股投研"
+        description="单股研报、热点选股、投委会分析 — 三条 Workflow 统一在此入口。"
+      />
 
-      <form className="form" onSubmit={handleSubmit}>
-        <input
-          className="input"
-          value={symbol}
-          onChange={(event) => setSymbol(event.target.value)}
-          placeholder="6 位代码，如 600519"
-          maxLength={6}
-          disabled={loading}
-        />
-        <button className="button" type="submit" disabled={loading}>
-          {loading ? '生成中…' : '生成研报'}
-        </button>
-      </form>
-
-      <div className="examples">
-        {EXAMPLES.map((item) => (
-          <button
-            key={item.symbol}
-            type="button"
-            className="chip"
-            disabled={loading}
-            onClick={() => setSymbol(item.symbol)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="dashboard-grid">
+        <Link href="/#research" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">生成研报</h2>
+          <p className="dashboard-tile-desc">
+            输入 6 位代码，Research Workflow 流式输出 Markdown 研报。
+          </p>
+          <span className="dashboard-tile-tag">当前页</span>
+        </Link>
+        <Link href="/screen" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">自动选股</h2>
+          <p className="dashboard-tile-desc">
+            扫描热点新闻与强势板块，无需手动输入主题。
+          </p>
+          <span className="dashboard-tile-tag">一键启动</span>
+        </Link>
+        <Link href="/history" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">历史研报</h2>
+          <p className="dashboard-tile-desc">本地 LibSQL 持久化，按代码筛选回看。</p>
+        </Link>
       </div>
 
+      <section id="research" className="section">
+        <h2 className="section-title">单股研报</h2>
+
+        <form className="form" onSubmit={handleSubmit}>
+          <input
+            className="input"
+            value={symbol}
+            onChange={(event) => setSymbol(event.target.value)}
+            placeholder="6 位代码，如 600519"
+            maxLength={6}
+            disabled={loading}
+            aria-label="股票代码"
+          />
+          <button className="button button-lg" type="submit" disabled={loading}>
+            {loading ? '生成中…' : '生成研报'}
+          </button>
+        </form>
+
+        <div className="examples">
+          {EXAMPLES.map((item) => (
+            <button
+              key={item.symbol}
+              type="button"
+              className="chip"
+              disabled={loading}
+              onClick={() => setSymbol(item.symbol)}
+            >
+              {item.label} {item.symbol}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {loading && !result && (
-        <div className="loading">
-          <div>Workflow 执行中（SSE）…</div>
-          <div className="step-progress">
-            {STEP_ORDER.map((label) => (
-              <span
-                key={label}
-                className={`step-item ${
-                  currentStep === label
-                    ? 'active'
-                    : STEP_ORDER.indexOf(label) <
-                        STEP_ORDER.indexOf(currentStep ?? '')
-                      ? 'done'
-                      : ''
-                }`}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
+        <div className="loading-block">
+          <p>Research Workflow 执行中…</p>
+          <WorkflowPipeline
+            steps={STEP_ORDER}
+            currentStep={currentStep}
+            className="pipeline--horizontal"
+          />
         </div>
       )}
 
@@ -228,15 +235,16 @@ export default function HomePage() {
       {result && (
         <div className="status-bar">
           <span>
-            <strong>{result.name}</strong> ({result.symbol})
+            <strong>{result.name}</strong>{' '}
+            <span className="muted">({result.symbol})</span>
           </span>
           <span className={`badge ${result.passed ? 'pass' : 'fail'}`}>
             质检 {result.passed ? 'PASS' : 'FAIL'}
           </span>
-          <span>耗时 {(result.elapsedMs / 1000).toFixed(1)}s</span>
+          <span className="muted">{(result.elapsedMs / 1000).toFixed(1)}s</span>
           {result.reportId && (
             <Link href={`/history/${result.reportId}`} className="saved-link">
-              已保存 · 查看历史
+              已保存 · 查看
             </Link>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { callIwencaiTool, isIwencaiMcpConfigured } from '../../mastra/mcp/iwencai.js';
+import { extractNewsEntries } from './format-report-news.js';
 
 export type HotNewsItem = {
   title: string;
@@ -16,110 +17,111 @@ export type AutoScreenContext = {
   mode: 'auto' | 'manual';
 };
 
-function walkValues(node: unknown, out: unknown[]): void {
-  if (node == null) return;
-  if (Array.isArray(node)) {
-    for (const item of node) walkValues(item, out);
-    return;
+const NOISE_TITLE_PATTERNS = [
+  /首页/,
+  /_财经_/,
+  /_市场_/,
+  /_新浪网$/,
+  /新浪财经_新浪网/,
+  /cnfol\.com\/?$/,
+  /cls\.cn$/,
+  /rss/i,
+  /app\.d\.html/,
+  /zaker\/articles/,
+  /召开董事会会议$/,
+  /金投网/,
+  /优惠来了/,
+  /火爆原因/,
+  /健康养生新闻/,
+  /护理保健/,
+  /美容护肤/,
+];
+
+const HOT_KEYWORD_PATTERN =
+  /MLCC|半导体|AI|人工智能|涨停|板块|概念|资金|关税|国补|稀土|算力|机器人|医药|新能源|铜|金|银行|地产/i;
+
+export function isNoiseNewsTitle(title: string): boolean {
+  const trimmed = title.trim();
+  if (trimmed.length < 10) return true;
+  if (NOISE_TITLE_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return true;
   }
-  if (typeof node === 'object') {
-    out.push(node);
-    for (const value of Object.values(node as Record<string, unknown>)) {
-      walkValues(value, out);
-    }
-  }
+  // 导航型标题：分隔符过多、缺少实质内容
+  const separators = (trimmed.match(/[_|/]/g) ?? []).length;
+  if (separators >= 2 && trimmed.length < 40) return true;
+  return false;
 }
 
-function normalizeUrl(url: string | null | undefined): string | null {
-  if (!url?.trim()) return null;
-  const trimmed = url.trim();
-  if (trimmed.startsWith('http')) return trimmed;
-  if (trimmed.startsWith('//')) return `https:${trimmed}`;
-  return null;
+function scoreNewsTitle(title: string): number {
+  if (isNoiseNewsTitle(title)) return -1;
+  let score = 0;
+  if (HOT_KEYWORD_PATTERN.test(title)) score += 10;
+  if (title.length >= 12 && title.length <= 60) score += 2;
+  return score;
 }
 
-function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return null;
+/** 按热度关键词排序后再提取主题 */
+export function rankHotNews(news: HotNewsItem[]): HotNewsItem[] {
+  return [...news].sort(
+    (a, b) => scoreNewsTitle(b.title) - scoreNewsTitle(a.title),
+  );
 }
 
-/** 从问财 news_search / comprehensive search 结果提取新闻标题 */
+/** 从问财 news_search 结果提取新闻标题（复用研报资讯解析） */
 export function parseHotNewsFromIwencai(data: unknown, limit = 15): HotNewsItem[] {
+  const entries = extractNewsEntries(data);
   const items: HotNewsItem[] = [];
-  const seen = new Set<string>();
-  const flat: unknown[] = [];
-  walkValues(data, flat);
 
-  for (const node of flat) {
-    if (!node || typeof node !== 'object') continue;
-    const obj = node as Record<string, unknown>;
-    const title =
-      pickString(obj, [
-        'title',
-        'news_title',
-        'content_title',
-        'headline',
-        'doc_title',
-        'name',
-      ]) ?? null;
-
-    if (!title || title.length < 6 || seen.has(title)) continue;
-    if (/^[0-9.%+-]+$/.test(title)) continue;
-
-    seen.add(title);
-    const datetime =
-      pickString(obj, [
-        'datetime',
-        'time',
-        'publish_time',
-        'pub_time',
-        'date',
-      ]) ?? '';
-    const url = normalizeUrl(
-      pickString(obj, ['url', 'link', 'pc_url', 'news_url', 'jump_url']),
-    );
-
-    items.push({ title, datetime, url });
+  for (const entry of entries) {
+    if (!entry.title || isNoiseNewsTitle(entry.title)) continue;
+    items.push({
+      title: entry.title,
+      datetime: entry.datetime,
+      url: entry.url,
+    });
     if (items.length >= limit) break;
-  }
-
-  if (items.length === 0) {
-    for (const node of flat) {
-      if (typeof node !== 'string' || node.length < 10 || node.length > 120) {
-        continue;
-      }
-      if (seen.has(node)) continue;
-      seen.add(node);
-      items.push({ title: node, datetime: '', url: null });
-      if (items.length >= limit) break;
-    }
   }
 
   return items;
 }
 
-/** 从新闻标题提取简短主题词（用于拼接问财 query） */
+/** 从新闻标题提取可用于问财 query 的主题词 */
 export function extractThemesFromNews(
   news: HotNewsItem[],
-  limit = 5,
+  limit = 3,
 ): string[] {
   const themes: string[] = [];
   const seen = new Set<string>();
+  const ranked = rankHotNews(news);
 
-  for (const item of news) {
-    const title = item.title
+  for (const item of ranked) {
+    if (isNoiseNewsTitle(item.title)) continue;
+
+    const cleaned = item.title
       .replace(/【[^】]+】/g, '')
+      .replace(/^[|\s_-]+|[|\s_-]+$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
-    if (title.length < 4) continue;
 
-    const snippet = title.slice(0, 24);
-    if (seen.has(snippet)) continue;
-    seen.add(snippet);
-    themes.push(snippet);
+    if (cleaned.length < 6) continue;
+
+    const keywordTheme =
+      (/MLCC/i.test(cleaned) && 'MLCC概念') ||
+      (/半导体/.test(cleaned) && '半导体') ||
+      (/AI硬件|人工智能/.test(cleaned) && 'AI应用') ||
+      (/国补/.test(cleaned) && '消费补贴') ||
+      (/稀土/.test(cleaned) && '稀土永磁') ||
+      null;
+
+    const topic =
+      keywordTheme ??
+      cleaned.match(/行业\d+[：:]([^，,——附]+)/)?.[1]?.trim().slice(0, 16) ??
+      cleaned.split(/[：:|｜—-]/)[0]?.trim().slice(0, 20) ??
+      cleaned.slice(0, 20);
+    if (topic.length < 4 || seen.has(topic)) continue;
+
+    seen.add(topic);
+    themes.push(topic);
     if (themes.length >= limit) break;
   }
 
@@ -135,13 +137,16 @@ export async function fetchIwencaiHotNews(limit = 15): Promise<{
   }
 
   const raw = await callIwencaiTool('news_search', {
-    query: 'A股今日热点 财经要闻 板块异动',
+    query: 'A股 今日 热点 板块 涨停 资金',
     timeout: 60,
   });
 
   return {
     raw,
-    items: parseHotNewsFromIwencai(raw, limit),
+    items: rankHotNews(parseHotNewsFromIwencai(raw, limit * 2)).slice(
+      0,
+      limit,
+    ),
   };
 }
 
@@ -161,13 +166,11 @@ export async function discoverAutoScreenContext(options?: {
   const userQuery = options?.userQuery?.trim();
 
   const { items: hotNews } = await fetchIwencaiHotNews(15);
-  const hotThemes = extractThemesFromNews(hotNews, 5);
-  const themeHint =
-    hotThemes.length > 0
-      ? hotThemes.slice(0, 3).join('、')
-      : 'A股今日市场热点';
+  const hotThemes = extractThemesFromNews(hotNews, 3);
 
   if (userQuery) {
+    const themeHint =
+      hotThemes.length > 0 ? hotThemes.slice(0, 2).join('、') : '市场热点';
     return {
       query: userQuery,
       sectorQuery: `${userQuery}${excludeHint}，参考热点：${themeHint}`,
@@ -178,11 +181,19 @@ export async function discoverAutoScreenContext(options?: {
     };
   }
 
-  const sectorQuery = `今日A股涨幅靠前或资金净流入的概念板块，热点：${themeHint}${excludeHint}`;
-  const stockQuery = `${themeHint} 相关A股，所属热门板块，近期有新闻催化${excludeHint}`;
+  const themeHint =
+    hotThemes.length > 0 ? hotThemes.slice(0, 2).join('、') : null;
+
+  const sectorQuery = themeHint
+    ? `${themeHint}概念板块，今日涨幅或主力净流入靠前${excludeHint}`
+    : `今日A股概念板块涨幅排名前10${excludeHint}`;
+
+  const stockQuery = themeHint
+    ? `${themeHint}相关A股，主力净流入${excludeHint}`
+    : `今日A股主力净流入排名前20${excludeHint}`;
 
   return {
-    query: `热点自动选股：${themeHint}`,
+    query: themeHint ? `热点自动选股：${themeHint}` : '热点自动选股：今日强势板块',
     sectorQuery,
     stockQuery,
     hotNews,
