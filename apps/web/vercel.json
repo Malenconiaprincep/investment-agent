@@ -4,6 +4,9 @@
   "buildCommand": "cd ../.. && pnpm --filter @investment-agent/web build",
   "framework": "nextjs",
   "regions": ["hkg1"],
+  "env": {
+    "AGENT_CORE_ROOT": "../../packages/agent-core"
+  },
   "crons": [
     { "path": "/api/cron/daily-snapshot", "schedule": "30 7 * * 1-5" },
     { "path": "/api/cron/weekly-review", "schedule": "0 0 * * 1" },

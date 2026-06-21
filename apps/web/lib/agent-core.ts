@@ -62,22 +62,52 @@ function findPackageRoot(packageName: string, extraStarts: string[] = []): strin
   return findUp(starts, (dir) => readPackageName(dir) === packageName);
 }
 
+const AGENT_CORE_MARKER = 'src/cli/paper-json.ts';
+
+function isAgentCoreRoot(dir: string): boolean {
+  return existsSync(path.join(dir, AGENT_CORE_MARKER));
+}
+
+function resolveAgentCorePath(candidate: string): string | null {
+  const resolved = path.isAbsolute(candidate)
+    ? candidate
+    : path.resolve(process.cwd(), candidate);
+  return isAgentCoreRoot(resolved) ? resolved : null;
+}
+
 export function getAgentCoreRoot(): string {
   const envRoot = process.env.AGENT_CORE_ROOT?.trim();
-  if (envRoot && existsSync(path.join(envRoot, 'package.json'))) {
-    return envRoot;
+  if (envRoot) {
+    const fromEnv = resolveAgentCorePath(envRoot);
+    if (fromEnv) return fromEnv;
   }
 
   const repo = findRepoRoot();
   if (repo) {
     const fromRepo = path.join(repo, 'packages/agent-core');
-    if (existsSync(path.join(fromRepo, 'package.json'))) {
-      return fromRepo;
-    }
+    if (isAgentCoreRoot(fromRepo)) return fromRepo;
   }
 
+  const cwd = process.cwd();
+  const explicitCandidates = [
+    cwd,
+    path.join(cwd, 'packages/agent-core'),
+    path.join(cwd, '../packages/agent-core'),
+    path.join(cwd, '../../packages/agent-core'),
+    path.join(cwd, '../../../packages/agent-core'),
+    path.resolve(moduleDir, '../../../packages/agent-core'),
+    path.resolve(moduleDir, '../../../../packages/agent-core'),
+  ];
+
+  for (const candidate of explicitCandidates) {
+    if (isAgentCoreRoot(candidate)) return candidate;
+  }
+
+  const byMarker = findUp([cwd, moduleDir, ...explicitCandidates], isAgentCoreRoot);
+  if (byMarker) return byMarker;
+
   const pkgRoot = findPackageRoot(AGENT_CORE_PKG);
-  if (pkgRoot) return pkgRoot;
+  if (pkgRoot && isAgentCoreRoot(pkgRoot)) return pkgRoot;
 
   throw new Error('未找到 agent-core 包，请检查 monorepo 部署配置');
 }

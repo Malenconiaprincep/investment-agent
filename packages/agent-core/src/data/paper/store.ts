@@ -62,7 +62,7 @@ export type PaperAutoRun = {
   summary: Record<string, unknown> | null;
 };
 
-const DEFAULT_CASH = 1_000_000;
+const DEFAULT_CASH = 50_000;
 const MAX_POSITIONS = 5;
 const POSITION_BUDGET_PCT = 0.15;
 
