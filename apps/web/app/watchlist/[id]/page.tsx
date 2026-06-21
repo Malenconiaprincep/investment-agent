@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
+import { MomentumChecklist } from '@/components/MomentumChecklist';
 
 type DetailPayload = {
   item: {
@@ -20,6 +21,13 @@ type DetailPayload = {
     score: number;
     reasons: string[];
     tradeDate: string;
+  } | null;
+  momentum: {
+    checklist: Array<{ id: string; label: string; passed: boolean; detail?: string }>;
+    checklistScore: number;
+    action: 'buy' | 'hold' | 'wait' | 'sell';
+    entryMemo: string;
+    stopLossPrice: number | null;
   } | null;
   snapshots: Array<{
     tradeDate: string;
@@ -137,6 +145,17 @@ export default function WatchlistDetailPage() {
                 <p className="muted">前复权日 K，默认展示近 120 个交易日。</p>
                 <KlineChart bars={bars} diamonds={diamonds} fill />
               </section>
+
+              {data.momentum && (
+                <MomentumChecklist
+                  checklist={data.momentum.checklist}
+                  score={data.momentum.checklistScore}
+                  maxScore={data.momentum.checklist.length}
+                  action={data.momentum.action}
+                  entryMemo={data.momentum.entryMemo}
+                  stopLossPrice={data.momentum.stopLossPrice}
+                />
+              )}
 
               <div className="page-toolbar">
                 <button

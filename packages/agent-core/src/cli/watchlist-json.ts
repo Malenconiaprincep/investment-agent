@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { getDailyQuote } from '../data/market/services.js';
 import { detectDiamondSignal } from '../data/market/diamond-signal.js';
+import { analyzeMomentum } from '../data/paper/momentum.js';
 import {
   addWatchlistItem,
   getWatchlistItem,
@@ -74,8 +75,9 @@ async function main() {
     } catch {
       liveSignal = null;
     }
+    const momentum = analyzeMomentum(item.symbol, item.name, kline.quotes, liveSignal);
     process.stdout.write(
-      JSON.stringify({ item, kline, snapshots, diamondSignal: liveSignal }),
+      JSON.stringify({ item, kline, snapshots, diamondSignal: liveSignal, momentum }),
     );
     return;
   }

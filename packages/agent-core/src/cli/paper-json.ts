@@ -1,54 +1,46 @@
 import 'dotenv/config';
 
-import { getDailyQuote } from '../data/market/services.js';
 import {
+  getPaperAccountSummary,
   executePaperTrade,
-  getOrCreatePaperAccount,
-  listPaperPositions,
   listPaperTrades,
+  listEquitySnapshots,
 } from '../data/paper/store.js';
+import {
+  getPaperAutoStatus,
+  runPaperAutoPipeline,
+} from '../data/paper/auto-pipeline.js';
+import { getDailyQuote } from '../data/market/services.js';
 
 async function main() {
   const command = process.argv[2];
 
   if (command === 'account') {
-    const account = await getOrCreatePaperAccount();
-    const positions = await listPaperPositions();
-    let totalValue = account.cash;
-
-    const enriched = [];
-    for (const pos of positions) {
-      let latestPrice: number | null = null;
-      try {
-        const q = await getDailyQuote(pos.symbol, 2);
-        latestPrice = q.latestClose;
-      } catch {
-        latestPrice = pos.avgCost;
-      }
-      const marketValue = latestPrice ? pos.shares * latestPrice : null;
-      if (marketValue) totalValue += marketValue;
-      const pnlPct =
-        latestPrice && pos.avgCost > 0
-          ? Number((((latestPrice - pos.avgCost) / pos.avgCost) * 100).toFixed(2))
-          : null;
-      enriched.push({ ...pos, latestPrice, marketValue, pnlPct });
-    }
-
-    process.stdout.write(
-      JSON.stringify({
-        account,
-        totalValue: Number(totalValue.toFixed(2)),
-        returnPct: Number(
-          (((totalValue - account.initialCash) / account.initialCash) * 100).toFixed(2),
-        ),
-        positions: enriched,
-      }),
-    );
+    process.stdout.write(JSON.stringify(await getPaperAccountSummary()));
     return;
   }
 
   if (command === 'trades') {
-    process.stdout.write(JSON.stringify(await listPaperTrades()));
+    const limit = Number(process.argv[3] ?? 100);
+    process.stdout.write(JSON.stringify({ trades: await listPaperTrades(limit) }));
+    return;
+  }
+
+  if (command === 'equity') {
+    const limit = Number(process.argv[3] ?? 90);
+    process.stdout.write(JSON.stringify({ snapshots: await listEquitySnapshots(limit) }));
+    return;
+  }
+
+  if (command === 'status') {
+    process.stdout.write(JSON.stringify(await getPaperAutoStatus()));
+    return;
+  }
+
+  if (command === 'auto-run') {
+    const force = process.argv.includes('--force');
+    const result = await runPaperAutoPipeline({ force });
+    process.stdout.write(JSON.stringify(result));
     return;
   }
 
@@ -82,12 +74,15 @@ async function main() {
       side,
       shares,
       price,
+      source: 'manual',
     });
     process.stdout.write(JSON.stringify(result));
     return;
   }
 
-  process.stderr.write('Usage: paper-json.ts account|trades|trade ...');
+  process.stderr.write(
+    'Usage: paper-json.ts account|trades|equity|status|auto-run|trade ...',
+  );
   process.exit(1);
 }
 

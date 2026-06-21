@@ -1078,6 +1078,142 @@ a:hover {
   margin-top: 0.25rem;
 }
 
+.paper-rules {
+  margin-bottom: 1.25rem;
+}
+
+.paper-rules-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.paper-rules-list strong {
+  color: var(--text);
+}
+
+.paper-session-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+}
+
+.paper-equity-section {
+  margin-bottom: 1.25rem;
+}
+
+.equity-chart {
+  width: 100%;
+}
+
+.equity-chart-empty {
+  padding: 2rem;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.paper-trades-table .paper-trade-time {
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+.paper-trades-table .paper-trade-note {
+  max-width: 14rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.paper-position-memo {
+  cursor: help;
+  opacity: 0.7;
+}
+
+.momentum-panel {
+  margin-bottom: 1rem;
+}
+
+.momentum-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.momentum-action {
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+}
+
+.momentum-action--buy {
+  color: #5cb87a;
+  background: rgba(92, 184, 122, 0.12);
+}
+
+.momentum-action--hold {
+  color: #6b9fd4;
+  background: rgba(107, 159, 212, 0.12);
+}
+
+.momentum-action--wait {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.momentum-action--sell {
+  color: #e07070;
+  background: rgba(224, 112, 112, 0.12);
+}
+
+.momentum-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.momentum-checklist-item {
+  display: flex;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
+.momentum-checklist-item--pass {
+  color: var(--text);
+}
+
+.momentum-check {
+  flex-shrink: 0;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.momentum-checklist-item--pass .momentum-check {
+  color: #5cb87a;
+}
+
+.momentum-memo {
+  margin: 0.875rem 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.momentum-stop {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+
 .inline-actions {
   display: flex;
   flex-wrap: wrap;
