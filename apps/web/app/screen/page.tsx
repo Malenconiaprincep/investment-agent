@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { WorkflowPipeline } from '@/components/ui/WorkflowPipeline';
+import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { readSSEStream } from '@/lib/sse';
 
 type Sector = { name: string; reason: string; dataSource: string };
@@ -275,6 +275,9 @@ export default function ScreenPage() {
   const displayHotNews = screenResult?.hotNews ?? hotNews;
   const displayQuery = screenResult?.query ?? autoQuery;
 
+  const isScreenActive = loading && !screenResult;
+  const isCommitteeActive = committeeLoading && !committeeResult;
+
   return (
     <main className="page">
       <PageHeader
@@ -283,53 +286,37 @@ export default function ScreenPage() {
         description="扫描问财热点新闻与强势板块，自动筛选候选股。需配置 IWENCAI_API_KEY。"
       />
 
-      <div className="layout-split">
-        <aside className="layout-split-aside">
-          {(loading || screenResult) && (
-            <WorkflowPipeline steps={SCREEN_STEPS} currentStep={currentStep} />
-          )}
-          {committeeLoading && (
-            <div style={{ marginTop: '1.5rem' }}>
-              <p className="section-title">投委会</p>
-              <WorkflowPipeline
-                steps={COMMITTEE_STEPS}
-                currentStep={committeeStep}
-              />
-              {Object.keys(specialists).length > 0 && (
-                <div className="specialist-grid">
-                  {Object.entries(specialists).map(([role, status]) => (
-                    <span key={role} className="chip">
-                      {role}: {status}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </aside>
-
-        <div>
-          <div className="form">
-            <button
-              className="button button-lg"
-              type="button"
-              disabled={loading || committeeLoading}
-              onClick={() => handleScreenSubmit()}
-            >
-              {loading ? '扫描热点并选股…' : '开始自动选股'}
-            </button>
-            <button
-              type="button"
+      <div className="action-panel">
+        <div className="action-panel-row action-panel-row--actions">
+          <button
+            className="button button-lg"
+            type="button"
+            disabled={loading || committeeLoading}
+            onClick={() => handleScreenSubmit()}
+          >
+            {loading ? '扫描热点并选股…' : '开始自动选股'}
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={loading || committeeLoading}
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            {showAdvanced ? '收起高级' : '指定主题'}
+          </button>
+          {screenResult?.sessionId && (
+            <Link
+              href={`/screen/history/${screenResult.sessionId}`}
               className="button button-secondary"
-              disabled={loading || committeeLoading}
-              onClick={() => setShowAdvanced((v) => !v)}
             >
-              {showAdvanced ? '收起高级' : '指定主题'}
-            </button>
-          </div>
+              查看本次记录
+            </Link>
+          )}
+        </div>
 
-          {showAdvanced && (
-            <form className="form advanced-panel" onSubmit={handleScreenSubmit}>
+        {showAdvanced && (
+          <form className="advanced-panel" onSubmit={handleScreenSubmit}>
+            <div className="action-panel-row action-panel-row--primary">
               <input
                 className="input input-wide"
                 value={queryOverride}
@@ -347,164 +334,176 @@ export default function ScreenPage() {
               >
                 按主题选股
               </button>
-            </form>
-          )}
-
-          {loading && !screenResult && (
-            <div className="loading-block">
-              <p>板块选股 Workflow 执行中…</p>
             </div>
-          )}
+          </form>
+        )}
 
-          {error && <div className="error">{error}</div>}
+        {isScreenActive && (
+          <WorkflowStatus
+            label="板块选股进行中"
+            steps={SCREEN_STEPS}
+            currentStep={currentStep}
+          />
+        )}
 
-          {displayQuery && (
-            <div className="status-bar">
-              <span>
-                选股依据：<strong>{displayQuery}</strong>
-              </span>
-            </div>
-          )}
-
-          {displayHotNews.length > 0 && (
-            <section className="section">
-              <h2 className="section-title">今日热点</h2>
-              <ul className="sector-list">
-                {displayHotNews.slice(0, 8).map((item) => (
-                  <li key={item.title}>
-                    {item.url ? (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {item.title}
-                      </a>
-                    ) : (
-                      item.title
-                    )}
-                  </li>
+        {isCommitteeActive && (
+          <WorkflowStatus
+            label="投委会分析进行中"
+            steps={COMMITTEE_STEPS}
+            currentStep={committeeStep}
+          >
+            {Object.keys(specialists).length > 0 && (
+              <div className="specialist-grid">
+                {Object.entries(specialists).map(([role, status]) => (
+                  <span key={role} className="chip">
+                    {role}: {status}
+                  </span>
                 ))}
-              </ul>
-            </section>
-          )}
+              </div>
+            )}
+          </WorkflowStatus>
+        )}
+      </div>
 
-          {screenResult && (
-            <div className="status-bar">
-              <span className={`badge ${screenResult.passed ? 'pass' : 'fail'}`}>
-                选股 {screenResult.passed ? 'PASS' : 'FAIL'}
-              </span>
-              {!screenResult.passed && (
-                <span className="muted">
-                  {screenResult.missingSections.length > 0 &&
-                    `缺少：${screenResult.missingSections.join('、')}`}
-                </span>
-              )}
-              <span className="muted">
-                {(screenResult.elapsedMs / 1000).toFixed(1)}s
-              </span>
-              {screenResult.sessionId && (
-                <Link
-                  href={`/screen/history/${screenResult.sessionId}`}
-                  className="saved-link"
-                >
-                  已保存 · 查看
-                </Link>
-              )}
+      {error && <div className="error">{error}</div>}
+
+      {displayQuery && (
+        <div className="result-toolbar">
+          <span className="muted">选股依据</span>
+          <strong>{displayQuery}</strong>
+        </div>
+      )}
+
+      {screenResult && (
+        <div className="result-toolbar">
+          <span className={`badge ${screenResult.passed ? 'pass' : 'fail'}`}>
+            选股 {screenResult.passed ? 'PASS' : 'FAIL'}
+          </span>
+          {!screenResult.passed && screenResult.missingSections.length > 0 && (
+            <span className="muted">
+              缺少：{screenResult.missingSections.join('、')}
+            </span>
+          )}
+          <span className="muted">
+            {(screenResult.elapsedMs / 1000).toFixed(1)}s
+          </span>
+        </div>
+      )}
+
+      {displayHotNews.length > 0 && (
+        <section className="section">
+          <h2 className="section-title">今日热点</h2>
+          <ul className="sector-list">
+            {displayHotNews.slice(0, 8).map((item) => (
+              <li key={item.title}>
+                {item.url ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {item.title}
+                  </a>
+                ) : (
+                  item.title
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {sectors.length > 0 && (
+        <section className="section">
+          <h2 className="section-title">热门板块</h2>
+          <ul className="sector-list">
+            {sectors.map((s) => (
+              <li key={s.name}>
+                <strong>{s.name}</strong>
+                <span className="muted"> — {s.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {candidates.length > 0 && (
+        <section className="section">
+          <h2 className="section-title">候选池</h2>
+          <table className="candidate-table">
+            <thead>
+              <tr>
+                <th>代码</th>
+                <th>名称</th>
+                <th>入选理由</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.map((c) => (
+                <tr key={c.symbol}>
+                  <td>{c.symbol}</td>
+                  <td>{c.name}</td>
+                  <td>{c.thesis.slice(0, 80)}</td>
+                  <td>
+                    <Link href={`/?symbol=${c.symbol}`} className="saved-link">
+                      生成研报
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {screenResult && !committeeResult && !committeeLoading && (
+            <div className="result-actions">
               <button
                 type="button"
-                className="button button-secondary"
-                disabled={committeeLoading}
+                className="button"
                 onClick={handleCommittee}
               >
-                {committeeLoading ? '投委会分析中…' : '进入投委会'}
+                进入投委会分析
               </button>
-            </div>
-          )}
-
-          {sectors.length > 0 && (
-            <section className="section">
-              <h2 className="section-title">热门板块</h2>
-              <ul className="sector-list">
-                {sectors.map((s) => (
-                  <li key={s.name}>
-                    <strong>{s.name}</strong>
-                    <span className="muted"> — {s.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {candidates.length > 0 && (
-            <section className="section">
-              <h2 className="section-title">候选池</h2>
-              <table className="candidate-table">
-                <thead>
-                  <tr>
-                    <th>代码</th>
-                    <th>名称</th>
-                    <th>入选理由</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {candidates.map((c) => (
-                    <tr key={c.symbol}>
-                      <td>{c.symbol}</td>
-                      <td>{c.name}</td>
-                      <td>{c.thesis.slice(0, 80)}</td>
-                      <td>
-                        <Link
-                          href={`/?symbol=${c.symbol}`}
-                          className="saved-link"
-                        >
-                          生成研报
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          )}
-
-          {displaySummary && (
-            <section className="section">
-              <h2 className="section-title">板块轮动摘要</h2>
-              <article className="report">
-                <ReportMarkdown source={displaySummary} />
-              </article>
-            </section>
-          )}
-
-          {committeeResult && (
-            <div className="status-bar">
-              <span
-                className={`badge ${committeeResult.passed ? 'pass' : 'fail'}`}
-              >
-                投委会 {committeeResult.passed ? 'PASS' : 'FAIL'}
-              </span>
               <span className="muted">
-                {(committeeResult.elapsedMs / 1000).toFixed(1)}s
+                将对前 {Math.min(candidates.length, 3)} 只候选股做六维度分析
               </span>
             </div>
           )}
+        </section>
+      )}
 
-          {displayMemo && (
-            <section className="section">
-              <h2 className="section-title">投委会纪要</h2>
-              <article className="report">
-                <ReportMarkdown source={displayMemo} />
-              </article>
-            </section>
-          )}
+      {displaySummary && (
+        <section className="section">
+          <h2 className="section-title">板块轮动摘要</h2>
+          <article className="report">
+            <ReportMarkdown source={displaySummary} />
+          </article>
+        </section>
+      )}
 
-          <p className="disclaimer">
-            仅供学习研究，不构成投资建议。数据来自问财 OpenAPI 与东财。
-          </p>
+      {committeeResult && (
+        <div className="result-toolbar">
+          <span className={`badge ${committeeResult.passed ? 'pass' : 'fail'}`}>
+            投委会 {committeeResult.passed ? 'PASS' : 'FAIL'}
+          </span>
+          <span className="muted">
+            {(committeeResult.elapsedMs / 1000).toFixed(1)}s
+          </span>
         </div>
-      </div>
+      )}
+
+      {displayMemo && (
+        <section className="section">
+          <h2 className="section-title">投委会纪要</h2>
+          <article className="report">
+            <ReportMarkdown source={displayMemo} />
+          </article>
+        </section>
+      )}
+
+      <p className="disclaimer">
+        仅供学习研究，不构成投资建议。数据来自问财 OpenAPI 与东财。
+      </p>
     </main>
   );
 }

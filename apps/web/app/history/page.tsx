@@ -61,33 +61,35 @@ export default function HistoryPage() {
         description="Workflow 生成的研报自动保存到本地 LibSQL，可按代码筛选回看。"
       />
 
-      <div className="form history-filter">
+      <nav className="page-toolbar" aria-label="页面导航">
         <Link href="/" className="button button-secondary">
           返回工作台
         </Link>
         <Link href="/screen/history" className="button button-secondary">
           选股历史
         </Link>
-      </div>
+      </nav>
 
-      <div className="form history-filter">
+      <div className="filter-bar">
         <input
           className="input"
           value={filterSymbol}
           onChange={(event) => setFilterSymbol(event.target.value)}
           placeholder="按代码筛选，如 600519"
           maxLength={6}
+          aria-label="按股票代码筛选"
         />
         <button
           className="button button-secondary"
           type="button"
           onClick={() => setFilterSymbol('')}
+          disabled={!filterSymbol}
         >
           清除筛选
         </button>
       </div>
 
-      {loading && <div className="loading-block">加载中…</div>}
+      {loading && <div className="list-loading">加载历史研报…</div>}
       {error && <div className="error">{error}</div>}
 
       {!loading && !error && reports.length === 0 && (

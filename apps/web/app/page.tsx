@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { WorkflowPipeline } from '@/components/ui/WorkflowPipeline';
+import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { readSSEStream } from '@/lib/sse';
 
 type ResearchResult = {
@@ -189,51 +189,54 @@ export default function HomePage() {
       <section id="research" className="section">
         <h2 className="section-title">单股研报</h2>
 
-        <form className="form" onSubmit={handleSubmit}>
-          <input
-            className="input"
-            value={symbol}
-            onChange={(event) => setSymbol(event.target.value)}
-            placeholder="6 位代码，如 600519"
-            maxLength={6}
-            disabled={loading}
-            aria-label="股票代码"
-          />
-          <button className="button button-lg" type="submit" disabled={loading}>
-            {loading ? '生成中…' : '生成研报'}
-          </button>
-        </form>
-
-        <div className="examples">
-          {EXAMPLES.map((item) => (
-            <button
-              key={item.symbol}
-              type="button"
-              className="chip"
+        <div className="action-panel">
+          <form
+            className="action-panel-row action-panel-row--primary"
+            onSubmit={handleSubmit}
+          >
+            <input
+              className="input"
+              value={symbol}
+              onChange={(event) => setSymbol(event.target.value)}
+              placeholder="6 位代码，如 600519"
+              maxLength={6}
               disabled={loading}
-              onClick={() => setSymbol(item.symbol)}
-            >
-              {item.label} {item.symbol}
+              aria-label="股票代码"
+            />
+            <button className="button button-lg" type="submit" disabled={loading}>
+              {loading ? '生成中…' : '生成研报'}
             </button>
-          ))}
+          </form>
+
+          <div className="examples">
+            {EXAMPLES.map((item) => (
+              <button
+                key={item.symbol}
+                type="button"
+                className="chip"
+                disabled={loading}
+                onClick={() => setSymbol(item.symbol)}
+              >
+                {item.label} {item.symbol}
+              </button>
+            ))}
+          </div>
+
+          {loading && (
+            <WorkflowStatus
+              label="Research Workflow 执行中"
+              steps={STEP_ORDER}
+              currentStep={currentStep}
+              horizontal
+            />
+          )}
         </div>
       </section>
-
-      {loading && !result && (
-        <div className="loading-block">
-          <p>Research Workflow 执行中…</p>
-          <WorkflowPipeline
-            steps={STEP_ORDER}
-            currentStep={currentStep}
-            className="pipeline--horizontal"
-          />
-        </div>
-      )}
 
       {error && <div className="error">{error}</div>}
 
       {result && (
-        <div className="status-bar">
+        <div className="result-toolbar">
           <span>
             <strong>{result.name}</strong>{' '}
             <span className="muted">({result.symbol})</span>

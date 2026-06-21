@@ -245,7 +245,153 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+  margin-bottom: 0;
+}
+
+.action-panel {
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.action-panel .examples {
+  margin-top: 0.875rem;
+  margin-bottom: 0;
+}
+
+.action-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.action-panel-row .input {
+  flex: 1 1 12rem;
+}
+
+.action-panel-row .button-lg {
+  flex: 0 0 auto;
+}
+
+@media (min-width: 560px) {
+  .action-panel-row--primary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .action-panel-row--actions {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+}
+
+.advanced-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+.advanced-panel .form {
+  margin-bottom: 0;
+}
+
+.workflow-status {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.workflow-status-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.workflow-status-label::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: pulse-dot 1.2s ease infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem 1rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
   margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  font-size: 0.875rem;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: stretch;
+  margin-bottom: 1.25rem;
+}
+
+.filter-bar .input {
+  flex: 1 1 12rem;
+}
+
+.list-loading {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.page-toolbar .button,
+.page-toolbar .button-secondary {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .input {
@@ -605,15 +751,16 @@ a:hover {
 }
 
 .loading-block {
-  padding: 2rem 1rem;
-  text-align: center;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   color: var(--muted);
   font-size: 0.875rem;
 }
 
 .loading-block .pipeline {
-  margin-top: 1.25rem;
-  text-align: left;
+  margin-top: 0.75rem;
 }
 
 .disclaimer {
@@ -708,13 +855,11 @@ a:hover {
   margin-top: 0.75rem;
 }
 
-.advanced-panel {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px dashed var(--border);
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .workflow-status-label::before {
+    animation: none;
+  }
+
   *,
   *::before,
   *::after {

@@ -54,16 +54,16 @@ export default function ScreeningHistoryPage() {
         description="每次自动选股 Workflow 完成后会写入本地 LibSQL，可在此回看板块、候选池与摘要。"
       />
 
-      <div className="form">
+      <nav className="page-toolbar" aria-label="页面导航">
         <Link href="/screen" className="button">
           新建选股
         </Link>
         <Link href="/history" className="button button-secondary">
           研报历史
         </Link>
-      </div>
+      </nav>
 
-      {loading && <div className="loading-block">加载中…</div>}
+      {loading && <div className="list-loading">加载选股记录…</div>}
       {error && <div className="error">{error}</div>}
 
       {!loading && !error && sessions.length === 0 && (
