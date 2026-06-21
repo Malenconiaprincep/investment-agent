@@ -10,6 +10,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@esbuild/linux-x64':
+        specifier: 0.28.1
+        version: 0.28.1
       '@uiw/react-markdown-preview':
         specifier: ^5.2.1
         version: 5.2.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -3631,8 +3634,7 @@ snapshots:
   '@esbuild/linux-s390x@0.28.1':
     optional: true
 
-  '@esbuild/linux-x64@0.28.1':
-    optional: true
+  '@esbuild/linux-x64@0.28.1': {}
 
   '@esbuild/netbsd-arm64@0.28.1':
     optional: true

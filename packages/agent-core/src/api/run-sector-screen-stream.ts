@@ -117,6 +117,7 @@ export async function runSectorScreenStream(
         missingKeywords: output.missingKeywords,
         screenedAt: output.screenedAt,
         asOfDate: output.asOfDate,
+        fetchErrors: output.fetchErrors ?? [],
         elapsedMs,
         sessionId: saved.id,
       });

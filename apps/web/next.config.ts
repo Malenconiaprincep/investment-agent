@@ -5,24 +5,12 @@ const repoRoot = path.resolve(__dirname, '../..');
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
-  // Vercel serverless 需显式打入 agent-core 源码、tsx 及其 esbuild 依赖
+  // agent-core 源码；tsx/esbuild 由 scripts/patch-api-trace.mjs 补进 trace（pnpm symlink 无法被 glob 收录）
   outputFileTracingIncludes: {
     '/api/**': [
-      '../../packages/agent-core/src/**/*',
-      '../../packages/agent-core/package.json',
-      '../../packages/agent-core/node_modules/**/*',
-      '../../apps/web/node_modules/tsx/**/*',
-      '../../apps/web/node_modules/esbuild/**/*',
-      '../../packages/agent-core/node_modules/tsx/**/*',
-      '../../node_modules/tsx/**/*',
-      '../../node_modules/esbuild/**/*',
-      '../../node_modules/.pnpm/tsx@*/node_modules/tsx/**/*',
-      '../../node_modules/.pnpm/tsx@*/node_modules/esbuild/**/*',
-      '../../node_modules/.pnpm/esbuild@*/node_modules/esbuild/**/*',
-      '../../apps/web/node_modules/@esbuild/linux-x64/**/*',
-      '../../node_modules/@esbuild/linux-x64/**/*',
-      '../../node_modules/.pnpm/esbuild@*/node_modules/@esbuild/linux-x64/**/*',
-      '../../node_modules/.pnpm/@esbuild+linux-x64@*/node_modules/@esbuild/linux-x64/**/*',
+      'packages/agent-core/src/**/*',
+      'packages/agent-core/package.json',
+      'packages/agent-core/.env.example',
     ],
   },
   serverExternalPackages: ['tsx', 'esbuild'],

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ScreeningSummary } from '@/app/api/screenings/route';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QualityBadge } from '@/components/ui/QualityBadge';
@@ -17,12 +17,6 @@ function formatTime(iso: string) {
   });
 }
 
-function defaultReplayDate(): string {
-  const date = new Date();
-  date.setDate(date.getDate() - 14);
-  return date.toISOString().slice(0, 10);
-}
-
 export default function ScreeningHistoryPage() {
   const router = useRouter();
   const [sessions, setSessions] = useState<ScreeningSummary[]>([]);
@@ -30,8 +24,6 @@ export default function ScreeningHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [replayDate, setReplayDate] = useState(defaultReplayDate);
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   useEffect(() => {
     async function loadSessions() {
@@ -79,37 +71,12 @@ export default function ScreeningHistoryPage() {
     );
   }
 
-  function startReplay() {
-    if (!replayDate) return;
-    router.push(`/screen?asOf=${encodeURIComponent(replayDate)}`);
-  }
-
   return (
     <main className="page">
       <PageHeader
         title="选股记录"
-        description="每次智能选股的结果都会保存在这里，方便你回看、对比和按历史日期回放。"
+        description="从今天起的每次智能选股都会保存在这里。点进某条记录可查看当时新闻、候选股，以及「入选至今」涨跌幅。"
       />
-
-      <section className="section replay-panel">
-        <h2 className="section-title">历史回放</h2>
-        <p className="muted">
-          选一个历史日期，系统会用该日前后 14 天的新闻重新跑一遍选股，便于验证「当时若选会选什么」。
-        </p>
-        <div className="page-toolbar">
-          <input
-            className="input"
-            type="date"
-            value={replayDate}
-            max={todayStr}
-            onChange={(event) => setReplayDate(event.target.value)}
-            aria-label="回放日期"
-          />
-          <button type="button" className="button" onClick={startReplay}>
-            开始回放
-          </button>
-        </div>
-      </section>
 
       <nav className="page-toolbar" aria-label="页面导航">
         <Link href="/screen" className="button">

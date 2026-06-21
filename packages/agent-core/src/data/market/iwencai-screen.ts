@@ -250,6 +250,79 @@ export async function fetchIwencaiCandidates(
   };
 }
 
+/** 多路问财 query 并行，合并去重；仅当全部失败时才 fallback */
+export async function fetchIwencaiCandidatesMerged(
+  queries: string[],
+  sectorHint: string | undefined,
+  limit = 10,
+  options?: { allowFallback?: boolean },
+): Promise<{
+  raw: unknown;
+  candidates: CandidateItem[];
+  usedFallback: boolean;
+  queriesUsed: string[];
+}> {
+  const uniqueQueries = [...new Set(queries.filter((q) => q.trim()))];
+  if (uniqueQueries.length === 0) {
+    uniqueQueries.push(FALLBACK_STOCK_QUERY);
+  }
+
+  const perQueryLimit = Math.max(Math.ceil(limit / uniqueQueries.length) + 2, 5);
+  const merged: CandidateItem[] = [];
+  const seen = new Set<string>();
+  let lastRaw: unknown = null;
+  const queriesUsed: string[] = [];
+
+  for (const query of uniqueQueries) {
+    try {
+      const result = await fetchIwencaiCandidates(query, sectorHint, perQueryLimit);
+      lastRaw = result.raw;
+      queriesUsed.push(query);
+      for (const item of result.candidates) {
+        if (seen.has(item.symbol)) continue;
+        seen.add(item.symbol);
+        merged.push(item);
+        if (merged.length >= limit) break;
+      }
+      if (merged.length >= limit) break;
+    } catch {
+      // 单路失败继续其它 query
+    }
+  }
+
+  if (merged.length > 0) {
+    return {
+      raw: lastRaw,
+      candidates: merged.slice(0, limit),
+      usedFallback: false,
+      queriesUsed,
+    };
+  }
+
+  if (options?.allowFallback !== false) {
+    const fallback = await fetchIwencaiCandidates(
+      FALLBACK_STOCK_QUERY,
+      sectorHint,
+      limit,
+    );
+    if (fallback.candidates.length > 0) {
+      return {
+        raw: fallback.raw,
+        candidates: fallback.candidates,
+        usedFallback: true,
+        queriesUsed: [FALLBACK_STOCK_QUERY],
+      };
+    }
+  }
+
+  return {
+    raw: lastRaw,
+    candidates: [],
+    usedFallback: false,
+    queriesUsed,
+  };
+}
+
 /** 主 query 无结果时，用通用主力净流入 query 重试 */
 export async function fetchIwencaiCandidatesWithFallback(
   query: string,

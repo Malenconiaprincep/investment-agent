@@ -90,6 +90,7 @@ type ScreenResult = {
   sessionId?: string;
   elapsedMs: number;
   asOfDate?: string;
+  fetchErrors?: string[];
 };
 
 type CommitteeResult = {
@@ -127,6 +128,7 @@ type ScreenStreamEvent =
       sessionId: string;
       elapsedMs: number;
       asOfDate?: string;
+      fetchErrors: string[];
     }
   | { type: 'error'; message: string };
 
@@ -160,22 +162,10 @@ const COMMITTEE_STEPS = [
   '核对报告',
 ];
 
-function defaultReplayDate(): string {
-  const date = new Date();
-  date.setDate(date.getDate() - 14);
-  return date.toISOString().slice(0, 10);
-}
-
-function formatAsOfLabel(asOfDate: string): string {
-  const [year, month, day] = asOfDate.split('-');
-  return `${year}年${Number(month)}月${Number(day)}日`;
-}
-
 export default function ScreenPage() {
   const searchParams = useSearchParams();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [queryOverride, setQueryOverride] = useState('');
-  const [asOfDate, setAsOfDate] = useState('');
   const [lookbackDays] = useState(14);
   const [loading, setLoading] = useState(false);
   const [committeeLoading, setCommitteeLoading] = useState(false);
@@ -207,13 +197,9 @@ export default function ScreenPage() {
   useEffect(() => {
     const fromUrl = searchParams.get('asOf')?.trim();
     if (fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl)) {
-      setAsOfDate(fromUrl);
-      setShowAdvanced(true);
+      setError('历史回放暂不可用（问财不支持按日期筛股），已切换为今日智能选股。');
     }
   }, [searchParams]);
-
-  const isReplay = Boolean(asOfDate);
-  const todayStr = new Date().toISOString().slice(0, 10);
 
   async function handleScreenSubmit(event?: React.FormEvent) {
     event?.preventDefault();
@@ -235,7 +221,6 @@ export default function ScreenPage() {
     const body: Record<string, unknown> = {
       maxCandidates: 10,
       lookbackDays,
-      ...(asOfDate ? { asOfDate } : {}),
       ...(showAdvanced && trimmedOverride ? { query: trimmedOverride } : {}),
     };
 
@@ -286,6 +271,7 @@ export default function ScreenPage() {
             sessionId: event.sessionId,
             elapsedMs: event.elapsedMs,
             asOfDate: event.asOfDate,
+            fetchErrors: event.fetchErrors,
           };
           setScreenResult(finalResult);
           setHotNews(event.hotNews);
@@ -425,12 +411,8 @@ export default function ScreenPage() {
   return (
     <main className="page page--screen">
       <PageHeader
-        title={isReplay ? '历史回放选股' : '智能选股'}
-        description={
-          isReplay
-            ? `基于 ${formatAsOfLabel(asOfDate)} 前 ${lookbackDays} 天的新闻与当日行情，模拟当时会选出哪些股票。`
-            : `根据近 ${lookbackDays} 日热点新闻与今日强势板块，自动为你筛选值得关注的候选股。`
-        }
+        title="智能选股"
+        description={`扫描近 ${lookbackDays} 日热点新闻与今日强势板块，筛出候选股；触发钻石信号的会优先推荐。每次结果自动保存，可在选股记录里看「入选至今」表现。`}
       />
 
       <div className="screen-stack">
@@ -442,13 +424,7 @@ export default function ScreenPage() {
               disabled={loading || committeeLoading}
               onClick={() => handleScreenSubmit()}
             >
-              {loading
-                ? isReplay
-                  ? '正在回放…'
-                  : '正在扫描热点…'
-                : isReplay
-                  ? '开始历史回放'
-                  : '开始智能选股'}
+              {loading ? '正在扫描热点…' : '开始智能选股'}
             </button>
             <button
               type="button"
@@ -469,41 +445,6 @@ export default function ScreenPage() {
             <Link href="/screen/history" className="button button-secondary">
               选股记录
             </Link>
-          </div>
-
-          <div className="action-panel-row action-panel-row--primary replay-date-row">
-            <label className="replay-date-label" htmlFor="replay-date">
-              回放日期
-              <span className="muted">（可选，选某天则按该日新闻+行情选股）</span>
-            </label>
-            <input
-              id="replay-date"
-              className="input"
-              type="date"
-              value={asOfDate}
-              max={todayStr}
-              onChange={(e) => setAsOfDate(e.target.value)}
-              disabled={loading || committeeLoading}
-            />
-            {asOfDate ? (
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={loading || committeeLoading}
-                onClick={() => setAsOfDate('')}
-              >
-                清除
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={loading || committeeLoading}
-                onClick={() => setAsOfDate(defaultReplayDate())}
-              >
-                上上周
-              </button>
-            )}
           </div>
 
           {showAdvanced && (
@@ -574,9 +515,7 @@ export default function ScreenPage() {
           <div className="insight-grid insight-grid--pair">
             {displayHotNews.length > 0 && (
               <section className="pane-card insight-panel">
-                <h2 className="section-title">
-                  {isReplay ? '回放窗口内热点' : `近 ${lookbackDays} 日热点`}
-                </h2>
+                <h2 className="section-title">近 {lookbackDays} 日热点</h2>
                 <ul className="sector-list sector-list--compact">
                   {displayHotNews.slice(0, 6).map((item) => (
                     <li key={item.title + item.datetime}>
@@ -643,9 +582,7 @@ export default function ScreenPage() {
           <section className="section">
             <h2 className="section-title">钻石推荐 · {displayDiamondPicks.length} 只</h2>
             <p className="muted">
-              {isReplay
-                ? `在 ${formatAsOfLabel(asOfDate)} 当日 K 线上触发钻石信号，已写入信号库。`
-                : '候选池中触发钻石信号，已优先展示并写入信号库。'}
+              候选池中触发钻石信号，已优先展示并写入信号库。
             </p>
             <div className="candidate-grid">
               {displayDiamondPicks.map((c) => (
@@ -774,6 +711,24 @@ export default function ScreenPage() {
                 ))}
               </ul>
             )}
+          </section>
+        ) : screenResult && !loading ? (
+          <section className="section pane-card">
+            <h2 className="section-title">候选池为空</h2>
+            <p className="muted">
+              新闻和板块分析已完成，但问财没有返回可解析的个股列表。
+              可能是问财接口暂时无数据，或当前主题下没有命中条件的 A 股。
+            </p>
+            {screenResult.fetchErrors && screenResult.fetchErrors.length > 0 && (
+              <ul className="sector-list">
+                {screenResult.fetchErrors.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+            <p className="muted">
+              建议：稍后重试，或在「指定主题」里换一个更常见的主题词（如「半导体」「高股息」）。
+            </p>
           </section>
         ) : (
           !loading && (

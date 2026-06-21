@@ -50,5 +50,6 @@ export type ScreenStreamEvent =
       elapsedMs: number;
       sessionId: string;
       asOfDate?: string;
+      fetchErrors: string[];
     }
   | { type: 'error'; message: string };

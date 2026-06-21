@@ -1,7 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import {
-  fetchIwencaiCandidatesWithFallback,
+  fetchIwencaiCandidatesMerged,
   fetchIwencaiIndustryContext,
   fetchIwencaiSectorsWithFallback,
   parseCandidatesFromIwencai,
@@ -39,14 +39,22 @@ const hotNewsSchema = z.object({
   url: z.string().nullable(),
 });
 
+const newsSymbolSchema = z.object({
+  symbol: z.string(),
+  name: z.string(),
+  source: z.string(),
+});
+
 const parsedQuerySchema = z.object({
   query: z.string(),
   maxCandidates: z.number(),
   excludeSt: z.boolean(),
   sectorQuery: z.string(),
   stockQuery: z.string(),
+  stockQueries: z.array(z.string()),
   hotNews: z.array(hotNewsSchema),
   hotThemes: z.array(z.string()),
+  newsSymbols: z.array(newsSymbolSchema),
   mode: z.enum(['auto', 'manual']),
   lookbackDays: z.number(),
   asOfDate: z.string().optional(),
@@ -102,8 +110,10 @@ const discoverHotMarketStep = createStep({
       excludeSt: inputData.excludeSt ?? true,
       sectorQuery: ctx.sectorQuery,
       stockQuery: ctx.stockQuery,
+      stockQueries: ctx.stockQueries,
       hotNews: ctx.hotNews,
       hotThemes: ctx.hotThemes,
+      newsSymbols: ctx.newsSymbols,
       mode: ctx.mode,
       lookbackDays: ctx.lookbackDays,
       asOfDate: ctx.asOfDate,
@@ -194,16 +204,37 @@ const fetchCandidatesStep = createStep({
     let candidateRaw: unknown = null;
 
     try {
-      const result = await fetchIwencaiCandidatesWithFallback(
-        inputData.parsed.stockQuery,
+      const queries =
+        inputData.parsed.stockQueries.length > 0
+          ? inputData.parsed.stockQueries
+          : [inputData.parsed.stockQuery];
+      const result = await fetchIwencaiCandidatesMerged(
+        queries,
         sectorHint,
         inputData.parsed.maxCandidates,
         { allowFallback: !inputData.parsed.asOfDate },
       );
       candidates = result.candidates;
       candidateRaw = result.raw;
+      if (result.queriesUsed.length > 0) {
+        const preview = result.queriesUsed.slice(0, 3).join('；');
+        fetchErrors.push(
+          `candidates: 问财 ${result.queriesUsed.length} 路 query — ${preview}${result.queriesUsed.length > 3 ? '…' : ''}`,
+        );
+      }
       if (result.usedFallback) {
-        fetchErrors.push('candidates: 主 query 无结果，已使用主力净流入 fallback');
+        fetchErrors.push('candidates: 全部主题 query 无结果，已使用主力净流入 fallback');
+      }
+
+      for (const item of inputData.parsed.newsSymbols) {
+        if (candidates.some((c) => c.symbol === item.symbol)) continue;
+        if (candidates.length >= inputData.parsed.maxCandidates) break;
+        candidates.push({
+          symbol: item.symbol,
+          name: item.name,
+          thesis: `新闻提及（${item.source.slice(0, 24)}）`,
+          dataSource: 'iwencai',
+        });
       }
     } catch (error) {
       fetchErrors.push(

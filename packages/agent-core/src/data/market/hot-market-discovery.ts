@@ -5,6 +5,7 @@ import {
   fetchEastMoneyFastNews,
   fetchSinaFinanceRollNews,
 } from './free/market-news-feed.js';
+import { enrichHotNews, type NewsMentionedSymbol } from './news-enrichment.js';
 
 export type HotNewsItem = {
   title: string;
@@ -23,8 +24,11 @@ export type AutoScreenContext = {
   query: string;
   sectorQuery: string;
   stockQuery: string;
+  /** 多路问财个股 query，避免单 query 总是同一批结果 */
+  stockQueries: string[];
   hotNews: HotNewsItem[];
   hotThemes: string[];
+  newsSymbols: NewsMentionedSymbol[];
   mode: 'auto' | 'manual';
   lookbackDays: number;
   asOfDate?: string;
@@ -91,23 +95,77 @@ export function parseNewsTime(value: string): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
-/** 历史回放优先使用 asOfDate 当天新闻提取主题 */
+/** 实时选股：主题提取优先用近几天新闻，避免 14 天窗口里老标题反复主导 */
 export function pickNewsForThemes(
   news: HotNewsItem[],
   asOfDate?: string,
+  recentDays = 3,
 ): HotNewsItem[] {
-  if (!asOfDate) return news;
-
-  const onDay = news.filter((item) => {
-    const ts = parseNewsTime(item.datetime);
-    if (!ts) return false;
-    const day = new Date(ts).toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Shanghai',
+  if (asOfDate) {
+    const onDay = news.filter((item) => {
+      const ts = parseNewsTime(item.datetime);
+      if (!ts) return false;
+      const day = new Date(ts).toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Shanghai',
+      });
+      return day === asOfDate;
     });
-    return day === asOfDate;
-  });
+    return onDay.length > 0 ? onDay : news;
+  }
 
-  return onDay.length > 0 ? onDay : news;
+  const cutoffTs = Date.now() - recentDays * 24 * 60 * 60 * 1000;
+  const recent = news.filter((item) => {
+    const ts = parseNewsTime(item.datetime);
+    return ts > 0 && ts >= cutoffTs;
+  });
+  return recent.length >= 3 ? recent : news.slice(0, 12);
+}
+
+function buildStockQueries(input: {
+  themes: string[];
+  excludeHint: string;
+  isReplay: boolean;
+  asOfDate?: string;
+  newsSymbols: NewsMentionedSymbol[];
+}): string[] {
+  const screenDateHint =
+    input.isReplay && input.asOfDate
+      ? formatAsOfDateLabel(input.asOfDate)
+      : '今日';
+  const queries: string[] = [];
+
+  for (const theme of input.themes.slice(0, 3)) {
+    queries.push(
+      input.isReplay
+        ? `${theme}相关A股，${screenDateHint}涨幅靠前${input.excludeHint}`
+        : `${theme}相关A股，今日涨幅靠前${input.excludeHint}`,
+    );
+    queries.push(
+      input.isReplay
+        ? `${theme}概念，${screenDateHint}主力净流入${input.excludeHint}`
+        : `${theme}概念，今日主力净流入${input.excludeHint}`,
+    );
+  }
+
+  if (queries.length === 0) {
+    queries.push(`今日A股涨幅排名前20${input.excludeHint}`);
+    queries.push(`今日A股主力净流入排名前20${input.excludeHint}`);
+    queries.push(`今日A股换手率排名前20${input.excludeHint}`);
+  }
+
+  if (input.newsSymbols.length > 0) {
+    const codeHint = input.newsSymbols
+      .slice(0, 6)
+      .map((item) => item.symbol)
+      .join('、');
+    queries.push(
+      input.isReplay
+        ? `${codeHint}${input.excludeHint}，${screenDateHint}行情`
+        : `${codeHint}${input.excludeHint}，今日行情`,
+    );
+  }
+
+  return [...new Set(queries)];
 }
 
 function normalizeHotNewsKey(title: string): string {
@@ -394,16 +452,38 @@ export async function discoverAutoScreenContext(options?: {
     lookbackDays,
     asOfDate,
   });
-  const hotThemes = extractThemesFromNews(
-    pickNewsForThemes(hotNews, asOfDate),
-    3,
-  );
+  const themeNews = pickNewsForThemes(hotNews, asOfDate);
+  const enrichment = await enrichHotNews(themeNews, 5);
+  const enrichedNews = mergeHotNewsSources([
+    hotNews,
+    enrichment.relatedNews,
+  ]).slice(0, 20);
+  const hotThemes = extractThemesFromNews(themeNews, 3);
+  const newsSymbols = enrichment.mentionedSymbols;
   const { sectorQuery, stockQuery } = buildMarketQueries({
     themeHint: hotThemes.length > 0 ? hotThemes.slice(0, 2).join('、') : null,
     excludeHint,
     isReplay,
     asOfDate,
   });
+  const stockQueries = buildStockQueries({
+    themes: hotThemes,
+    excludeHint,
+    isReplay,
+    asOfDate,
+    newsSymbols,
+  });
+
+  const baseContext = {
+    sectorQuery,
+    stockQuery,
+    stockQueries,
+    hotNews: enrichedNews,
+    hotThemes,
+    newsSymbols,
+    lookbackDays,
+    asOfDate,
+  };
 
   if (userQuery) {
     const themeHint =
@@ -415,6 +495,7 @@ export async function discoverAutoScreenContext(options?: {
       ? formatAsOfDateLabel(asOfDate)
       : null;
     return {
+      ...baseContext,
       query: `${replayPrefix}${userQuery}`,
       sectorQuery: replayDateHint
         ? `${userQuery}${excludeHint}，参考${replayDateHint}前${lookbackDays}天热点：${themeHint}，${replayDateHint}当日板块涨幅排名靠前`
@@ -422,11 +503,13 @@ export async function discoverAutoScreenContext(options?: {
       stockQuery: replayDateHint
         ? `${userQuery}相关A股，${replayDateHint}当日涨幅排名前20${excludeHint}`
         : `${userQuery} A股${excludeHint}`,
-      hotNews,
-      hotThemes,
-      mode: 'manual',
-      lookbackDays,
-      asOfDate,
+      stockQueries: [
+        replayDateHint
+          ? `${userQuery}相关A股，${replayDateHint}当日涨幅排名前20${excludeHint}`
+          : `${userQuery} A股${excludeHint}`,
+        ...stockQueries,
+      ],
+      mode: 'manual' as const,
     };
   }
 
@@ -436,27 +519,17 @@ export async function discoverAutoScreenContext(options?: {
   if (isReplay && asOfDate) {
     const dateLabel = formatAsOfDateLabel(asOfDate);
     return {
+      ...baseContext,
       query: themeHint
         ? `历史回放（${dateLabel}）：${themeHint}`
         : `历史回放（${dateLabel}）：热点选股`,
-      sectorQuery,
-      stockQuery,
-      hotNews,
-      hotThemes,
-      mode: 'auto',
-      lookbackDays,
-      asOfDate,
+      mode: 'auto' as const,
     };
   }
 
   return {
+    ...baseContext,
     query: themeHint ? `热点自动选股：${themeHint}` : '热点自动选股：今日强势板块',
-    sectorQuery,
-    stockQuery,
-    hotNews,
-    hotThemes,
-    mode: 'auto',
-    lookbackDays,
-    asOfDate,
+    mode: 'auto' as const,
   };
 }

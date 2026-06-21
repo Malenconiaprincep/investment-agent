@@ -675,6 +675,27 @@ a:hover {
   border-top: 1px dashed var(--border);
 }
 
+.replay-date-row {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--border);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.replay-date-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.92rem;
+  min-width: 12rem;
+}
+
+.replay-date-label .muted {
+  font-size: 0.78rem;
+}
+
 .advanced-panel .form {
   margin-bottom: 0;
 }
