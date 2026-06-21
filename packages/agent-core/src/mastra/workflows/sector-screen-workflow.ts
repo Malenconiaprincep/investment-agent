@@ -19,6 +19,10 @@ import {
   scanScreeningCandidatesDiamonds,
   type ScreeningCandidateWithDiamond,
 } from '../../data/screening/diamond-scan.js';
+import {
+  formatFactorThesis,
+  scoreAndRankCandidates,
+} from '../../data/screening/factor-score.js';
 
 const workflowInputSchema = z.object({
   /** 可选；留空则根据热门新闻 + 板块自动选股 */
@@ -77,6 +81,28 @@ const candidateDiamondSchema = z
   .nullable()
   .optional();
 
+const factorScoreSchema = z
+  .object({
+    total: z.number(),
+    shortTermScore: z.number(),
+    trendScore: z.number(),
+    outlook: z.enum(['short-bullish', 'trend-bullish', 'neutral', 'weak']),
+    outlookLabel: z.string(),
+    factors: z.array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        passed: z.boolean(),
+        points: z.number(),
+        detail: z.string().optional(),
+      }),
+    ),
+    ret1dPct: z.number().nullable(),
+    ret5dPct: z.number().nullable(),
+    ret20dPct: z.number().nullable(),
+  })
+  .optional();
+
 const candidateSchema = z.object({
   symbol: z.string(),
   name: z.string(),
@@ -84,6 +110,7 @@ const candidateSchema = z.object({
   dataSource: z.string(),
   industry: z.string().nullable().optional(),
   diamond: candidateDiamondSchema,
+  factorScore: factorScoreSchema,
 });
 
 const discoverHotMarketStep = createStep({
@@ -208,10 +235,14 @@ const fetchCandidatesStep = createStep({
         inputData.parsed.stockQueries.length > 0
           ? inputData.parsed.stockQueries
           : [inputData.parsed.stockQuery];
+      const fetchLimit = Math.min(
+        Math.max(inputData.parsed.maxCandidates * 2, 16),
+        24,
+      );
       const result = await fetchIwencaiCandidatesMerged(
         queries,
         sectorHint,
-        inputData.parsed.maxCandidates,
+        fetchLimit,
         { allowFallback: !inputData.parsed.asOfDate },
       );
       candidates = result.candidates;
@@ -228,7 +259,7 @@ const fetchCandidatesStep = createStep({
 
       for (const item of inputData.parsed.newsSymbols) {
         if (candidates.some((c) => c.symbol === item.symbol)) continue;
-        if (candidates.length >= inputData.parsed.maxCandidates) break;
+        if (candidates.length >= fetchLimit) break;
         candidates.push({
           symbol: item.symbol,
           name: item.name,
@@ -360,6 +391,72 @@ const scanDiamondsStep = createStep({
   },
 });
 
+const scoreFactorsStep = createStep({
+  id: 'score-factors',
+  description: '因子打分：隔日动量 + 趋势',
+  inputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+  }),
+  outputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+  }),
+  execute: async ({ inputData }) => {
+    const fetchErrors = [...inputData.fetchErrors];
+
+    if (inputData.parsed.asOfDate) {
+      return { ...inputData };
+    }
+
+    const { candidates, dropped } = await scoreAndRankCandidates({
+      candidates: inputData.candidates as ScreeningCandidateWithDiamond[],
+      limit: inputData.parsed.maxCandidates,
+      minTotal: 42,
+    });
+
+    const enriched = candidates.map((item) => ({
+      ...item,
+      thesis: item.factorScore
+        ? `${formatFactorThesis(item.factorScore)}；${item.thesis}`.slice(0, 280)
+        : item.thesis,
+    }));
+
+    const diamondSymbols = new Set(
+      enriched.filter((c) => c.diamond).map((c) => c.symbol),
+    );
+    const diamondPicks = enriched.filter((c) => diamondSymbols.has(c.symbol));
+
+    if (enriched.length > 0) {
+      const top = enriched[0].factorScore!;
+      fetchErrors.push(
+        `factor: ${enriched.length} 只通过因子筛选（隔日${top.shortTermScore}/趋势${top.trendScore}，${dropped} 只淘汰）`,
+      );
+    } else {
+      fetchErrors.push('factor: 因子打分无结果，保留原候选顺序');
+      return { ...inputData };
+    }
+
+    return {
+      ...inputData,
+      candidates: enriched,
+      diamondPicks:
+        diamondPicks.length > 0 ? diamondPicks : inputData.diamondPicks,
+      fetchErrors,
+    };
+  },
+});
+
 const summarizeStep = createStep({
   id: 'summarize',
   description: '板块轮动 Agent 生成摘要',
@@ -390,7 +487,7 @@ const summarizeStep = createStep({
     const agent = mastra.getAgent('sectorRotationAgent');
     const prompt = `请根据以下问财板块/选股结果撰写板块轮动 Markdown 摘要。
 
-选股模式：${inputData.parsed.mode === 'auto' ? '热点自动扫描' : '用户指定主题'}
+选股模式：${inputData.parsed.mode === 'auto' ? '热点因子选股（隔日动量+趋势）' : '用户指定主题'}
 主题说明：${inputData.parsed.query}
 ${inputData.parsed.asOfDate ? `历史回放日：${inputData.parsed.asOfDate}` : ''}
 
@@ -400,7 +497,7 @@ ${JSON.stringify(inputData.parsed.hotNews.slice(0, 8), null, 2)}
 === 板块 ===
 ${JSON.stringify(inputData.sectors, null, 2)}
 
-=== 候选股 ===
+=== 候选股（含因子得分：隔日动量/趋势） ===
 ${JSON.stringify(inputData.candidates, null, 2)}
 
 === 钻石信号推荐 ===
@@ -509,7 +606,7 @@ const qualityCheckStep = createStep({
 
 export const sectorScreenWorkflow = createWorkflow({
   id: 'sector-screen-workflow',
-  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 钻石 → 摘要',
+  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 钻石 → 因子打分 → 摘要',
   inputSchema: workflowInputSchema,
   outputSchema: z.object({
     query: z.string(),
@@ -533,6 +630,7 @@ export const sectorScreenWorkflow = createWorkflow({
   .then(fetchCandidatesStep)
   .then(enrichBasicsStep)
   .then(scanDiamondsStep)
+  .then(scoreFactorsStep)
   .then(summarizeStep)
   .then(qualityCheckStep)
   .commit();

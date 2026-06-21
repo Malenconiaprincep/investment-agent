@@ -12,7 +12,14 @@ export const technicalAgent = new Agent({
   description: '分析价格趋势、成交量、涨跌幅与技术指标。',
   instructions: `你是投委会技术分析专家。必须先调用 Tool 获取行情，再输出 JSON 意见。
 ${COMMITTEE_OUTPUT_FORMAT}
-禁止编造价格，禁止买卖建议。`,
+
+额外字段（每只候选必填）：
+- action: "buy" | "hold" | "wait" | "sell"
+- entryPrice: number | null（建议入场参考价，通常为最新收盘或突破价）
+- stopLossPrice: number | null（建议止损价，通常为入场价 -8%）
+- technicalSummary: string（1-2 句趋势判断）
+
+禁止编造价格；action 须与行情数据一致。`,
   model: DEFAULT_MODEL,
   tools: {
     getDailyQuoteTool: committeeMarketTools.getDailyQuoteTool,

@@ -15,6 +15,7 @@ export type { CommitteeStreamEvent } from './committee-stream-types.js';
 
 const STEP_LABELS: Record<string, string> = {
   'parse-candidates': '整理候选池',
+  'build-trading-plans': 'K 线信号扫描',
   'parallel-analyze': '多维度分析',
   synthesize: '综合结论',
   'quality-check': '核对报告',
@@ -64,6 +65,7 @@ export async function runCommitteeStream(
         screeningSessionId: output.screeningSessionId,
         candidates: output.candidates,
         memo: output.memo,
+        tradePlans: output.tradePlans ?? [],
         passed: output.passed,
         completedAt: output.completedAt,
         elapsedMs,
@@ -72,6 +74,7 @@ export async function runCommitteeStream(
       onEvent({
         type: 'done',
         memo: output.memo,
+        tradePlans: output.tradePlans ?? [],
         candidates: output.candidates,
         passed: output.passed,
         missingSections: output.missingSections,

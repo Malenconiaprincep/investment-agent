@@ -136,21 +136,20 @@ function buildStockQueries(input: {
 
   for (const theme of input.themes.slice(0, 3)) {
     queries.push(
-      input.isReplay
-        ? `${theme}相关A股，${screenDateHint}涨幅靠前${input.excludeHint}`
-        : `${theme}相关A股，今日涨幅靠前${input.excludeHint}`,
+      `${theme}相关A股，均线多头排列，5日涨幅靠前${input.excludeHint}`,
     );
     queries.push(
-      input.isReplay
-        ? `${theme}概念，${screenDateHint}主力净流入${input.excludeHint}`
-        : `${theme}概念，今日主力净流入${input.excludeHint}`,
+      `${theme}概念，MACD金叉，主力净流入${input.excludeHint}`,
+    );
+    queries.push(
+      `${theme}相关，10日涨幅靠前，${screenDateHint}涨幅小于7%${input.excludeHint}`,
     );
   }
 
   if (queries.length === 0) {
-    queries.push(`今日A股涨幅排名前20${input.excludeHint}`);
-    queries.push(`今日A股主力净流入排名前20${input.excludeHint}`);
-    queries.push(`今日A股换手率排名前20${input.excludeHint}`);
+    queries.push(`A股，均线多头排列，MACD金叉，5日涨幅前30${input.excludeHint}`);
+    queries.push(`A股，10日涨幅靠前，${screenDateHint}涨幅小于7%${input.excludeHint}`);
+    queries.push(`A股，连续3日主力净流入${input.excludeHint}`);
   }
 
   if (input.newsSymbols.length > 0) {
@@ -158,11 +157,7 @@ function buildStockQueries(input: {
       .slice(0, 6)
       .map((item) => item.symbol)
       .join('、');
-    queries.push(
-      input.isReplay
-        ? `${codeHint}${input.excludeHint}，${screenDateHint}行情`
-        : `${codeHint}${input.excludeHint}，今日行情`,
-    );
+    queries.push(`${codeHint}${input.excludeHint}，均线多头`);
   }
 
   return [...new Set(queries)];
@@ -410,21 +405,21 @@ function buildMarketQueries(input: {
   if (input.themeHint) {
     return {
       sectorQuery: input.isReplay
-        ? `${input.themeHint}概念板块，${screenDateHint}当日涨幅排名靠前${input.excludeHint}`
-        : `${input.themeHint}概念板块，今日涨幅或主力净流入靠前${input.excludeHint}`,
+        ? `${input.themeHint}概念板块，${screenDateHint}涨幅靠前，5日涨幅靠前${input.excludeHint}`
+        : `${input.themeHint}概念板块，5日涨幅靠前，均线多头${input.excludeHint}`,
       stockQuery: input.isReplay
-        ? `${input.themeHint}相关A股，${screenDateHint}当日涨幅排名前20${input.excludeHint}`
-        : `${input.themeHint}相关A股，今日主力净流入${input.excludeHint}`,
+        ? `${input.themeHint}相关A股，${screenDateHint}均线多头排列${input.excludeHint}`
+        : `${input.themeHint}相关A股，均线多头排列，MACD金叉${input.excludeHint}`,
     };
   }
 
   return {
     sectorQuery: input.isReplay
-      ? `${screenDateHint}当日A股概念板块涨幅排名前10${input.excludeHint}`
-      : `今日A股概念板块涨幅排名前10${input.excludeHint}`,
+      ? `${screenDateHint}A股概念板块，5日涨幅排名前10${input.excludeHint}`
+      : `A股概念板块，5日涨幅排名前10，均线多头${input.excludeHint}`,
     stockQuery: input.isReplay
-      ? `${screenDateHint}当日A股涨幅排名前20${input.excludeHint}`
-      : `今日A股主力净流入排名前20${input.excludeHint}`,
+      ? `${screenDateHint}A股，均线多头排列，5日涨幅前20${input.excludeHint}`
+      : `A股，均线多头排列，MACD金叉，5日涨幅前20${input.excludeHint}`,
   };
 }
 
@@ -529,7 +524,9 @@ export async function discoverAutoScreenContext(options?: {
 
   return {
     ...baseContext,
-    query: themeHint ? `热点自动选股：${themeHint}` : '热点自动选股：今日强势板块',
+    query: themeHint
+      ? `因子选股：${themeHint}（隔日动量+趋势）`
+      : '因子选股：热点趋势+隔日动量',
     mode: 'auto' as const,
   };
 }

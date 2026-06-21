@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
@@ -35,6 +36,7 @@ type ScreeningDetail = {
   committee: {
     id: string;
     memo: string;
+    tradePlans?: CommitteeTradePlanView[];
     passed: boolean;
     elapsedMs: number | null;
     createdAt: string;
@@ -349,6 +351,10 @@ export default function ScreeningHistoryDetailPage() {
 
           {session.committee && (
             <section className="section">
+              {session.committee.tradePlans &&
+                session.committee.tradePlans.length > 0 && (
+                  <CommitteeTradePanel tradePlans={session.committee.tradePlans} />
+                )}
               <h2 className="section-title">深度分析</h2>
               <div className="status-bar">
                 <QualityBadge

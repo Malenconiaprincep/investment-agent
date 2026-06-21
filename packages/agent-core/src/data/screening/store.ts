@@ -46,9 +46,31 @@ export type CommitteeSessionRecord = {
   screeningSessionId: string | null;
   candidates: Array<{ symbol: string; name: string }>;
   memo: string;
+  tradePlans: CommitteeTradePlanStored[];
   passed: boolean;
   elapsedMs: number | null;
   createdAt: string;
+};
+
+export type CommitteeTradePlanStored = {
+  symbol: string;
+  name: string;
+  action: 'buy' | 'hold' | 'wait' | 'sell';
+  actionReason: string;
+  latestClose: number;
+  entryPrice: number | null;
+  stopLossPrice: number;
+  targetHint: string;
+  signals: Array<{
+    kind: 'buy' | 'sell';
+    tradeDate: string;
+    price: number;
+    reason: string;
+    strength?: 'red' | 'blue';
+  }>;
+  diamondStrength: 'red' | 'blue' | null;
+  checklistScore: number;
+  checklistMax: number;
 };
 
 export type SaveScreeningInput = {
@@ -72,6 +94,7 @@ export type SaveCommitteeInput = {
   screeningSessionId?: string | null;
   candidates: Array<{ symbol: string; name: string }>;
   memo: string;
+  tradePlans?: CommitteeTradePlanStored[];
   passed: boolean;
   completedAt: string;
   elapsedMs?: number;
@@ -113,6 +136,7 @@ async function getDb(): Promise<Client> {
         ON screening_sessions(created_at DESC)`,
     ]);
     await ensureScreeningSessionColumns(client);
+    await ensureCommitteeSessionColumns(client);
     migrated = true;
   }
 
@@ -124,6 +148,19 @@ async function ensureScreeningSessionColumns(db: Client) {
     `ALTER TABLE screening_sessions ADD COLUMN hot_news TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE screening_sessions ADD COLUMN hot_themes TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE screening_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'`,
+  ];
+  for (const sql of alters) {
+    try {
+      await db.execute(sql);
+    } catch {
+      // column already exists
+    }
+  }
+}
+
+async function ensureCommitteeSessionColumns(db: Client) {
+  const alters = [
+    `ALTER TABLE committee_sessions ADD COLUMN trade_plans TEXT NOT NULL DEFAULT '[]'`,
   ];
   for (const sql of alters) {
     try {
@@ -224,13 +261,14 @@ export async function saveCommitteeSession(
 
   await db.execute({
     sql: `INSERT INTO committee_sessions (
-      id, screening_session_id, candidates, memo, passed, elapsed_ms, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      id, screening_session_id, candidates, memo, trade_plans, passed, elapsed_ms, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.screeningSessionId ?? null,
       JSON.stringify(input.candidates),
       input.memo,
+      JSON.stringify(input.tradePlans ?? []),
       input.passed ? 1 : 0,
       input.elapsedMs ?? null,
       createdAt,
@@ -242,6 +280,7 @@ export async function saveCommitteeSession(
     screeningSessionId: input.screeningSessionId ?? null,
     candidates: input.candidates,
     memo: input.memo,
+    tradePlans: input.tradePlans ?? [],
     passed: input.passed,
     elapsedMs: input.elapsedMs ?? null,
     createdAt,
@@ -304,6 +343,9 @@ export async function getCommitteeSessionByScreeningId(
         : String(row.screening_session_id),
     candidates: JSON.parse(String(row.candidates)) as CommitteeSessionRecord['candidates'],
     memo: String(row.memo),
+    tradePlans: JSON.parse(
+      String(row.trade_plans ?? '[]'),
+    ) as CommitteeSessionRecord['tradePlans'],
     passed: Boolean(row.passed),
     elapsedMs:
       row.elapsed_ms == null ? null : Number(row.elapsed_ms),

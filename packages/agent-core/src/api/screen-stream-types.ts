@@ -6,12 +6,24 @@ export type ScreeningCandidateDiamond = {
   reasons: string[];
 };
 
+export type ScreeningCandidateFactor = {
+  total: number;
+  shortTermScore: number;
+  trendScore: number;
+  outlook: 'short-bullish' | 'trend-bullish' | 'neutral' | 'weak';
+  outlookLabel: string;
+  ret1dPct: number | null;
+  ret5dPct: number | null;
+  ret20dPct: number | null;
+};
+
 export type ScreeningStreamCandidate = {
   symbol: string;
   name: string;
   thesis: string;
   dataSource: string;
   diamond?: ScreeningCandidateDiamond | null;
+  factorScore?: ScreeningCandidateFactor | null;
 };
 
 export type ScreenStreamEvent =

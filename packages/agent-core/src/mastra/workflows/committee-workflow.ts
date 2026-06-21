@@ -1,10 +1,38 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { emitCommitteeStreamEvent } from '../../api/committee-stream-context.js';
+import {
+  buildCommitteeTradePlans,
+  formatTradePlansForPrompt,
+  type CommitteeTradePlan,
+} from '../../data/screening/committee-trading-plan.js';
 
 const candidateInputSchema = z.object({
   symbol: z.string().regex(/^\d{6}$/),
   name: z.string(),
+});
+
+const tradeSignalSchema = z.object({
+  kind: z.enum(['buy', 'sell']),
+  tradeDate: z.string(),
+  price: z.number(),
+  reason: z.string(),
+  strength: z.enum(['red', 'blue']).optional(),
+});
+
+const tradePlanSchema = z.object({
+  symbol: z.string(),
+  name: z.string(),
+  action: z.enum(['buy', 'hold', 'wait', 'sell']),
+  actionReason: z.string(),
+  latestClose: z.number(),
+  entryPrice: z.number().nullable(),
+  stopLossPrice: z.number(),
+  targetHint: z.string(),
+  signals: z.array(tradeSignalSchema),
+  diamondStrength: z.enum(['red', 'blue']).nullable(),
+  checklistScore: z.number(),
+  checklistMax: z.number(),
 });
 
 const workflowInputSchema = z.object({
@@ -38,12 +66,31 @@ const parseCandidatesStep = createStep({
   }),
 });
 
-const parallelAnalyzeStep = createStep({
-  id: 'parallel-analyze',
-  description: '六组专家并行分析',
+const buildTradingPlansStep = createStep({
+  id: 'build-trading-plans',
+  description: 'K 线信号与交易计划',
   inputSchema: parsedInputSchema,
   outputSchema: z.object({
     parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
+  }),
+  execute: async ({ inputData }) => {
+    const tradePlans = await buildCommitteeTradePlans(inputData.candidates);
+    emitCommitteeStreamEvent({ type: 'tradePlans', tradePlans });
+    return { parsed: inputData, tradePlans };
+  },
+});
+
+const parallelAnalyzeStep = createStep({
+  id: 'parallel-analyze',
+  description: '六组专家并行分析',
+  inputSchema: z.object({
+    parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
+  }),
+  outputSchema: z.object({
+    parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
     opinions: z.array(
       z.object({
         role: z.string(),
@@ -53,9 +100,12 @@ const parallelAnalyzeStep = createStep({
     ),
   }),
   execute: async ({ inputData, mastra }) => {
-    const candidateList = inputData.candidates
+    const candidateList = inputData.parsed.candidates
       .map((c) => `${c.name}(${c.symbol})`)
       .join('、');
+    const planHint = formatTradePlansForPrompt(
+      inputData.tradePlans as CommitteeTradePlan[],
+    );
 
     const tasks = SPECIALISTS.map(async (spec) => {
       emitCommitteeStreamEvent({
@@ -67,6 +117,9 @@ const parallelAnalyzeStep = createStep({
       const agent = mastra.getAgent(spec.agentKey);
       const prompt = `请分析以下 A 股候选池，从【${spec.focus}】角度给出意见。
 候选：${candidateList}
+
+=== 系统 K 线交易计划（技术组须重点对照） ===
+${planHint}
 
 对每只候选分别给出 JSON 数组元素，或合并为一份含 symbol 字段的多条 JSON。
 必须先调用 Tool 获取数据。`;
@@ -100,7 +153,11 @@ const parallelAnalyzeStep = createStep({
     });
 
     const opinions = await Promise.all(tasks);
-    return { parsed: inputData, opinions };
+    return {
+      parsed: inputData.parsed,
+      tradePlans: inputData.tradePlans,
+      opinions,
+    };
   },
 });
 
@@ -109,6 +166,7 @@ const synthesizeStep = createStep({
   description: '投委会主席综合纪要',
   inputSchema: z.object({
     parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
     opinions: z.array(
       z.object({
         role: z.string(),
@@ -119,6 +177,7 @@ const synthesizeStep = createStep({
   }),
   outputSchema: z.object({
     parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
     opinions: z.array(
       z.object({
         role: z.string(),
@@ -130,10 +189,18 @@ const synthesizeStep = createStep({
   }),
   execute: async ({ inputData, mastra }) => {
     const supervisor = mastra.getAgent('committeeSupervisor');
-    const prompt = `请综合以下六组专家意见，撰写投委会 Markdown 纪要。
+    const planBlock = formatTradePlansForPrompt(
+      inputData.tradePlans as CommitteeTradePlan[],
+    );
+    const prompt = `请综合以下六组专家意见与 K 线交易计划，撰写投委会 Markdown 纪要。
+必须包含「操作建议」与「K线信号解读」章节，并给出明确的买入/持有/等待/卖出建议及价位。
 
 候选池：${JSON.stringify(inputData.parsed.candidates, null, 2)}
 
+=== K 线交易计划（系统预计算，价格以此为准） ===
+${planBlock}
+
+=== 六组专家意见 ===
 ${inputData.opinions
   .map((o) => `=== ${o.role} ===\n${o.content}`)
   .join('\n\n')}`;
@@ -155,6 +222,7 @@ const qualityCheckStep = createStep({
   description: '检查投委会纪要质量',
   inputSchema: z.object({
     parsed: parsedInputSchema,
+    tradePlans: z.array(tradePlanSchema),
     opinions: z.array(
       z.object({
         role: z.string(),
@@ -167,6 +235,7 @@ const qualityCheckStep = createStep({
   outputSchema: z.object({
     candidates: z.array(candidateInputSchema),
     screeningSessionId: z.string().optional(),
+    tradePlans: z.array(tradePlanSchema),
     memo: z.string(),
     opinions: z.array(
       z.object({
@@ -187,6 +256,7 @@ const qualityCheckStep = createStep({
     return {
       candidates: inputData.parsed.candidates,
       screeningSessionId: inputData.parsed.screeningSessionId,
+      tradePlans: inputData.tradePlans,
       memo: inputData.memo,
       opinions: inputData.opinions,
       passed: quality.passed,
@@ -199,11 +269,12 @@ const qualityCheckStep = createStep({
 
 export const committeeWorkflow = createWorkflow({
   id: 'committee-workflow',
-  description: '多 Agent 投委会：六组并行分析 + 主席综合',
+  description: '多 Agent 投委会：K 线交易计划 + 六组并行分析 + 主席综合',
   inputSchema: workflowInputSchema,
   outputSchema: z.object({
     candidates: z.array(candidateInputSchema),
     screeningSessionId: z.string().optional(),
+    tradePlans: z.array(tradePlanSchema),
     memo: z.string(),
     opinions: z.array(
       z.object({
@@ -219,6 +290,7 @@ export const committeeWorkflow = createWorkflow({
   }),
 })
   .then(parseCandidatesStep)
+  .then(buildTradingPlansStep)
   .then(parallelAnalyzeStep)
   .then(synthesizeStep)
   .then(qualityCheckStep)

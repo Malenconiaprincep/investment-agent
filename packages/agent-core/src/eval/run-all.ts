@@ -136,6 +136,8 @@ async function runScreenEval() {
 ## 候选池概览
 ## 各维度共识
 ## 分歧与待核实
+## 操作建议
+## K线信号解读
 ## 免责声明
 不构成投资建议`);
   if (committeeQuality.passed) passed += 1;

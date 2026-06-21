@@ -19,6 +19,7 @@ const STEP_LABELS: Record<string, string> = {
   'fetch-candidates': '筛选候选股',
   'enrich-basics': '补充信息',
   'scan-diamonds': '钻石信号检测',
+  'score-factors': '因子打分',
   summarize: '生成摘要',
   'quality-check': '核对结果',
 };
@@ -59,7 +60,11 @@ function mapWorkflowChunk(chunk: WorkflowStreamEvent): ScreenStreamEvent[] {
         }>,
       });
     }
-    if (chunk.payload.id === 'scan-diamonds' && output?.candidates) {
+    if (
+      (chunk.payload.id === 'scan-diamonds' ||
+        chunk.payload.id === 'score-factors') &&
+      output?.candidates
+    ) {
       const candidates = output.candidates as ScreeningStreamCandidate[];
       events.push({
         type: 'candidates',

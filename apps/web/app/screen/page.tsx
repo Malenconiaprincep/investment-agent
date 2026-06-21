@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -20,6 +21,16 @@ type Candidate = {
   name: string;
   thesis: string;
   dataSource: string;
+  factorScore?: {
+    total: number;
+    shortTermScore: number;
+    trendScore: number;
+    outlook: 'short-bullish' | 'trend-bullish' | 'neutral' | 'weak';
+    outlookLabel: string;
+    ret1dPct: number | null;
+    ret5dPct: number | null;
+    ret20dPct: number | null;
+  } | null;
   diamond?: {
     strength: 'red' | 'blue';
     score: number;
@@ -98,6 +109,7 @@ type CommitteeResult = {
   passed: boolean;
   sessionId?: string;
   elapsedMs: number;
+  tradePlans: CommitteeTradePlanView[];
 };
 
 type ScreenStreamEvent =
@@ -136,12 +148,14 @@ type CommitteeStreamEvent =
   | { type: 'step'; label: string }
   | { type: 'token'; text: string }
   | { type: 'specialist'; role: string; status: string }
+  | { type: 'tradePlans'; tradePlans: CommitteeTradePlanView[] }
   | {
       type: 'done';
       memo: string;
       passed: boolean;
       sessionId: string;
       elapsedMs: number;
+      tradePlans: CommitteeTradePlanView[];
     }
   | { type: 'error'; message: string };
 
@@ -151,12 +165,14 @@ const SCREEN_STEPS = [
   '筛选候选股',
   '补充信息',
   '钻石信号检测',
+  '因子打分',
   '生成摘要',
   '核对结果',
 ];
 
 const COMMITTEE_STEPS = [
   '整理候选池',
+  'K 线信号扫描',
   '多维度分析',
   '综合结论',
   '核对报告',
@@ -183,6 +199,7 @@ export default function ScreenPage() {
   const [committeeResult, setCommitteeResult] = useState<CommitteeResult | null>(
     null,
   );
+  const [tradePlans, setTradePlans] = useState<CommitteeTradePlanView[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchResults, setBatchResults] = useState<
     Array<{
@@ -303,6 +320,7 @@ export default function ScreenPage() {
     setCommitteeLoading(true);
     setError(null);
     setCommitteeResult(null);
+    setTradePlans([]);
     setStreamingMemo('');
     setCommitteeStep(null);
 
@@ -330,6 +348,7 @@ export default function ScreenPage() {
       await readSSEStream(response, (_eventName, data) => {
         const event = JSON.parse(data) as CommitteeStreamEvent;
         if (event.type === 'step') setCommitteeStep(event.label);
+        if (event.type === 'tradePlans') setTradePlans(event.tradePlans);
         if (event.type === 'token') {
           memo += event.text;
           setStreamingMemo(memo);
@@ -340,8 +359,10 @@ export default function ScreenPage() {
             passed: event.passed,
             sessionId: event.sessionId,
             elapsedMs: event.elapsedMs,
+            tradePlans: event.tradePlans,
           };
           setCommitteeResult(finalResult);
+          setTradePlans(event.tradePlans);
           setStreamingMemo(event.memo);
           setCommitteeLoading(false);
           setCommitteeStep(null);
@@ -401,6 +422,7 @@ export default function ScreenPage() {
   const summarySections = splitMarkdownSections(displaySummary);
   const summaryDisclaimer = extractMarkdownDisclaimer(displaySummary);
   const displayMemo = committeeResult?.memo ?? streamingMemo;
+  const displayTradePlans = committeeResult?.tradePlans ?? tradePlans;
   const displayHotNews = screenResult?.hotNews ?? hotNews;
   const displayQuery = screenResult?.query ?? autoQuery;
   const displayDiamondPicks = screenResult?.diamondPicks ?? diamondPicks;
@@ -412,7 +434,7 @@ export default function ScreenPage() {
     <main className="page page--screen">
       <PageHeader
         title="智能选股"
-        description={`扫描近 ${lookbackDays} 日热点新闻与今日强势板块，筛出候选股；触发钻石信号的会优先推荐。每次结果自动保存，可在选股记录里看「入选至今」表现。`}
+        description={`结合热点新闻与技术面因子，筛选隔日动量强、趋势向上的候选股（均线多头、MACD、量能、5日涨幅等）；触发钻石信号优先推荐。结果自动保存，可在选股记录查看表现。`}
       />
 
       <div className="screen-stack">
@@ -654,6 +676,13 @@ export default function ScreenPage() {
                   <article key={c.symbol} className="candidate-card">
                     <div className="candidate-card-head">
                       <strong>{c.name}</strong>
+                      {c.factorScore && (
+                        <span
+                          className={`factor-outlook factor-outlook--${c.factorScore.outlook}`}
+                        >
+                          {c.factorScore.outlookLabel} · {c.factorScore.total}分
+                        </span>
+                      )}
                       {c.diamond?.strength === 'red' && (
                         <span className="diamond-badge diamond-badge--red">红钻</span>
                       )}
@@ -662,8 +691,17 @@ export default function ScreenPage() {
                       )}
                       <span className="candidate-card-code">{c.symbol}</span>
                     </div>
-                    {(price || change) && (
+                    {(price || change || c.factorScore) && (
                       <div className="candidate-card-stats">
+                        {c.factorScore && (
+                          <span className="muted">
+                            隔日 {c.factorScore.shortTermScore} · 趋势{' '}
+                            {c.factorScore.trendScore}
+                            {c.factorScore.ret5dPct != null
+                              ? ` · 5日 ${c.factorScore.ret5dPct}%`
+                              : ''}
+                          </span>
+                        )}
                         {change && (
                           <span className={change.startsWith('-') ? 'return-down' : 'return-up'}>
                             {change}
@@ -742,6 +780,10 @@ export default function ScreenPage() {
           <div className="result-toolbar">
             <QualityBadge passed={committeeResult.passed} kind="committee" />
           </div>
+        )}
+
+        {displayTradePlans.length > 0 && (
+          <CommitteeTradePanel tradePlans={displayTradePlans} />
         )}
 
         {displayMemo && (
