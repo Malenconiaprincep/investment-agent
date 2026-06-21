@@ -16,7 +16,8 @@ pnpm web:dev
 
 1. 将仓库导入 [Vercel](https://vercel.com/new)
 2. **Root Directory** 设为 `apps/web`（会使用同目录下的 `vercel.json`）
-3. 在 Vercel 项目 **Environment Variables** 中配置（参考 `.env.example`）：
+3. 构建命令默认：`cd ../.. && pnpm --filter @investment-agent/web build`（无需 `setup:iwencai`）
+4. 在 Vercel 项目 **Environment Variables** 中配置（参考 `.env.example`）：
    - `DEEPSEEK_API_KEY`（必填）
    - `LIBSQL_URL` + `LIBSQL_AUTH_TOKEN`（推荐，Turso 持久化数据）
    - `IWENCAI_API_KEY`（选股功能，见下方限制）
