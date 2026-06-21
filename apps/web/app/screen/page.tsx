@@ -23,10 +23,13 @@ type Candidate = {
   dataSource: string;
   factorScore?: {
     total: number;
+    themeScore: number;
     longTermScore: number;
+    trendReturnScore: number;
     stabilityScore: number;
-    outlook: 'long-bullish' | 'long-watch' | 'neutral' | 'weak';
+    outlook: 'mainline-trend' | 'long-watch' | 'neutral' | 'weak';
     outlookLabel: string;
+    matchedTheme: string | null;
     ret20dPct: number | null;
     ret60dPct: number | null;
     ret120dPct: number | null;
@@ -434,7 +437,7 @@ function ScreenPageContent() {
     <main className="page page--screen">
       <PageHeader
         title="智能选股"
-        description={`结合热点与 2 个月及以上趋势因子选股：MA60/MA120 多头、60/120 日涨幅、回撤可控；适合低频持有，非短线隔日。结果自动保存。`}
+        description={`主线趋势选股：从近 ${lookbackDays} 日热点中识别市场主线，筛选契合主线且具备 60/120 日趋势性收益的标的，适合低频持有、少操作。`}
       />
 
       <div className="screen-stack">
@@ -695,12 +698,12 @@ function ScreenPageContent() {
                       <div className="candidate-card-stats">
                         {c.factorScore && (
                           <span className="muted">
-                            趋势 {c.factorScore.longTermScore}
+                            主线 {c.factorScore.themeScore}
+                            {c.factorScore.matchedTheme
+                              ? ` · ${c.factorScore.matchedTheme}`
+                              : ''}
                             {c.factorScore.ret60dPct != null
                               ? ` · 60日 ${c.factorScore.ret60dPct}%`
-                              : ''}
-                            {c.factorScore.ret120dPct != null
-                              ? ` · 120日 ${c.factorScore.ret120dPct}%`
                               : ''}
                           </span>
                         )}

@@ -12,8 +12,11 @@ export function checkSectorScreenQuality(output: {
   const missingSections: string[] = [];
   const missingKeywords: string[] = [];
 
-  if (!output.rotationSummary.includes('## 板块轮动逻辑')) {
-    missingSections.push('板块轮动逻辑');
+  if (
+    !output.rotationSummary.includes('## 板块轮动逻辑') &&
+    !output.rotationSummary.includes('## 市场主线判断')
+  ) {
+    missingSections.push('市场主线判断');
   }
   if (output.sectors.length === 0 && output.candidates.length === 0) {
     missingSections.push('板块或候选股');

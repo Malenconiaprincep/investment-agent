@@ -1,9 +1,12 @@
 export type ScreeningCandidateFactor = {
   total: number;
+  themeScore: number;
   longTermScore: number;
+  trendReturnScore: number;
   stabilityScore: number;
-  outlook: 'long-bullish' | 'long-watch' | 'neutral' | 'weak';
+  outlook: 'mainline-trend' | 'long-watch' | 'neutral' | 'weak';
   outlookLabel: string;
+  matchedTheme: string | null;
   ret20dPct: number | null;
   ret60dPct: number | null;
   ret120dPct: number | null;

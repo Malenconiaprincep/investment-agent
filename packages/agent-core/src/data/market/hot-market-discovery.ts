@@ -132,20 +132,20 @@ function buildStockQueries(input: {
 
   for (const theme of input.themes.slice(0, 3)) {
     queries.push(
-      `${theme}相关A股，60日涨幅靠前，站上MA60${input.excludeHint}`,
+      `${theme}主线龙头，60日涨幅靠前，站上MA60${input.excludeHint}`,
     );
     queries.push(
-      `${theme}概念，MA20上穿MA60，中期趋势向上${input.excludeHint}`,
+      `${theme}概念，板块强度靠前，MA20大于MA60${input.excludeHint}`,
     );
     queries.push(
-      `${theme}相关，120日涨幅靠前，均线多头${input.excludeHint}`,
+      `${theme}相关，120日趋势向上，中期趋势${input.excludeHint}`,
     );
   }
 
   if (queries.length === 0) {
-    queries.push(`A股，60日涨幅前30，MA60上方，均线多头${input.excludeHint}`);
-    queries.push(`A股，120日涨幅靠前，MA20大于MA60${input.excludeHint}`);
-    queries.push(`A股，中期趋势向上，60日均线向上${input.excludeHint}`);
+    queries.push(`A股主线，60日涨幅前30，MA60上方${input.excludeHint}`);
+    queries.push(`A股，板块强度靠前，120日涨幅靠前${input.excludeHint}`);
+    queries.push(`A股，中期趋势向上，均线多头${input.excludeHint}`);
   }
 
   if (input.newsSymbols.length > 0) {
@@ -401,21 +401,21 @@ function buildMarketQueries(input: {
   if (input.themeHint) {
     return {
       sectorQuery: input.isReplay
-        ? `${input.themeHint}概念板块，60日涨幅靠前${input.excludeHint}`
-        : `${input.themeHint}概念板块，60日涨幅靠前，MA60上方${input.excludeHint}`,
+        ? `${input.themeHint}主线板块，60日涨幅靠前${input.excludeHint}`
+        : `${input.themeHint}概念板块，板块强度靠前，60日涨幅靠前${input.excludeHint}`,
       stockQuery: input.isReplay
-        ? `${input.themeHint}相关A股，${screenDateHint}MA60上方${input.excludeHint}`
-        : `${input.themeHint}相关A股，60日涨幅靠前，MA20大于MA60${input.excludeHint}`,
+        ? `${input.themeHint}主线龙头，MA60上方${input.excludeHint}`
+        : `${input.themeHint}主线龙头，60日涨幅靠前，MA20大于MA60${input.excludeHint}`,
     };
   }
 
   return {
     sectorQuery: input.isReplay
-      ? `${screenDateHint}A股概念板块，60日涨幅排名前10${input.excludeHint}`
-      : `A股概念板块，60日涨幅排名前10，均线多头${input.excludeHint}`,
+      ? `${screenDateHint}A股主线板块，60日涨幅排名前10${input.excludeHint}`
+      : `A股主线板块，板块强度靠前，60日涨幅排名前10${input.excludeHint}`,
     stockQuery: input.isReplay
-      ? `${screenDateHint}A股，MA60上方，60日涨幅前20${input.excludeHint}`
-      : `A股，120日涨幅靠前，MA60上方，中期趋势向上${input.excludeHint}`,
+      ? `${screenDateHint}A股主线，MA60上方，60日涨幅前20${input.excludeHint}`
+      : `A股主线龙头，120日趋势向上，MA60上方${input.excludeHint}`,
   };
 }
 
@@ -521,8 +521,8 @@ export async function discoverAutoScreenContext(options?: {
   return {
     ...baseContext,
     query: themeHint
-      ? `长线选股：${themeHint}（2月+趋势）`
-      : '长线选股：热点+中期趋势',
+      ? `主线趋势：${themeHint}`
+      : '主线趋势：热点+趋势性收益',
     mode: 'auto' as const,
   };
 }

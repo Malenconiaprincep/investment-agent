@@ -84,10 +84,13 @@ const candidateDiamondSchema = z
 const factorScoreSchema = z
   .object({
     total: z.number(),
+    themeScore: z.number(),
     longTermScore: z.number(),
+    trendReturnScore: z.number(),
     stabilityScore: z.number(),
-    outlook: z.enum(['long-bullish', 'long-watch', 'neutral', 'weak']),
+    outlook: z.enum(['mainline-trend', 'long-watch', 'neutral', 'weak']),
     outlookLabel: z.string(),
+    matchedTheme: z.string().nullable(),
     factors: z.array(
       z.object({
         id: z.string(),
@@ -393,7 +396,7 @@ const scanDiamondsStep = createStep({
 
 const scoreFactorsStep = createStep({
   id: 'score-factors',
-  description: '因子打分：2月+长线趋势',
+  description: '因子打分：主线契合 + 趋势性收益',
   inputSchema: z.object({
     parsed: parsedQuerySchema,
     sectors: z.array(sectorSchema),
@@ -423,6 +426,8 @@ const scoreFactorsStep = createStep({
       candidates: inputData.candidates as ScreeningCandidateWithDiamond[],
       limit: inputData.parsed.maxCandidates,
       minTotal: 48,
+      hotThemes: inputData.parsed.hotThemes,
+      sectorNames: inputData.sectors.map((s) => s.name),
     });
 
     const enriched = candidates.map((item) => ({
@@ -440,7 +445,7 @@ const scoreFactorsStep = createStep({
     if (enriched.length > 0) {
       const top = enriched[0].factorScore!;
       fetchErrors.push(
-        `factor: ${enriched.length} 只通过长线因子（趋势${top.longTermScore}，${dropped} 只淘汰）`,
+        `factor: ${enriched.length} 只主线趋势筛选（主线${top.themeScore}/趋势收益${top.trendReturnScore}，${dropped} 只淘汰）`,
       );
     } else {
       fetchErrors.push('factor: 因子打分无结果，保留原候选顺序');
@@ -487,8 +492,9 @@ const summarizeStep = createStep({
     const agent = mastra.getAgent('sectorRotationAgent');
     const prompt = `请根据以下问财板块/选股结果撰写板块轮动 Markdown 摘要。
 
-选股模式：${inputData.parsed.mode === 'auto' ? '热点长线选股（2月+趋势）' : '用户指定主题'}
+选股模式：${inputData.parsed.mode === 'auto' ? '主线趋势选股（热点主线+趋势性收益）' : '用户指定主题'}
 主题说明：${inputData.parsed.query}
+热点主线：${inputData.parsed.hotThemes.join('、') || '—'}
 ${inputData.parsed.asOfDate ? `历史回放日：${inputData.parsed.asOfDate}` : ''}
 
 === 热点新闻（自动扫描） ===
@@ -497,7 +503,7 @@ ${JSON.stringify(inputData.parsed.hotNews.slice(0, 8), null, 2)}
 === 板块 ===
 ${JSON.stringify(inputData.sectors, null, 2)}
 
-=== 候选股（含长线因子：60/120日趋势） ===
+=== 候选股（主线因子 + 60/120 日趋势性收益） ===
 ${JSON.stringify(inputData.candidates, null, 2)}
 
 === 钻石信号推荐 ===
@@ -519,11 +525,11 @@ ${JSON.stringify(inputData.fetchErrors, null, 2)}
     }
 
     if (!rotationSummary.trim()) {
-      rotationSummary = `## 板块轮动逻辑
+      rotationSummary = `## 市场主线判断
 
 问财已返回板块/个股数据，但摘要生成未产出内容。请查看下方结构化候选池与采数异常说明。
 
-## 热门板块解读
+## 主线板块解读
 
 ${JSON.stringify(inputData.sectors, null, 2)}
 

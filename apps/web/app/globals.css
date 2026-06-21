@@ -1302,6 +1302,11 @@ a:hover {
   border-radius: 999px;
 }
 
+.factor-outlook--mainline-trend {
+  color: #e8b84a;
+  background: rgba(232, 184, 74, 0.16);
+}
+
 .factor-outlook--long-bullish {
   color: #5b9cf5;
   background: rgba(91, 156, 245, 0.14);
