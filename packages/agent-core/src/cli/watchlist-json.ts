@@ -1,7 +1,10 @@
 import 'dotenv/config';
 
-import { getDailyQuote } from '../data/market/services.js';
-import { detectDiamondSignal } from '../data/market/diamond-signal.js';
+import { getDailyQuote, getStockBasic } from '../data/market/services.js';
+import {
+  detectDiamondSignal,
+  scanDiamondSignalHistory,
+} from '../data/market/diamond-signal.js';
 import { analyzeMomentum } from '../data/paper/momentum.js';
 import {
   addWatchlistItem,
@@ -68,16 +71,18 @@ async function main() {
       process.exit(1);
     }
     const kline = await getDailyQuote(item.symbol, 120);
+    const bars = kline.quotes.filter((q) => q.close != null);
     const snapshots = await listSnapshotsForSymbol(item.symbol, 30);
     let liveSignal = null;
     try {
-      liveSignal = detectDiamondSignal(item.symbol, item.name, kline.quotes);
+      liveSignal = detectDiamondSignal(item.symbol, item.name, bars);
     } catch {
       liveSignal = null;
     }
-    const momentum = analyzeMomentum(item.symbol, item.name, kline.quotes, liveSignal);
+    const diamondHistory = scanDiamondSignalHistory(item.symbol, item.name, bars, 120);
+    const momentum = analyzeMomentum(item.symbol, item.name, bars, liveSignal);
     process.stdout.write(
-      JSON.stringify({ item, kline, snapshots, diamondSignal: liveSignal, momentum }),
+      JSON.stringify({ item, kline, snapshots, diamondSignal: liveSignal, diamondHistory, momentum }),
     );
     return;
   }
@@ -96,6 +101,33 @@ async function main() {
       diamondSignal = null;
     }
     process.stdout.write(JSON.stringify({ ...kline, diamondSignal }));
+    return;
+  }
+
+  if (command === 'stock-chart' && process.argv[3]) {
+    const symbol = process.argv[3];
+    const days = Number(process.argv[4] ?? 120);
+    const basic = await getStockBasic(symbol);
+    const kline = await getDailyQuote(symbol, days);
+    const bars = kline.quotes.filter((q) => q.close != null);
+    const diamondHistory = scanDiamondSignalHistory(basic.symbol, basic.name, bars, days);
+    let latestDiamond = null;
+    try {
+      latestDiamond = detectDiamondSignal(basic.symbol, basic.name, bars);
+    } catch {
+      latestDiamond = null;
+    }
+    const momentum = analyzeMomentum(basic.symbol, basic.name, bars, latestDiamond);
+    process.stdout.write(
+      JSON.stringify({
+        symbol: basic.symbol,
+        name: basic.name,
+        kline,
+        diamondHistory,
+        latestDiamond,
+        momentum,
+      }),
+    );
     return;
   }
 
@@ -163,7 +195,7 @@ async function main() {
   }
 
   process.stderr.write(
-    'Usage: watchlist-json.ts list|add|remove|get|kline|snapshot-daily|diamond-scan|diamond-list|weekly-generate|weekly-list|weekly-get|today-summary',
+    'Usage: watchlist-json.ts list|add|remove|get|kline|stock-chart|snapshot-daily|diamond-scan|diamond-list|weekly-generate|weekly-list|weekly-get|today-summary',
   );
   process.exit(1);
 }

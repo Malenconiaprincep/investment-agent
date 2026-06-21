@@ -1082,6 +1082,25 @@ a:hover {
   border-radius: var(--radius-lg);
 }
 
+.chart-empty--compact {
+  padding: 1.25rem 0.75rem;
+  font-size: 0.8125rem;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stock-kline-chart {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.stock-kline-chart .kline-chart {
+  min-height: 0;
+  border-radius: var(--radius-md);
+}
+
 .paper-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));

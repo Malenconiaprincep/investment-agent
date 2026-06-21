@@ -13,15 +13,16 @@ export function sma(values: number[], period: number): number | null {
   return Number((slice.reduce((sum, v) => sum + v, 0) / period).toFixed(4));
 }
 
+/** values 按时间从旧到新 */
 export function emaSeries(values: number[], period: number): number[] {
   if (values.length === 0) return [];
   const k = 2 / (period + 1);
   const result: number[] = [];
-  let prev = values[values.length - 1];
-  for (let i = values.length - 1; i >= 0; i -= 1) {
-    const value = values[i];
-    prev = i === values.length - 1 ? value : value * k + prev * (1 - k);
-    result.unshift(prev);
+  let prev = values[0];
+  result.push(prev);
+  for (let i = 1; i < values.length; i += 1) {
+    prev = values[i] * k + prev * (1 - k);
+    result.push(prev);
   }
   return result;
 }

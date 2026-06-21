@@ -45,6 +45,9 @@ const ACTION_CLASS: Record<CommitteeTradePlanView['action'], string> = {
 
 function TradePlanCard({ plan }: { plan: CommitteeTradePlanView }) {
   const [bars, setBars] = useState<KlineBar[]>([]);
+  const [diamonds, setDiamonds] = useState<Array<{ tradeDate: string; strength: 'red' | 'blue' }>>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,10 +58,10 @@ function TradePlanCard({ plan }: { plan: CommitteeTradePlanView }) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/kline/${plan.symbol}?days=120`);
+        const res = await fetch(`/api/stock/${plan.symbol}/chart?days=120`);
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error ?? 'K 线加载失败');
-        const quotes = (payload.quotes ?? []) as Array<{
+        const quotes = (payload.kline?.quotes ?? []) as Array<{
           tradeDate: string;
           open: number | null;
           high: number | null;
@@ -80,7 +83,19 @@ function TradePlanCard({ plan }: { plan: CommitteeTradePlanView }) {
             low: q.low!,
             close: q.close!,
           }));
-        if (!cancelled) setBars(next);
+        const history = (payload.diamondHistory ?? []) as Array<{
+          tradeDate: string;
+          strength: 'red' | 'blue';
+        }>;
+        if (!cancelled) {
+          setBars(next);
+          setDiamonds(
+            history.map((signal) => ({
+              tradeDate: signal.tradeDate,
+              strength: signal.strength,
+            })),
+          );
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'K 线加载失败');
@@ -101,17 +116,6 @@ function TradePlanCard({ plan }: { plan: CommitteeTradePlanView }) {
     kind: signal.kind,
     label: signal.kind === 'buy' ? '买' : '卖',
   }));
-
-  const diamonds =
-    plan.diamondStrength != null
-      ? plan.signals
-          .filter((s) => s.kind === 'buy' && s.strength)
-          .slice(0, 1)
-          .map((s) => ({
-            tradeDate: s.tradeDate,
-            strength: s.strength!,
-          }))
-      : [];
 
   const priceLines: PriceLineSpec[] = [
     {

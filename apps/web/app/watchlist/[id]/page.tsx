@@ -6,6 +6,14 @@ import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
 import { MomentumChecklist } from '@/components/MomentumChecklist';
 
+type DiamondSignal = {
+  tradeDate: string;
+  close: number;
+  strength: 'red' | 'blue';
+  score: number;
+  reasons: string[];
+};
+
 type DetailPayload = {
   item: {
     id: string;
@@ -15,13 +23,17 @@ type DetailPayload = {
     entryPrice: number | null;
     entryDate: string | null;
   };
-  kline: { quotes: Array<{ tradeDate: string; open: number | null; high: number | null; low: number | null; close: number | null }> };
-  diamondSignal: {
-    strength: 'red' | 'blue';
-    score: number;
-    reasons: string[];
-    tradeDate: string;
-  } | null;
+  kline: {
+    quotes: Array<{
+      tradeDate: string;
+      open: number | null;
+      high: number | null;
+      low: number | null;
+      close: number | null;
+    }>;
+  };
+  diamondSignal: DiamondSignal | null;
+  diamondHistory?: DiamondSignal[];
   momentum: {
     checklist: Array<{ id: string; label: string; passed: boolean; detail?: string }>;
     checklistScore: number;
@@ -37,6 +49,11 @@ type DetailPayload = {
     diamondStrength: 'red' | 'blue' | null;
   }>;
 };
+
+function formatDate(tradeDate: string): string {
+  if (tradeDate.includes('-')) return tradeDate;
+  return `${tradeDate.slice(0, 4)}-${tradeDate.slice(4, 6)}-${tradeDate.slice(6, 8)}`;
+}
 
 export default function WatchlistDetailPage() {
   const params = useParams<{ id: string }>();
@@ -97,9 +114,17 @@ export default function WatchlistDetailPage() {
         close: q.close!,
       })) ?? [];
 
-  const diamonds = data?.diamondSignal
-    ? [{ tradeDate: data.diamondSignal.tradeDate, strength: data.diamondSignal.strength }]
-    : [];
+  const diamondHistory =
+    data?.diamondHistory ??
+    (data?.diamondSignal ? [data.diamondSignal] : []);
+
+  const diamonds = diamondHistory.map((signal) => ({
+    tradeDate: signal.tradeDate,
+    strength: signal.strength,
+  }));
+
+  const latestRed = diamondHistory.find((s) => s.strength === 'red');
+  const highlightSignal = latestRed ?? data?.diamondSignal ?? null;
 
   return (
     <main className="page page--workspace">
@@ -122,18 +147,28 @@ export default function WatchlistDetailPage() {
             </p>
           </header>
 
+          <div className="signal-legend" style={{ marginBottom: '1rem' }}>
+            <span className="diamond-badge diamond-badge--red">红钻 · 强买点</span>
+            <span className="diamond-badge diamond-badge--blue">蓝钻 · 温和关注</span>
+            <span className="muted">K 线下方标记为近 120 日历史钻石信号</span>
+          </div>
+
           <div className="page-workspace page-workspace--chart">
             <div className="page-pane page-pane--chart-main">
-              {data.diamondSignal && (
+              {highlightSignal && (
                 <div
-                  className={`diamond-card diamond-card--${data.diamondSignal.strength}`}
+                  className={`diamond-card diamond-card--${highlightSignal.strength}`}
                 >
                   <strong>
-                    {data.diamondSignal.strength === 'red' ? '🔴 红钻信号' : '🔵 蓝钻信号'}
+                    {highlightSignal.strength === 'red' ? '🔴 红钻信号' : '🔵 蓝钻信号'}
                   </strong>
-                  <span className="muted"> 评分 {data.diamondSignal.score}</span>
+                  <span className="muted">
+                    {' '}
+                    {formatDate(highlightSignal.tradeDate)} · 收盘{' '}
+                    {highlightSignal.close.toFixed(2)} · 评分 {highlightSignal.score}
+                  </span>
                   <ul className="sector-list">
-                    {data.diamondSignal.reasons.map((r) => (
+                    {highlightSignal.reasons.map((r) => (
                       <li key={r}>{r}</li>
                     ))}
                   </ul>
@@ -142,8 +177,34 @@ export default function WatchlistDetailPage() {
 
               <section className="section pane-card pane-chart-body">
                 <h2 className="section-title">日 K 走势</h2>
-                <p className="muted">前复权日 K，默认展示近 120 个交易日。</p>
-                <KlineChart bars={bars} diamonds={diamonds} fill />
+                <p className="muted">前复权日 K，展示近 120 个交易日。</p>
+                <div className="committee-trade-chart">
+                  <KlineChart
+                    bars={bars}
+                    diamonds={diamonds}
+                    priceLines={[
+                      ...(latestRed
+                        ? [
+                            {
+                              price: latestRed.close,
+                              color: '#5b9cf5',
+                              title: '最近红钻',
+                            },
+                          ]
+                        : []),
+                      ...(data.momentum?.stopLossPrice != null
+                        ? [
+                            {
+                              price: data.momentum.stopLossPrice,
+                              color: '#e07070',
+                              title: '止损参考',
+                            },
+                          ]
+                        : []),
+                    ]}
+                    height={420}
+                  />
+                </div>
               </section>
 
               {data.momentum && (
@@ -157,6 +218,25 @@ export default function WatchlistDetailPage() {
                 />
               )}
 
+              {diamondHistory.length > 0 && (
+                <section className="section pane-card">
+                  <h2 className="section-title">历史钻石信号</h2>
+                  <ul className="sector-list">
+                    {diamondHistory.map((signal) => (
+                      <li key={`${signal.tradeDate}-${signal.strength}`}>
+                        <span
+                          className={`diamond-badge diamond-badge--${signal.strength}`}
+                        >
+                          {signal.strength === 'red' ? '红钻' : '蓝钻'}
+                        </span>{' '}
+                        {formatDate(signal.tradeDate)} · 收盘 {signal.close.toFixed(2)} · 评分{' '}
+                        {signal.score}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               <div className="page-toolbar">
                 <button
                   type="button"
@@ -168,6 +248,12 @@ export default function WatchlistDetailPage() {
                 </button>
                 <Link href={`/?symbol=${data.item.symbol}`} className="button button-secondary">
                   重新生成研报
+                </Link>
+                <Link
+                  href={`/demo/stock/${data.item.symbol}`}
+                  className="button button-secondary"
+                >
+                  全屏 K 线
                 </Link>
               </div>
             </div>

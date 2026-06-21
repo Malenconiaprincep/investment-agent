@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
+import { StockKlineChart } from '@/components/charts/StockKlineChart';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -631,6 +632,7 @@ function ScreenPageContent() {
                       ))}
                     </ul>
                   )}
+                  <StockKlineChart symbol={c.symbol} height={200} />
                   <div className="candidate-card-actions">
                     <Link href={`/?symbol=${c.symbol}`} className="button button-secondary">
                       生成研报
@@ -671,6 +673,9 @@ function ScreenPageContent() {
                 </div>
               )}
             </div>
+            <p className="muted section-toolbar-hint">
+              每张卡片含近 120 日 K 线与红/蓝钻历史标记（滚动进入视口后加载）。
+            </p>
 
             <div className="candidate-grid">
               {candidates.map((c) => {
@@ -716,6 +721,7 @@ function ScreenPageContent() {
                       </div>
                     )}
                     <p className="candidate-card-thesis">{summary}</p>
+                    <StockKlineChart symbol={c.symbol} height={200} />
                     <div className="candidate-card-actions">
                       <Link href={`/?symbol=${c.symbol}`} className="button button-secondary">
                         生成研报

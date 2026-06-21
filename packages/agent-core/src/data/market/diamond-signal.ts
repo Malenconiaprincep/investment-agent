@@ -176,3 +176,32 @@ export async function scanDiamondSignalAtDate(
   }
   return detectDiamondSignalAtDate(symbol, name, bars, asOfDate);
 }
+
+/** 扫描近 lookback 根 K 线上的历史钻石信号（最新在前） */
+export function scanDiamondSignalHistory(
+  symbol: string,
+  name: string,
+  bars: OhlcvBar[],
+  lookback = 120,
+): DiamondSignalResult[] {
+  const found: DiamondSignalResult[] = [];
+  const limit = Math.min(bars.length, lookback);
+
+  for (let i = 0; i < limit; i++) {
+    if (bars.length - i < 30) break;
+    const slice = bars.slice(i);
+    const signal = detectDiamondSignal(symbol, name, slice);
+    const bar = slice[0];
+    if (!signal || !bar?.tradeDate || bar.close == null) continue;
+    if (signal.tradeDate.replace(/-/g, '') !== bar.tradeDate.replace(/-/g, '')) {
+      continue;
+    }
+
+    const prev = found[found.length - 1];
+    if (prev && prev.tradeDate === bar.tradeDate) continue;
+
+    found.push(signal);
+  }
+
+  return found;
+}

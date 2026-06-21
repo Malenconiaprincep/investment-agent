@@ -116,7 +116,7 @@ export function KlineChart({
     return () => observer.disconnect();
   }, [fill]);
 
-  const chartHeight = fill ? measuredHeight : height;
+  const chartHeight = fill ? Math.max(measuredHeight, height) : height;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -145,7 +145,11 @@ export function KlineChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
-    markersRef.current = createSeriesMarkers(series);
+    try {
+      markersRef.current = createSeriesMarkers(series);
+    } catch {
+      markersRef.current = null;
+    }
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -210,6 +214,7 @@ export function KlineChart({
     <div
       ref={containerRef}
       className={`kline-chart${fill ? ' kline-chart--fill' : ''}`}
+      style={fill ? { minHeight: height } : { height: chartHeight }}
     />
   );
 }
