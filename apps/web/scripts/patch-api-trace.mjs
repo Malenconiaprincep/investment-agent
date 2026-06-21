@@ -4,11 +4,14 @@
  * 以及 agent-core 的完整 node_modules（含 @libsql/client 等 symlink 包及其 pnpm 同级依赖）。
  */
 import {
+  cpSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -70,6 +73,33 @@ function findPnpmVirtualNodeModules(realPkgPath) {
   return null;
 }
 
+/** 将 pnpm store 中的包复制到 agent-core/node_modules，Vercel 打包时 lstat 不认 symlink */
+function materializePackage(deployPath, sourcePath) {
+  if (!sourcePath || sourcePath === deployPath) return;
+
+  let realSource;
+  try {
+    realSource = realpathSync(sourcePath);
+  } catch {
+    return;
+  }
+
+  let needsCopy = !existsSync(deployPath);
+  if (!needsCopy) {
+    try {
+      needsCopy = lstatSync(deployPath).isSymbolicLink();
+    } catch {
+      needsCopy = true;
+    }
+  }
+
+  if (!needsCopy) return;
+
+  mkdirSync(dirname(deployPath), { recursive: true });
+  rmSync(deployPath, { recursive: true, force: true });
+  cpSync(realSource, deployPath, { recursive: true });
+}
+
 function collectLinkedPackageClosureWithSource(
   deployLinkPath,
   seenDeployPaths,
@@ -79,7 +109,13 @@ function collectLinkedPackageClosureWithSource(
   if (seenDeployPaths.has(deployLinkPath)) return;
   seenDeployPaths.add(deployLinkPath);
 
-  for (const filePath of mapPackageFiles(deployLinkPath, sourcePath)) {
+  if (!existsSync(deployLinkPath) || sourcePath !== deployLinkPath) {
+    materializePackage(deployLinkPath, sourcePath);
+  }
+
+  if (!existsSync(deployLinkPath)) return;
+
+  for (const filePath of mapPackageFiles(deployLinkPath, deployLinkPath)) {
     files.push(filePath);
   }
 
@@ -193,26 +229,43 @@ function patchNftFiles() {
     return;
   }
 
+  let added = 0;
+  let missing = 0;
+
   for (const nftPath of nftFiles) {
     const routeJs = nftPath.replace(/\.nft\.json$/, '');
     const nft = JSON.parse(readFileSync(nftPath, 'utf8'));
     const existing = new Set(nft.files ?? []);
 
     for (const absPath of runtimeFiles) {
+      if (!existsSync(absPath)) {
+        missing += 1;
+        continue;
+      }
       const relPath = relative(dirname(routeJs), absPath);
       if (!existing.has(relPath)) {
         nft.files.push(relPath);
         existing.add(relPath);
+        added += 1;
       }
     }
 
     writeFileSync(nftPath, JSON.stringify(nft));
   }
 
-  const libsqlFiles = runtimeFiles.filter((file) => file.includes('@libsql'));
-  console.log(
-    `[patch-api-trace] 已为 ${nftFiles.length} 个 API route 补充 ${runtimeFiles.length} 个运行时文件（@libsql: ${libsqlFiles.length}）`,
+  const libsqlFiles = runtimeFiles.filter(
+    (file) => file.includes('@libsql') && existsSync(file),
   );
+  console.log(
+    `[patch-api-trace] 已为 ${nftFiles.length} 个 API route 补充 trace（新增 ${added} 条，跳过缺失 ${missing}，@libsql 文件 ${libsqlFiles.length}）`,
+  );
+
+  if (missing > 0) {
+    const sample = runtimeFiles.find((file) => !existsSync(file));
+    throw new Error(
+      `[patch-api-trace] ${missing} 个运行时文件在磁盘上不存在，Vercel 打包会失败。示例: ${sample}`,
+    );
+  }
 }
 
 patchNftFiles();

@@ -5,8 +5,9 @@
   "description": "Investment research agent web UI",
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build; node scripts/patch-api-trace.mjs",
-    "start": "next start --port 3000"
+    "build": "next build && node scripts/patch-api-trace.mjs",
+    "start": "next start --port 3000",
+    "simulate:vercel-api": "node scripts/simulate-vercel-api.mjs"
   },
   "dependencies": {
     "@esbuild/linux-x64": "0.28.1",
