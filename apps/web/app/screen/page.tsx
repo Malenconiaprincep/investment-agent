@@ -8,6 +8,10 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { QualityBadge } from '@/components/ui/QualityBadge';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { readSSEStream } from '@/lib/sse';
+import {
+  extractMarkdownDisclaimer,
+  splitMarkdownSections,
+} from '@/lib/markdown-sections';
 
 type Sector = { name: string; reason: string; dataSource: string };
 type Candidate = {
@@ -17,6 +21,38 @@ type Candidate = {
   dataSource: string;
 };
 type HotNewsItem = { title: string; datetime: string; url: string | null };
+
+function formatCandidateThesis(thesis: string) {
+  const parts = thesis.split(/[；;]/).map((p) => p.trim()).filter(Boolean);
+  let price: string | undefined;
+  let change: string | undefined;
+
+  for (const part of parts) {
+    if (part.includes('最新价') || part.includes('现价')) {
+      price = part.split(/[:：]/)[1]?.trim();
+    }
+    if (part.includes('涨跌幅') || part.includes('涨幅')) {
+      change = part.split(/[:：]/)[1]?.trim();
+    }
+  }
+
+  const summary = parts
+    .filter(
+      (p) =>
+        !p.includes('股票代码') &&
+        !p.includes('stock_code') &&
+        !p.includes('最新价') &&
+        !p.includes('涨跌幅'),
+    )
+    .slice(0, 2)
+    .join(' · ');
+
+  return {
+    price,
+    change,
+    summary: summary || thesis.slice(0, 72),
+  };
+}
 
 type ScreenResult = {
   query: string;
@@ -315,6 +351,8 @@ export default function ScreenPage() {
   }
 
   const displaySummary = screenResult?.rotationSummary ?? streamingSummary;
+  const summarySections = splitMarkdownSections(displaySummary);
+  const summaryDisclaimer = extractMarkdownDisclaimer(displaySummary);
   const displayMemo = committeeResult?.memo ?? streamingMemo;
   const displayHotNews = screenResult?.hotNews ?? hotNews;
   const displayQuery = screenResult?.query ?? autoQuery;
@@ -323,162 +361,215 @@ export default function ScreenPage() {
   const isCommitteeActive = committeeLoading && !committeeResult;
 
   return (
-    <main className="page">
+    <main className="page page--screen">
       <PageHeader
         title="智能选股"
         description="根据今日热点新闻与强势板块，自动为你筛选值得关注的候选股。"
       />
 
-      <div className="action-panel">
-        <div className="action-panel-row action-panel-row--actions">
-          <button
-            className="button button-lg"
-            type="button"
-            disabled={loading || committeeLoading}
-            onClick={() => handleScreenSubmit()}
-          >
-            {loading ? '正在扫描热点…' : '开始智能选股'}
-          </button>
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={loading || committeeLoading}
-            onClick={() => setShowAdvanced((v) => !v)}
-          >
-            {showAdvanced ? '收起高级' : '指定主题'}
-          </button>
-          {screenResult?.sessionId && (
-            <Link
-              href={`/screen/history/${screenResult.sessionId}`}
-              className="button button-secondary"
+      <div className="screen-stack">
+        <div className="action-panel screen-toolbar">
+          <div className="action-panel-row action-panel-row--actions">
+            <button
+              className="button button-lg"
+              type="button"
+              disabled={loading || committeeLoading}
+              onClick={() => handleScreenSubmit()}
             >
-              查看本次记录
-            </Link>
-          )}
-          <Link href="/screen/history" className="button button-secondary">
-            选股记录
-          </Link>
-        </div>
-
-        {showAdvanced && (
-          <form className="advanced-panel" onSubmit={handleScreenSubmit}>
-            <div className="action-panel-row action-panel-row--primary">
-              <input
-                className="input input-wide"
-                value={queryOverride}
-                onChange={(e) => setQueryOverride(e.target.value)}
-                placeholder="可选约束，如「高股息央企」"
-                disabled={loading || committeeLoading}
-                aria-label="选股主题约束"
-              />
-              <button
-                className="button"
-                type="submit"
-                disabled={
-                  loading || committeeLoading || !queryOverride.trim()
-                }
+              {loading ? '正在扫描热点…' : '开始智能选股'}
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={loading || committeeLoading}
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced ? '收起高级' : '指定主题'}
+            </button>
+            {screenResult?.sessionId && (
+              <Link
+                href={`/screen/history/${screenResult.sessionId}`}
+                className="button button-secondary"
               >
-                按主题选股
-              </button>
-            </div>
-          </form>
-        )}
+                查看本次记录
+              </Link>
+            )}
+            <Link href="/screen/history" className="button button-secondary">
+              选股记录
+            </Link>
+          </div>
 
-        {isScreenActive && (
-          <WorkflowStatus
-            label="正在为你选股"
-            steps={SCREEN_STEPS}
-            currentStep={currentStep}
-          />
-        )}
+          {showAdvanced && (
+            <form className="advanced-panel" onSubmit={handleScreenSubmit}>
+              <div className="action-panel-row action-panel-row--primary">
+                <input
+                  className="input input-wide"
+                  value={queryOverride}
+                  onChange={(e) => setQueryOverride(e.target.value)}
+                  placeholder="可选约束，如「高股息央企」"
+                  disabled={loading || committeeLoading}
+                  aria-label="选股主题约束"
+                />
+                <button
+                  className="button"
+                  type="submit"
+                  disabled={
+                    loading || committeeLoading || !queryOverride.trim()
+                  }
+                >
+                  按主题选股
+                </button>
+              </div>
+            </form>
+          )}
 
-        {isCommitteeActive && (
-          <WorkflowStatus
-            label="正在深度分析"
-            steps={COMMITTEE_STEPS}
-            currentStep={committeeStep}
-          />
-        )}
-      </div>
+          {isScreenActive && (
+            <WorkflowStatus
+              label="正在为你选股"
+              steps={SCREEN_STEPS}
+              currentStep={currentStep}
+            />
+          )}
 
-      {error && <div className="error">{error}</div>}
-
-      {displayQuery && (
-        <div className="result-toolbar">
-          <span className="muted">选股依据</span>
-          <strong>{displayQuery}</strong>
-        </div>
-      )}
-
-      {screenResult && (
-        <div className="result-toolbar">
-          <QualityBadge passed={screenResult.passed} kind="screen" />
-          {!screenResult.passed && screenResult.missingSections.length > 0 && (
-            <span className="muted">
-              待补充：{screenResult.missingSections.join('、')}
-            </span>
+          {isCommitteeActive && (
+            <WorkflowStatus
+              label="正在深度分析"
+              steps={COMMITTEE_STEPS}
+              currentStep={committeeStep}
+            />
           )}
         </div>
-      )}
 
-      {displayHotNews.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">今日热点</h2>
-          <ul className="sector-list">
-            {displayHotNews.slice(0, 8).map((item) => (
-              <li key={item.title}>
-                {item.url ? (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {item.title}
-                  </a>
-                ) : (
-                  item.title
+        {error && <div className="error">{error}</div>}
+
+        {(displayQuery || screenResult) && (
+          <div className="screen-meta">
+            {displayQuery && (
+              <div className="result-toolbar">
+                <span className="muted">选股依据</span>
+                <strong>{displayQuery}</strong>
+              </div>
+            )}
+            {screenResult && (
+              <div className="result-toolbar">
+                <QualityBadge passed={screenResult.passed} kind="screen" />
+                {!screenResult.passed && screenResult.missingSections.length > 0 && (
+                  <span className="muted">
+                    待补充：{screenResult.missingSections.join('、')}
+                  </span>
                 )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+              </div>
+            )}
+          </div>
+        )}
 
-      {sectors.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">热门板块</h2>
-          <ul className="sector-list">
-            {sectors.map((s) => (
-              <li key={s.name}>
-                <strong>{s.name}</strong>
-                <span className="muted"> — {s.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        {(displayHotNews.length > 0 || sectors.length > 0) && (
+          <div className="insight-grid insight-grid--pair">
+            {displayHotNews.length > 0 && (
+              <section className="pane-card insight-panel">
+                <h2 className="section-title">今日热点</h2>
+                <ul className="sector-list sector-list--compact">
+                  {displayHotNews.slice(0, 6).map((item) => (
+                    <li key={item.title}>
+                      {item.url ? (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        item.title
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
-      {candidates.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">候选池</h2>
-          <table className="candidate-table">
-            <thead>
-              <tr>
-                <th>代码</th>
-                <th>名称</th>
-                <th>入选理由</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {candidates.map((c) => (
-                <tr key={c.symbol}>
-                  <td>{c.symbol}</td>
-                  <td>{c.name}</td>
-                  <td>{c.thesis.slice(0, 80)}</td>
-                  <td>
-                    <div className="candidate-chips">
-                      <Link href={`/?symbol=${c.symbol}`} className="saved-link">
+            {sectors.length > 0 && (
+              <section className="pane-card insight-panel">
+                <h2 className="section-title">热门板块</h2>
+                <ul className="sector-list sector-list--compact">
+                  {sectors.map((s) => (
+                    <li key={s.name}>
+                      <strong>{s.name}</strong>
+                      <span className="muted"> — {s.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        )}
+
+        {summarySections.length > 0 && (
+          <div className="insight-blocks-wrap">
+            <h2 className="insight-blocks-heading">市场解读</h2>
+            <div className="insight-blocks">
+              {summarySections.map((section) => (
+                <section key={section.id} className="pane-card insight-block">
+                  <h3 className="insight-block-title">{section.title}</h3>
+                  {section.content ? (
+                    <article className="report">
+                      <ReportMarkdown source={section.content} />
+                    </article>
+                  ) : null}
+                </section>
+              ))}
+            </div>
+            {summaryDisclaimer && (
+              <p className="muted insight-disclaimer">{summaryDisclaimer}</p>
+            )}
+          </div>
+        )}
+
+        {candidates.length > 0 ? (
+          <section className="candidates-section">
+            <div className="section-toolbar">
+              <h2 className="section-title">候选池 · {candidates.length} 只</h2>
+              {screenResult && !committeeResult && !committeeLoading && (
+                <div className="section-toolbar-actions">
+                  <button type="button" className="button" onClick={handleCommittee}>
+                    深度分析
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    disabled={batchLoading}
+                    onClick={handleBatchResearch}
+                  >
+                    {batchLoading
+                      ? '正在生成…'
+                      : `批量研报（${Math.min(candidates.length, 5)}）`}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="candidate-grid">
+              {candidates.map((c) => {
+                const { price, change, summary } = formatCandidateThesis(c.thesis);
+                return (
+                  <article key={c.symbol} className="candidate-card">
+                    <div className="candidate-card-head">
+                      <strong>{c.name}</strong>
+                      <span className="candidate-card-code">{c.symbol}</span>
+                    </div>
+                    {(price || change) && (
+                      <div className="candidate-card-stats">
+                        {change && (
+                          <span className={change.startsWith('-') ? 'return-down' : 'return-up'}>
+                            {change}
+                          </span>
+                        )}
+                        {price && <span className="muted">¥{price}</span>}
+                      </div>
+                    )}
+                    <p className="candidate-card-thesis">{summary}</p>
+                    <div className="candidate-card-actions">
+                      <Link href={`/?symbol=${c.symbol}`} className="button button-secondary">
                         生成研报
                       </Link>
                       <AddToWatchlistButton
@@ -489,93 +580,58 @@ export default function ScreenPage() {
                         sourceId={screenResult?.sessionId}
                       />
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {screenResult && !committeeResult && !committeeLoading && (
-            <div className="result-actions">
-              <button
-                type="button"
-                className="button"
-                onClick={handleCommittee}
-              >
-                深度分析
-              </button>
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={batchLoading}
-                onClick={handleBatchResearch}
-              >
-                {batchLoading
-                  ? '正在生成研报…'
-                  : `一键生成研报（前 ${Math.min(candidates.length, 5)} 只）`}
-              </button>
-              <span className="muted">
-                深度分析将聚焦前 {Math.min(candidates.length, 3)} 只候选股
-              </span>
+                  </article>
+                );
+              })}
             </div>
-          )}
 
-          {batchResults.length > 0 && (
-            <ul className="sector-list batch-results">
-              {batchResults.map((item) => (
-                <li key={item.symbol}>
-                  <strong>
-                    {item.name} ({item.symbol})
-                  </strong>
-                  <QualityBadge passed={item.passed} kind="report" />
-                  {item.error && (
-                    <span className="muted"> — {item.error}</span>
-                  )}
-                  {item.reportId && (
-                    <>
-                      {' '}
-                      <Link
-                        href={`/history/${item.reportId}`}
-                        className="saved-link"
-                      >
-                        查看研报
-                      </Link>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+            {batchResults.length > 0 && (
+              <ul className="sector-list batch-results pane-card">
+                {batchResults.map((item) => (
+                  <li key={item.symbol}>
+                    <strong>
+                      {item.name} ({item.symbol})
+                    </strong>
+                    <QualityBadge passed={item.passed} kind="report" />
+                    {item.error && <span className="muted"> — {item.error}</span>}
+                    {item.reportId && (
+                      <>
+                        {' '}
+                        <Link href={`/history/${item.reportId}`} className="saved-link">
+                          查看研报
+                        </Link>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : (
+          !loading && (
+            <div className="empty-state">
+              点击「开始智能选股」，候选股将以卡片形式展示在下方
+            </div>
+          )
+        )}
 
-      {displaySummary && (
-        <section className="section">
-          <h2 className="section-title">市场解读</h2>
-          <article className="report">
-            <ReportMarkdown source={displaySummary} />
-          </article>
-        </section>
-      )}
+        {committeeResult && (
+          <div className="result-toolbar">
+            <QualityBadge passed={committeeResult.passed} kind="committee" />
+          </div>
+        )}
 
-      {committeeResult && (
-        <div className="result-toolbar">
-          <QualityBadge passed={committeeResult.passed} kind="committee" />
-        </div>
-      )}
+        {displayMemo && (
+          <section className="pane-card memo-panel">
+            <h2 className="section-title">深度分析</h2>
+            <article className="report">
+              <ReportMarkdown source={displayMemo} />
+            </article>
+          </section>
+        )}
 
-      {displayMemo && (
-        <section className="section">
-          <h2 className="section-title">深度分析</h2>
-          <article className="report">
-            <ReportMarkdown source={displayMemo} />
-          </article>
-        </section>
-      )}
-
-      <p className="disclaimer">
-        仅供学习研究，不构成投资建议。数据来自公开行情与新闻接口。
-      </p>
+        <p className="disclaimer">仅供学习研究，不构成投资建议。数据来自公开行情与新闻接口。</p>
+      </div>
     </main>
   );
 }

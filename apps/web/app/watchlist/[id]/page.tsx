@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
-import { ReportMarkdown } from '@/components/ReportMarkdown';
 
 type DetailPayload = {
   item: {
@@ -95,7 +94,7 @@ export default function WatchlistDetailPage() {
     : [];
 
   return (
-    <main className="page">
+    <main className="page page--workspace">
       <p className="breadcrumb">
         <Link href="/watchlist">← 我的自选</Link>
       </p>
@@ -111,82 +110,89 @@ export default function WatchlistDetailPage() {
             </h1>
             <p className="page-description">
               加入价 {data.item.entryPrice?.toFixed(2) ?? '—'} · {data.item.entryDate ?? '—'}
+              {data.item.reason ? ` · ${data.item.reason}` : ''}
             </p>
           </header>
 
-          {data.diamondSignal && (
-            <div
-              className={`diamond-card diamond-card--${data.diamondSignal.strength}`}
-            >
-              <strong>
-                {data.diamondSignal.strength === 'red' ? '🔴 红钻信号' : '🔵 蓝钻信号'}
-              </strong>
-              <span className="muted"> 评分 {data.diamondSignal.score}</span>
-              <ul className="sector-list">
-                {data.diamondSignal.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
+          <div className="page-workspace page-workspace--chart">
+            <div className="page-pane page-pane--chart-main">
+              {data.diamondSignal && (
+                <div
+                  className={`diamond-card diamond-card--${data.diamondSignal.strength}`}
+                >
+                  <strong>
+                    {data.diamondSignal.strength === 'red' ? '🔴 红钻信号' : '🔵 蓝钻信号'}
+                  </strong>
+                  <span className="muted"> 评分 {data.diamondSignal.score}</span>
+                  <ul className="sector-list">
+                    {data.diamondSignal.reasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <section className="section pane-card pane-chart-body">
+                <h2 className="section-title">日 K 走势</h2>
+                <p className="muted">前复权日 K，默认展示近 120 个交易日。</p>
+                <KlineChart bars={bars} diamonds={diamonds} fill />
+              </section>
+
+              <div className="page-toolbar">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={paperLoading}
+                  onClick={() => simulateBuy(100)}
+                >
+                  {paperLoading ? '下单中…' : '模拟买入 100 股'}
+                </button>
+                <Link href={`/?symbol=${data.item.symbol}`} className="button button-secondary">
+                  重新生成研报
+                </Link>
+              </div>
             </div>
-          )}
 
-          {data.item.reason && (
-            <p className="muted">关注理由：{data.item.reason}</p>
-          )}
-
-          <section className="section">
-            <h2 className="section-title">日 K 走势</h2>
-            <p className="muted">前复权日 K，默认展示近 120 个交易日。</p>
-            <KlineChart bars={bars} diamonds={diamonds} />
-          </section>
-
-          <div className="page-toolbar">
-            <button
-              type="button"
-              className="button"
-              disabled={paperLoading}
-              onClick={() => simulateBuy(100)}
-            >
-              {paperLoading ? '下单中…' : '模拟买入 100 股'}
-            </button>
-            <Link href={`/?symbol=${data.item.symbol}`} className="button button-secondary">
-              重新生成研报
-            </Link>
+            <aside className="page-pane page-pane--sidebar page-pane--scroll">
+              {data.snapshots.length > 0 ? (
+                <section className="section pane-card pane-card--fill">
+                  <h2 className="section-title">每日记录</h2>
+                  <div className="table-scroll-wrap">
+                    <table className="candidate-table">
+                      <thead>
+                        <tr>
+                          <th>日期</th>
+                          <th>收盘</th>
+                          <th>涨跌</th>
+                          <th>相对加入</th>
+                          <th>信号</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.snapshots.map((s) => (
+                          <tr key={s.tradeDate + String(s.close)}>
+                            <td>{s.tradeDate}</td>
+                            <td>{s.close.toFixed(2)}</td>
+                            <td>{s.pctChg != null ? `${s.pctChg}%` : '—'}</td>
+                            <td>{s.vsEntryPct != null ? `${s.vsEntryPct}%` : '—'}</td>
+                            <td>
+                              {s.diamondStrength === 'red'
+                                ? '红钻'
+                                : s.diamondStrength === 'blue'
+                                  ? '蓝钻'
+                                  : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ) : (
+                <div className="empty-state pane-empty">暂无每日记录，等待收盘快照。</div>
+              )}
+            </aside>
           </div>
-
-          {data.snapshots.length > 0 && (
-            <section className="section">
-              <h2 className="section-title">每日记录</h2>
-              <table className="candidate-table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>收盘</th>
-                    <th>涨跌</th>
-                    <th>相对加入</th>
-                    <th>信号</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.snapshots.map((s) => (
-                    <tr key={s.tradeDate + String(s.close)}>
-                      <td>{s.tradeDate}</td>
-                      <td>{s.close.toFixed(2)}</td>
-                      <td>{s.pctChg != null ? `${s.pctChg}%` : '—'}</td>
-                      <td>{s.vsEntryPct != null ? `${s.vsEntryPct}%` : '—'}</td>
-                      <td>
-                        {s.diamondStrength === 'red'
-                          ? '红钻'
-                          : s.diamondStrength === 'blue'
-                            ? '蓝钻'
-                            : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          )}
         </>
       )}
     </main>

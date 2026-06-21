@@ -60,72 +60,80 @@ export default function SignalsPage() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--list">
       <PageHeader
         title="信号提醒"
         description="基于日 K 收盘：趋势、放量、MACD 与突破同时满足时出现。红色偏强，蓝色偏温和。"
       />
 
-      <div className="signal-legend">
-        <span className="diamond-badge diamond-badge--red">红钻 · 强势启动</span>
-        <span className="diamond-badge diamond-badge--blue">蓝钻 · 温和关注</span>
-      </div>
-
-      <nav className="page-toolbar">
-        <button
-          type="button"
-          className="button"
-          disabled={scanning}
-          onClick={() => runScan('watchlist')}
-        >
-          {scanning ? '扫描中…' : '扫描自选池'}
-        </button>
-        <button
-          type="button"
-          className="button button-secondary"
-          disabled={scanning}
-          onClick={() => runScan('latest-screening')}
-        >
-          扫描最近选股
-        </button>
-        <Link href="/watchlist" className="button button-secondary">
-          我的自选
-        </Link>
-      </nav>
-
-      {loading && <div className="list-loading">加载信号…</div>}
-      {error && <div className="error">{error}</div>}
-
-      {!loading && signals.length === 0 && (
-        <div className="empty-state">暂无信号，点击上方按钮扫描。</div>
-      )}
-
-      <div className="history-list">
-        {signals.map((s) => (
-          <div
-            key={s.id}
-            className={`history-card diamond-card diamond-card--${s.strength}`}
-          >
-            <div className="history-card-main">
-              <strong>
-                {s.name} ({s.symbol})
-              </strong>
-              <span className="history-card-time">{s.tradeDate}</span>
-            </div>
-            <div className="history-card-meta">
-              <span className={`diamond-badge diamond-badge--${s.strength}`}>
-                {s.strength === 'red' ? '红钻' : '蓝钻'}
-              </span>
-              <span>收盘 {s.close.toFixed(2)}</span>
-              <span>评分 {s.score}</span>
-            </div>
-            <ul className="sector-list">
-              {s.reasons.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
+      <div className="list-stack">
+        <div className="list-stack-head">
+          <div className="signal-legend">
+            <span className="diamond-badge diamond-badge--red">红钻 · 强势启动</span>
+            <span className="diamond-badge diamond-badge--blue">蓝钻 · 温和关注</span>
           </div>
-        ))}
+
+          <nav className="page-toolbar">
+            <button
+              type="button"
+              className="button"
+              disabled={scanning}
+              onClick={() => runScan('watchlist')}
+            >
+              {scanning ? '扫描中…' : '扫描自选池'}
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={scanning}
+              onClick={() => runScan('latest-screening')}
+            >
+              扫描最近选股
+            </button>
+            <Link href="/watchlist" className="button button-secondary">
+              我的自选
+            </Link>
+          </nav>
+
+          {loading && <div className="list-loading">加载信号…</div>}
+          {error && <div className="error">{error}</div>}
+
+          {!loading && signals.length === 0 && (
+            <div className="empty-state">暂无信号，点击上方按钮扫描。</div>
+          )}
+        </div>
+
+        {signals.length > 0 && (
+          <div className="list-body">
+            <div className="history-list">
+              {signals.map((s) => (
+                <div
+                  key={s.id}
+                  className={`history-card diamond-card diamond-card--${s.strength}`}
+                >
+                  <div className="history-card-main">
+                    <strong>
+                      {s.name} ({s.symbol})
+                    </strong>
+                    <span className="history-card-time">{s.tradeDate}</span>
+                  </div>
+                  <div className="history-card-meta">
+                    <span className={`diamond-badge diamond-badge--${s.strength}`}>
+                      {s.strength === 'red' ? '红钻' : '蓝钻'}
+                    </span>
+                    <span>收盘 {s.close.toFixed(2)}</span>
+                    <span>评分 {s.score}</span>
+                  </div>
+                  <ul className="sector-list">
+                    {s.reasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

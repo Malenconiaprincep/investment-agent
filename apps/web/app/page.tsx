@@ -164,124 +164,134 @@ export default function HomePage() {
   const showReport = Boolean(displayReport);
 
   return (
-    <main className="page">
+    <main className="page page--workspace">
       <PageHeader
         title="投研助手"
         description="输入股票代码生成研报，或从热点新闻一键选股，再对候选股做深度分析。"
       />
 
-      <div className="dashboard-grid dashboard-grid--compact">
-        <Link href="/screen" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">智能选股</h2>
-          <p className="dashboard-tile-desc">
-            扫描今日热点与强势板块，自动筛出候选股。
-          </p>
-        </Link>
-        <Link href="/watchlist" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">我的自选</h2>
-          <p className="dashboard-tile-desc">
-            加入关注后每日跟踪，出现买卖信号会提醒。
-          </p>
-        </Link>
-        <Link href="/history" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">我的研报</h2>
-          <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
-        </Link>
-      </div>
-
-      <section id="research" className="section">
-        <h2 className="section-title">单股研报</h2>
-
-        <div className="action-panel">
-          <form
-            className="action-panel-row action-panel-row--primary"
-            onSubmit={handleSubmit}
-          >
-            <input
-              className="input"
-              value={symbol}
-              onChange={(event) => setSymbol(event.target.value)}
-              placeholder="6 位代码，如 600519"
-              maxLength={6}
-              disabled={loading}
-              aria-label="股票代码"
-            />
-            <button className="button button-lg" type="submit" disabled={loading}>
-              {loading ? '生成中…' : '生成研报'}
-            </button>
-          </form>
-
-          <div className="examples">
-            {EXAMPLES.map((item) => (
-              <button
-                key={item.symbol}
-                type="button"
-                className="chip"
-                disabled={loading}
-                onClick={() => setSymbol(item.symbol)}
-              >
-                {item.label} {item.symbol}
-              </button>
-            ))}
+      <div className="page-workspace">
+        <aside className="page-pane page-pane--sidebar page-pane--scroll">
+          <div className="dashboard-grid dashboard-grid--compact">
+            <Link href="/screen" className="dashboard-tile">
+              <h2 className="dashboard-tile-title">智能选股</h2>
+              <p className="dashboard-tile-desc">
+                扫描今日热点与强势板块，自动筛出候选股。
+              </p>
+            </Link>
+            <Link href="/watchlist" className="dashboard-tile">
+              <h2 className="dashboard-tile-title">我的自选</h2>
+              <p className="dashboard-tile-desc">
+                加入关注后每日跟踪，出现买卖信号会提醒。
+              </p>
+            </Link>
+            <Link href="/history" className="dashboard-tile">
+              <h2 className="dashboard-tile-title">我的研报</h2>
+              <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
+            </Link>
           </div>
 
-          {loading && (
-            <WorkflowStatus
-              label="正在生成研报"
-              steps={STEP_ORDER}
-              currentStep={currentStep}
-              horizontal
+          <section id="research" className="section">
+            <h2 className="section-title">单股研报</h2>
+
+            <div className="action-panel">
+              <form
+                className="action-panel-row action-panel-row--primary"
+                onSubmit={handleSubmit}
+              >
+                <input
+                  className="input"
+                  value={symbol}
+                  onChange={(event) => setSymbol(event.target.value)}
+                  placeholder="6 位代码，如 600519"
+                  maxLength={6}
+                  disabled={loading}
+                  aria-label="股票代码"
+                />
+                <button className="button button-lg" type="submit" disabled={loading}>
+                  {loading ? '生成中…' : '生成研报'}
+                </button>
+              </form>
+
+              <div className="examples">
+                {EXAMPLES.map((item) => (
+                  <button
+                    key={item.symbol}
+                    type="button"
+                    className="chip"
+                    disabled={loading}
+                    onClick={() => setSymbol(item.symbol)}
+                  >
+                    {item.label} {item.symbol}
+                  </button>
+                ))}
+              </div>
+
+              {loading && (
+                <WorkflowStatus
+                  label="正在生成研报"
+                  steps={STEP_ORDER}
+                  currentStep={currentStep}
+                  horizontal
+                />
+              )}
+            </div>
+          </section>
+
+          {error && <div className="error">{error}</div>}
+
+          {result && (
+            <div className="result-toolbar">
+              <span>
+                <strong>{result.name}</strong>{' '}
+                <span className="muted">({result.symbol})</span>
+              </span>
+              <QualityBadge passed={result.passed} kind="report" />
+              {result.reportId && (
+                <Link href={`/history/${result.reportId}`} className="saved-link">
+                  已保存 · 查看
+                </Link>
+              )}
+            </div>
+          )}
+
+          {result?.reportId && (
+            <FeedbackButtons targetType="report" targetId={result.reportId} />
+          )}
+
+          {result && (
+            <AddToWatchlistButton
+              symbol={result.symbol}
+              name={result.name}
+              reason="首页生成研报"
+              sourceType="report"
+              sourceId={result.reportId}
             />
           )}
-        </div>
-      </section>
 
-      {error && <div className="error">{error}</div>}
-
-      {result && (
-        <div className="result-toolbar">
-          <span>
-            <strong>{result.name}</strong>{' '}
-            <span className="muted">({result.symbol})</span>
-          </span>
-          <QualityBadge passed={result.passed} kind="report" />
-          {result.reportId && (
-            <Link href={`/history/${result.reportId}`} className="saved-link">
-              已保存 · 查看
-            </Link>
+          {result && !result.passed && (
+            <div className="notice notice--warn">
+              {formatMissingHint(result.missingSections, result.missingKeywords)}
+            </div>
           )}
-        </div>
-      )}
 
-      {result?.reportId && (
-        <FeedbackButtons targetType="report" targetId={result.reportId} />
-      )}
+          <p className="disclaimer disclaimer--pane">
+            仅供学习研究，不构成投资建议。数据来自公开行情接口与研究笔记。
+          </p>
+        </aside>
 
-      {result && (
-        <AddToWatchlistButton
-          symbol={result.symbol}
-          name={result.name}
-          reason="首页生成研报"
-          sourceType="report"
-          sourceId={result.reportId}
-        />
-      )}
-
-      {result && !result.passed && (
-        <div className="notice notice--warn">
-          {formatMissingHint(result.missingSections, result.missingKeywords)}
-        </div>
-      )}
-
-      {showReport && (
-        <article className="report">
-          <ReportMarkdown source={displayReport} />
-        </article>
-      )}
-
-      <p className="disclaimer">
-        仅供学习研究，不构成投资建议。数据来自公开行情接口与研究笔记。
-      </p>
+        <section className="page-pane page-pane--main">
+          {showReport ? (
+            <article className="report report--pane">
+              <ReportMarkdown source={displayReport} />
+            </article>
+          ) : (
+            <div className="empty-state pane-empty">
+              输入代码并生成研报，全文将显示在此区域
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

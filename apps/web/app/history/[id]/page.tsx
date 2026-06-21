@@ -74,50 +74,56 @@ export default function HistoryDetailPage() {
   }, [params.id]);
 
   return (
-    <main className="page">
+    <main className="page page--workspace">
       <div className="breadcrumb">
         <Link href="/history">← 我的研报</Link>
       </div>
 
-      {loading && <div className="loading">加载中…</div>}
+      {loading && <div className="list-loading">加载中…</div>}
       {error && <div className="error">{error}</div>}
 
       {report && (
         <>
-          <header className="header">
-            <h1>
+          <header className="page-header">
+            <h1 className="page-title">
               {report.name} ({report.symbol})
             </h1>
-            <p>生成于 {formatTime(report.createdAt)}</p>
+            <p className="page-description">生成于 {formatTime(report.createdAt)}</p>
           </header>
 
-          <div className="status-bar">
-            <QualityBadge passed={report.passed} kind="report" />
+          <div className="page-workspace">
+            <aside className="page-pane page-pane--sidebar page-pane--scroll">
+              <div className="status-bar">
+                <QualityBadge passed={report.passed} kind="report" />
+              </div>
+
+              {!report.passed && (
+                <div className="notice notice--warn">
+                  {formatMissingHint(report.missingSections, report.missingKeywords)}
+                </div>
+              )}
+
+              <FeedbackButtons
+                targetType="report"
+                targetId={report.id}
+                initial={report.feedback}
+              />
+
+              <AddToWatchlistButton
+                symbol={report.symbol}
+                name={report.name}
+                reason={`研报 ${report.createdAt.slice(0, 10)}`}
+                sourceType="report"
+                sourceId={report.id}
+              />
+            </aside>
+
+            <section className="page-pane page-pane--main">
+              <article className="report report--pane">
+                <ReportMarkdown source={report.report} />
+              </article>
+            </section>
           </div>
-
-          {!report.passed && (
-            <div className="notice notice--warn">
-              {formatMissingHint(report.missingSections, report.missingKeywords)}
-            </div>
-          )}
-
-          <FeedbackButtons
-            targetType="report"
-            targetId={report.id}
-            initial={report.feedback}
-          />
-
-          <AddToWatchlistButton
-            symbol={report.symbol}
-            name={report.name}
-            reason={`研报 ${report.createdAt.slice(0, 10)}`}
-            sourceType="report"
-            sourceId={report.id}
-          />
-
-          <article className="report">
-            <ReportMarkdown source={report.report} />
-          </article>
         </>
       )}
     </main>

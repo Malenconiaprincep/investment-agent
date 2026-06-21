@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CandlestickSeries,
   ColorType,
@@ -28,6 +28,8 @@ type KlineChartProps = {
   bars: KlineBar[];
   diamonds?: DiamondMarker[];
   height?: number;
+  /** 大屏下随容器高度拉伸 */
+  fill?: boolean;
 };
 
 function toUtcTimestamp(tradeDate: string): UTCTimestamp {
@@ -39,16 +41,37 @@ function toUtcTimestamp(tradeDate: string): UTCTimestamp {
   ) as UTCTimestamp;
 }
 
-export function KlineChart({ bars, diamonds = [], height = 360 }: KlineChartProps) {
+export function KlineChart({
+  bars,
+  diamonds = [],
+  height = 360,
+  fill = false,
+}: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(height);
+
+  useEffect(() => {
+    if (!fill || !containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry && entry.contentRect.height >= 200) {
+        setMeasuredHeight(Math.floor(entry.contentRect.height));
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [fill]);
+
+  const chartHeight = fill ? measuredHeight : height;
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      height,
+      height: chartHeight,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#9aa3ad',
@@ -76,6 +99,9 @@ export function KlineChart({ bars, diamonds = [], height = 360 }: KlineChartProp
       const entry = entries[0];
       if (entry) {
         chart.applyOptions({ width: entry.contentRect.width });
+        if (fill && entry.contentRect.height >= 200) {
+          chart.applyOptions({ height: Math.floor(entry.contentRect.height) });
+        }
       }
     });
     observer.observe(containerRef.current);
@@ -86,7 +112,7 @@ export function KlineChart({ bars, diamonds = [], height = 360 }: KlineChartProp
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [height]);
+  }, [chartHeight, fill]);
 
   useEffect(() => {
     if (!seriesRef.current || bars.length === 0) return;
@@ -109,5 +135,10 @@ export function KlineChart({ bars, diamonds = [], height = 360 }: KlineChartProp
     return <div className="chart-empty">暂无日 K 数据</div>;
   }
 
-  return <div ref={containerRef} className="kline-chart" />;
+  return (
+    <div
+      ref={containerRef}
+      className={`kline-chart${fill ? ' kline-chart--fill' : ''}`}
+    />
+  );
 }

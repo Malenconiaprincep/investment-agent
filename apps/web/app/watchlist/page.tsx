@@ -46,69 +46,75 @@ export default function WatchlistPage() {
   }, []);
 
   return (
-    <main className="page">
+    <main className="page page--list">
       <PageHeader
         title="我的自选"
         description="分析后加入自选池，按日 K 收盘记录行情，出现信号时会提示。"
       />
 
-      <nav className="page-toolbar">
-        <Link href="/signals" className="button button-secondary">
-          信号提醒
-        </Link>
-        <Link href="/reviews" className="button button-secondary">
-          每周复盘
-        </Link>
-        <Link href="/paper" className="button button-secondary">
-          模拟操盘
-        </Link>
-      </nav>
-
-      {loading && <div className="list-loading">加载自选…</div>}
-      {error && <div className="error">{error}</div>}
-
-      {!loading && items.length === 0 && (
-        <div className="empty-state">
-          暂无自选股票。在
-          <Link href="/">研报</Link>
-          或
-          <Link href="/screen">选股</Link>
-          结果页点击「加入自选」。
-        </div>
-      )}
-
-      {items.length > 0 && (
-        <div className="history-list">
-          {items.map((item) => (
-            <Link
-              key={item.id}
-              href={`/watchlist/${item.id}`}
-              className="history-card"
-            >
-              <div className="history-card-main">
-                <strong>
-                  {item.name} ({item.symbol})
-                </strong>
-                {item.latest && (
-                  <span className="history-card-time">
-                    收盘 {item.latest.close.toFixed(2)}
-                  </span>
-                )}
-              </div>
-              <div className="history-card-meta">
-                <span>今日 {fmtPct(item.latest?.pctChg)}</span>
-                <span>自加入 {fmtPct(item.latest?.vsEntryPct)}</span>
-                {item.latest?.diamondStrength === 'red' && (
-                  <span className="diamond-badge diamond-badge--red">红钻</span>
-                )}
-                {item.latest?.diamondStrength === 'blue' && (
-                  <span className="diamond-badge diamond-badge--blue">蓝钻</span>
-                )}
-              </div>
+      <div className="list-stack">
+        <div className="list-stack-head">
+          <nav className="page-toolbar">
+            <Link href="/signals" className="button button-secondary">
+              信号提醒
             </Link>
-          ))}
+            <Link href="/reviews" className="button button-secondary">
+              每周复盘
+            </Link>
+            <Link href="/paper" className="button button-secondary">
+              模拟操盘
+            </Link>
+          </nav>
+
+          {loading && <div className="list-loading">加载自选…</div>}
+          {error && <div className="error">{error}</div>}
+
+          {!loading && items.length === 0 && (
+            <div className="empty-state">
+              暂无自选股票。在
+              <Link href="/">研报</Link>
+              或
+              <Link href="/screen">选股</Link>
+              结果页点击「加入自选」。
+            </div>
+          )}
         </div>
-      )}
+
+        {items.length > 0 && (
+          <div className="list-body">
+            <div className="history-list">
+              {items.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/watchlist/${item.id}`}
+                  className="history-card"
+                >
+                  <div className="history-card-main">
+                    <strong>
+                      {item.name} ({item.symbol})
+                    </strong>
+                    {item.latest && (
+                      <span className="history-card-time">
+                        收盘 {item.latest.close.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="history-card-meta">
+                    <span>今日 {fmtPct(item.latest?.pctChg)}</span>
+                    <span>自加入 {fmtPct(item.latest?.vsEntryPct)}</span>
+                    {item.latest?.diamondStrength === 'red' && (
+                      <span className="diamond-badge diamond-badge--red">红钻</span>
+                    )}
+                    {item.latest?.diamondStrength === 'blue' && (
+                      <span className="diamond-badge diamond-badge--blue">蓝钻</span>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }

@@ -58,68 +58,74 @@ export default function HistoryPage() {
   }, [filterSymbol]);
 
   return (
-    <main className="page">
+    <main className="page page--list">
       <PageHeader
         title="我的研报"
         description="已生成的研报会自动保存，可按股票代码筛选回看。"
       />
 
-      <nav className="page-toolbar" aria-label="页面导航">
-        <Link href="/" className="button button-secondary">
-          返回首页
-        </Link>
-        <Link href="/screen/history" className="button button-secondary">
-          选股记录
-        </Link>
-      </nav>
-
-      <div className="filter-bar">
-        <input
-          className="input"
-          value={filterSymbol}
-          onChange={(event) => setFilterSymbol(event.target.value)}
-          placeholder="按代码筛选，如 600519"
-          maxLength={6}
-          aria-label="按股票代码筛选"
-        />
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={() => setFilterSymbol('')}
-          disabled={!filterSymbol}
-        >
-          清除筛选
-        </button>
-      </div>
-
-      {loading && <div className="list-loading">加载历史研报…</div>}
-      {error && <div className="error">{error}</div>}
-
-      {!loading && !error && reports.length === 0 && (
-        <div className="empty-state">
-          暂无历史研报。去
-          <Link href="/">生成研报</Link>
-          页面试试。
-        </div>
-      )}
-
-      {!loading && reports.length > 0 && (
-        <div className="history-list">
-          {reports.map((item) => (
-            <Link key={item.id} href={`/history/${item.id}`} className="history-card">
-              <div className="history-card-main">
-                <strong>
-                  {item.name} ({item.symbol})
-                </strong>
-                <span className="history-card-time">{formatTime(item.createdAt)}</span>
-              </div>
-              <div className="history-card-meta">
-                <QualityBadge passed={item.passed} kind="report" />
-              </div>
+      <div className="list-stack">
+        <div className="list-stack-head">
+          <nav className="page-toolbar" aria-label="页面导航">
+            <Link href="/" className="button button-secondary">
+              返回首页
             </Link>
-          ))}
+            <Link href="/screen/history" className="button button-secondary">
+              选股记录
+            </Link>
+          </nav>
+
+          <div className="filter-bar">
+            <input
+              className="input"
+              value={filterSymbol}
+              onChange={(event) => setFilterSymbol(event.target.value)}
+              placeholder="按代码筛选，如 600519"
+              maxLength={6}
+              aria-label="按股票代码筛选"
+            />
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => setFilterSymbol('')}
+              disabled={!filterSymbol}
+            >
+              清除筛选
+            </button>
+          </div>
+
+          {loading && <div className="list-loading">加载历史研报…</div>}
+          {error && <div className="error">{error}</div>}
+
+          {!loading && !error && reports.length === 0 && (
+            <div className="empty-state">
+              暂无历史研报。去
+              <Link href="/">生成研报</Link>
+              页面试试。
+            </div>
+          )}
         </div>
-      )}
+
+        {!loading && reports.length > 0 && (
+          <div className="list-body">
+            <div className="history-list">
+              {reports.map((item) => (
+                <Link key={item.id} href={`/history/${item.id}`} className="history-card">
+                  <div className="history-card-main">
+                    <strong>
+                      {item.name} ({item.symbol})
+                    </strong>
+                    <span className="history-card-time">{formatTime(item.createdAt)}</span>
+                  </div>
+                  <div className="history-card-meta">
+                    <QualityBadge passed={item.passed} kind="report" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
