@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { QualityBadge } from '@/components/ui/QualityBadge';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { readSSEStream } from '@/lib/sse';
 
@@ -82,18 +83,18 @@ type CommitteeStreamEvent =
 
 const SCREEN_STEPS = [
   '扫描热点',
-  '板块筛选',
-  '候选股筛选',
-  '补全基本信息',
-  '轮动摘要',
-  '质量检查',
+  '筛选板块',
+  '筛选候选股',
+  '补充信息',
+  '生成摘要',
+  '核对结果',
 ];
 
 const COMMITTEE_STEPS = [
-  '解析候选池',
-  '六组并行分析',
-  '投委会综合',
-  '质量检查',
+  '整理候选池',
+  '多维度分析',
+  '综合结论',
+  '核对报告',
 ];
 
 export default function ScreenPage() {
@@ -104,7 +105,6 @@ export default function ScreenPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [committeeStep, setCommitteeStep] = useState<string | null>(null);
-  const [specialists, setSpecialists] = useState<Record<string, string>>({});
   const [streamingSummary, setStreamingSummary] = useState('');
   const [streamingMemo, setStreamingMemo] = useState('');
   const [hotNews, setHotNews] = useState<HotNewsItem[]>([]);
@@ -139,7 +139,6 @@ export default function ScreenPage() {
     setAutoQuery(null);
     setStreamingSummary('');
     setStreamingMemo('');
-    setSpecialists({});
     setCurrentStep(null);
 
     const trimmedOverride = queryOverride.trim();
@@ -221,7 +220,6 @@ export default function ScreenPage() {
     setError(null);
     setCommitteeResult(null);
     setStreamingMemo('');
-    setSpecialists({});
     setCommitteeStep(null);
 
     try {
@@ -248,12 +246,6 @@ export default function ScreenPage() {
       await readSSEStream(response, (_eventName, data) => {
         const event = JSON.parse(data) as CommitteeStreamEvent;
         if (event.type === 'step') setCommitteeStep(event.label);
-        if (event.type === 'specialist') {
-          setSpecialists((prev) => ({
-            ...prev,
-            [event.role]: event.status,
-          }));
-        }
         if (event.type === 'token') {
           memo += event.text;
           setStreamingMemo(memo);
@@ -332,9 +324,8 @@ export default function ScreenPage() {
   return (
     <main className="page">
       <PageHeader
-        eyebrow="Workflow"
-        title="自动选股"
-        description="扫描问财热点新闻与强势板块，自动筛选候选股。需配置 IWENCAI_API_KEY。"
+        title="智能选股"
+        description="根据今日热点新闻与强势板块，自动为你筛选值得关注的候选股。"
       />
 
       <div className="action-panel">
@@ -345,7 +336,7 @@ export default function ScreenPage() {
             disabled={loading || committeeLoading}
             onClick={() => handleScreenSubmit()}
           >
-            {loading ? '扫描热点并选股…' : '开始自动选股'}
+            {loading ? '正在扫描热点…' : '开始智能选股'}
           </button>
           <button
             type="button"
@@ -391,7 +382,7 @@ export default function ScreenPage() {
 
         {isScreenActive && (
           <WorkflowStatus
-            label="板块选股进行中"
+            label="正在为你选股"
             steps={SCREEN_STEPS}
             currentStep={currentStep}
           />
@@ -399,20 +390,10 @@ export default function ScreenPage() {
 
         {isCommitteeActive && (
           <WorkflowStatus
-            label="投委会分析进行中"
+            label="正在深度分析"
             steps={COMMITTEE_STEPS}
             currentStep={committeeStep}
-          >
-            {Object.keys(specialists).length > 0 && (
-              <div className="specialist-grid">
-                {Object.entries(specialists).map(([role, status]) => (
-                  <span key={role} className="chip">
-                    {role}: {status}
-                  </span>
-                ))}
-              </div>
-            )}
-          </WorkflowStatus>
+          />
         )}
       </div>
 
@@ -427,17 +408,12 @@ export default function ScreenPage() {
 
       {screenResult && (
         <div className="result-toolbar">
-          <span className={`badge ${screenResult.passed ? 'pass' : 'fail'}`}>
-            选股 {screenResult.passed ? 'PASS' : 'FAIL'}
-          </span>
+          <QualityBadge passed={screenResult.passed} kind="screen" />
           {!screenResult.passed && screenResult.missingSections.length > 0 && (
             <span className="muted">
-              缺少：{screenResult.missingSections.join('、')}
+              待补充：{screenResult.missingSections.join('、')}
             </span>
           )}
-          <span className="muted">
-            {(screenResult.elapsedMs / 1000).toFixed(1)}s
-          </span>
         </div>
       )}
 
@@ -513,7 +489,7 @@ export default function ScreenPage() {
                 className="button"
                 onClick={handleCommittee}
               >
-                进入投委会分析
+                深度分析
               </button>
               <button
                 type="button"
@@ -522,11 +498,11 @@ export default function ScreenPage() {
                 onClick={handleBatchResearch}
               >
                 {batchLoading
-                  ? '批量生成研报中…'
-                  : `批量生成研报（前 ${Math.min(candidates.length, 5)} 只）`}
+                  ? '正在生成研报…'
+                  : `一键生成研报（前 ${Math.min(candidates.length, 5)} 只）`}
               </button>
               <span className="muted">
-                将对前 {Math.min(candidates.length, 3)} 只候选股做六维度分析
+                深度分析将聚焦前 {Math.min(candidates.length, 3)} 只候选股
               </span>
             </div>
           )}
@@ -538,9 +514,7 @@ export default function ScreenPage() {
                   <strong>
                     {item.name} ({item.symbol})
                   </strong>
-                  <span className={`badge ${item.passed ? 'pass' : 'fail'}`}>
-                    {item.passed ? 'PASS' : 'FAIL'}
-                  </span>
+                  <QualityBadge passed={item.passed} kind="report" />
                   {item.error && (
                     <span className="muted"> — {item.error}</span>
                   )}
@@ -564,7 +538,7 @@ export default function ScreenPage() {
 
       {displaySummary && (
         <section className="section">
-          <h2 className="section-title">板块轮动摘要</h2>
+          <h2 className="section-title">市场解读</h2>
           <article className="report">
             <ReportMarkdown source={displaySummary} />
           </article>
@@ -573,18 +547,13 @@ export default function ScreenPage() {
 
       {committeeResult && (
         <div className="result-toolbar">
-          <span className={`badge ${committeeResult.passed ? 'pass' : 'fail'}`}>
-            投委会 {committeeResult.passed ? 'PASS' : 'FAIL'}
-          </span>
-          <span className="muted">
-            {(committeeResult.elapsedMs / 1000).toFixed(1)}s
-          </span>
+          <QualityBadge passed={committeeResult.passed} kind="committee" />
         </div>
       )}
 
       {displayMemo && (
         <section className="section">
-          <h2 className="section-title">投委会纪要</h2>
+          <h2 className="section-title">深度分析</h2>
           <article className="report">
             <ReportMarkdown source={displayMemo} />
           </article>
@@ -592,7 +561,7 @@ export default function ScreenPage() {
       )}
 
       <p className="disclaimer">
-        仅供学习研究，不构成投资建议。数据来自问财 OpenAPI 与东财。
+        仅供学习研究，不构成投资建议。数据来自公开行情与新闻接口。
       </p>
     </main>
   );

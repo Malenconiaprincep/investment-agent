@@ -15,11 +15,11 @@ export type { ScreenStreamEvent } from './screen-stream-types.js';
 
 const STEP_LABELS: Record<string, string> = {
   'discover-hot-market': '扫描热点',
-  'fetch-sectors': '板块筛选',
-  'fetch-candidates': '候选股筛选',
-  'enrich-basics': '补全基本信息',
-  summarize: '轮动摘要',
-  'quality-check': '质量检查',
+  'fetch-sectors': '筛选板块',
+  'fetch-candidates': '筛选候选股',
+  'enrich-basics': '补充信息',
+  summarize: '生成摘要',
+  'quality-check': '核对结果',
 };
 
 function mapWorkflowChunk(chunk: WorkflowStreamEvent): ScreenStreamEvent[] {

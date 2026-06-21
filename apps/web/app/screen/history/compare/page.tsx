@@ -71,25 +71,24 @@ function CompareContent() {
   return (
     <main className="page">
       <p className="breadcrumb">
-        <Link href="/screen/history">← 选股历史</Link>
+        <Link href="/screen/history">← 选股记录</Link>
       </p>
 
       <header className="page-header">
-        <p className="page-eyebrow">对比</p>
-        <h1 className="page-title">两次选股差异</h1>
+        <h1 className="page-title">选股对比</h1>
         <p className="page-description">
-          基准 → 目标：板块与候选池的增减变化。
+          看看两次选股之间，板块和候选池有什么变化。
         </p>
       </header>
 
-      {loading && <div className="list-loading">计算差异…</div>}
+      {loading && <div className="list-loading">正在对比…</div>}
       {error && <div className="error">{error}</div>}
 
       {data && (
         <>
           <div className="compare-header">
             <div className="compare-side">
-              <span className="muted">基准</span>
+              <span className="muted">较早</span>
               <strong>{data.base.query}</strong>
               <span className="muted">{formatTime(data.base.createdAt)}</span>
               <Link href={`/screen/history/${data.base.id}`} className="saved-link">
@@ -100,7 +99,7 @@ function CompareContent() {
               →
             </span>
             <div className="compare-side">
-              <span className="muted">目标</span>
+              <span className="muted">较新</span>
               <strong>{data.target.query}</strong>
               <span className="muted">{formatTime(data.target.createdAt)}</span>
               <Link

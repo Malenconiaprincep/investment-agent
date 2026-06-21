@@ -12,7 +12,7 @@ export function WorkflowPipeline({
   const currentIndex = currentStep ? steps.indexOf(currentStep) : -1;
 
   return (
-    <ol className={`pipeline ${className}`.trim()} aria-label="Workflow 进度">
+    <ol className={`pipeline ${className}`.trim()} aria-label="进度">
       {steps.map((label, index) => {
         let state: 'pending' | 'active' | 'done' = 'pending';
         if (currentIndex === index) state = 'active';

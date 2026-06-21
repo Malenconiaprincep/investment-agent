@@ -4,6 +4,10 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { ReportSummary } from '@/app/api/reports/route';
 import { PageHeader } from '@/components/ui/PageHeader';
+import {
+  formatMissingHint,
+  QualityBadge,
+} from '@/components/ui/QualityBadge';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -56,17 +60,16 @@ export default function HistoryPage() {
   return (
     <main className="page">
       <PageHeader
-        eyebrow="归档"
-        title="历史研报"
-        description="Workflow 生成的研报自动保存到本地 LibSQL，可按代码筛选回看。"
+        title="我的研报"
+        description="已生成的研报会自动保存，可按股票代码筛选回看。"
       />
 
       <nav className="page-toolbar" aria-label="页面导航">
         <Link href="/" className="button button-secondary">
-          返回工作台
+          返回首页
         </Link>
         <Link href="/screen/history" className="button button-secondary">
-          选股历史
+          选股记录
         </Link>
       </nav>
 
@@ -111,12 +114,7 @@ export default function HistoryPage() {
                 <span className="history-card-time">{formatTime(item.createdAt)}</span>
               </div>
               <div className="history-card-meta">
-                <span className={`badge ${item.passed ? 'pass' : 'fail'}`}>
-                  质检 {item.passed ? 'PASS' : 'FAIL'}
-                </span>
-                {item.elapsedMs !== null && (
-                  <span>耗时 {(item.elapsedMs / 1000).toFixed(1)}s</span>
-                )}
+                <QualityBadge passed={item.passed} kind="report" />
               </div>
             </Link>
           ))}

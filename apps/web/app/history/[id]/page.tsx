@@ -5,6 +5,10 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+import {
+  formatMissingHint,
+  QualityBadge,
+} from '@/components/ui/QualityBadge';
 
 type ReportDetail = {
   id: string;
@@ -71,7 +75,7 @@ export default function HistoryDetailPage() {
   return (
     <main className="page">
       <div className="breadcrumb">
-        <Link href="/history">← 返回历史列表</Link>
+        <Link href="/history">← 我的研报</Link>
       </div>
 
       {loading && <div className="loading">加载中…</div>}
@@ -87,19 +91,12 @@ export default function HistoryDetailPage() {
           </header>
 
           <div className="status-bar">
-            <span className={`badge ${report.passed ? 'pass' : 'fail'}`}>
-              质检 {report.passed ? 'PASS' : 'FAIL'}
-            </span>
-            {report.elapsedMs !== null && (
-              <span>耗时 {(report.elapsedMs / 1000).toFixed(1)}s</span>
-            )}
+            <QualityBadge passed={report.passed} kind="report" />
           </div>
 
           {!report.passed && (
-            <div className="error" style={{ marginBottom: '1rem' }}>
-              缺少章节: {report.missingSections.join(', ') || '无'}
-              {report.missingKeywords.length > 0 &&
-                ` · 缺少关键词: ${report.missingKeywords.join(', ')}`}
+            <div className="notice notice--warn">
+              {formatMissingHint(report.missingSections, report.missingKeywords)}
             </div>
           )}
 

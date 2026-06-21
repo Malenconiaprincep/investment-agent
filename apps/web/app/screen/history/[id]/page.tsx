@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
+import { QualityBadge } from '@/components/ui/QualityBadge';
 
 type FeedbackSummary = {
   up: number;
@@ -129,7 +130,7 @@ export default function ScreeningHistoryDetailPage() {
   return (
     <main className="page">
       <p className="breadcrumb">
-        <Link href="/screen/history">← 选股历史</Link>
+        <Link href="/screen/history">← 选股记录</Link>
       </p>
 
       {loading && <div className="loading-block">加载中…</div>}
@@ -139,21 +140,14 @@ export default function ScreeningHistoryDetailPage() {
         <>
           <header className="page-header">
             <p className="page-eyebrow">
-              {session.mode === 'auto' ? '自动选股' : '指定主题'}
+              {session.mode === 'auto' ? '智能选股' : '主题选股'}
             </p>
             <h1 className="page-title">{session.query}</h1>
             <p className="page-description">{formatTime(session.createdAt)}</p>
           </header>
 
           <div className="status-bar">
-            <span className={`badge ${session.passed ? 'pass' : 'fail'}`}>
-              选股 {session.passed ? 'PASS' : 'FAIL'}
-            </span>
-            {session.elapsedMs !== null && (
-              <span className="muted">
-                {(session.elapsedMs / 1000).toFixed(1)}s
-              </span>
-            )}
+            <QualityBadge passed={session.passed} kind="screen" />
           </div>
 
           <FeedbackButtons
@@ -225,7 +219,7 @@ export default function ScreeningHistoryDetailPage() {
 
           <section className="section">
             <div className="section-toolbar">
-              <h2 className="section-title">事后验证</h2>
+              <h2 className="section-title">入选后表现</h2>
               {!backtest && (
                 <button
                   type="button"
@@ -233,14 +227,14 @@ export default function ScreeningHistoryDetailPage() {
                   disabled={backtestLoading || session.candidates.length === 0}
                   onClick={loadBacktest}
                 >
-                  {backtestLoading ? '计算中…' : '计算 5 日涨跌'}
+                  {backtestLoading ? '计算中…' : '查看近 5 日涨跌'}
                 </button>
               )}
             </div>
             {backtest && (
               <>
                 <p className="muted">
-                  自选股日附近收盘价至最新收盘，平均{' '}
+                  自选股当日附近收盘价至最新收盘，组合平均涨跌{' '}
                   <strong>{formatPct(backtest.avgReturnPct)}</strong>
                 </p>
                 <table className="candidate-table">
@@ -283,7 +277,7 @@ export default function ScreeningHistoryDetailPage() {
 
           {session.rotationSummary && (
             <section className="section">
-              <h2 className="section-title">板块轮动摘要</h2>
+              <h2 className="section-title">市场解读</h2>
               <article className="report">
                 <ReportMarkdown source={session.rotationSummary} />
               </article>
@@ -292,13 +286,12 @@ export default function ScreeningHistoryDetailPage() {
 
           {session.committee && (
             <section className="section">
-              <h2 className="section-title">投委会纪要</h2>
+              <h2 className="section-title">深度分析</h2>
               <div className="status-bar">
-                <span
-                  className={`badge ${session.committee.passed ? 'pass' : 'fail'}`}
-                >
-                  投委会 {session.committee.passed ? 'PASS' : 'FAIL'}
-                </span>
+                <QualityBadge
+                  passed={session.committee.passed}
+                  kind="committee"
+                />
               </div>
               <article className="report">
                 <ReportMarkdown source={session.committee.memo} />

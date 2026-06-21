@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV = [
-  { href: '/', label: '工作台' },
-  { href: '/screen', label: '自动选股' },
-  { href: '/screen/history', label: '选股历史' },
-  { href: '/history', label: '研报历史' },
+  { href: '/', label: '首页' },
+  { href: '/screen', label: '智能选股' },
+  { href: '/screen/history', label: '选股记录' },
+  { href: '/history', label: '我的研报' },
 ] as const;
 
 export function SiteNav() {

@@ -192,7 +192,13 @@ a:hover {
 
 @media (min-width: 720px) {
   .dashboard-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -619,60 +625,25 @@ a:hover {
   align-items: center;
 }
 
-.eval-card {
-  margin-bottom: 2rem;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-.eval-card-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.eval-card-title {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.eval-card-rate {
-  margin: 0 0 1rem;
-  font-size: 1.125rem;
-}
-
-.eval-suite-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-}
-
-.eval-suite {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.eval-suite-name {
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 0.75rem;
-}
-
-.eval-failures {
-  margin: 0.75rem 0 0;
-  font-size: 0.8125rem;
-}
-
 .button--active {
   border-color: var(--accent);
   background: var(--accent-muted);
+}
+
+.notice {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.notice--warn {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  color: #e8c4c4;
 }
 
 .pipeline {

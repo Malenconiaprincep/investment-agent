@@ -33,12 +33,12 @@ export type ResearchStreamEvent =
 
 const STEP_LABELS: Record<string, string> = {
   'identify-target': '确认标的',
-  'pick-symbol': '提取代码',
-  'fetch-market-data': '并行采数',
-  'search-notes': '笔记检索',
-  'prepare-prompt': '组装 Prompt',
+  'pick-symbol': '识别代码',
+  'fetch-market-data': '获取行情',
+  'search-notes': '检索资料',
+  'prepare-prompt': '整理要点',
   'write-report': '撰写研报',
-  'quality-check': '质量检查',
+  'quality-check': '核对报告',
 };
 
 function mapWorkflowChunk(chunk: WorkflowStreamEvent): ResearchStreamEvent[] {

@@ -18,8 +18,8 @@ const serif = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: 'A股投研助手',
-  description: '基于 Mastra Workflow 的结构化 A 股投研报告',
+  title: '投研助手',
+  description: 'A 股智能研报与热点选股，帮助个人投资者快速完成研究。',
 };
 
 export default function RootLayout({

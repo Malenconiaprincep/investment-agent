@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { PageHeader } from '@/components/ui/PageHeader';
+import {
+  formatMissingHint,
+  QualityBadge,
+} from '@/components/ui/QualityBadge';
 import { WorkflowStatus } from '@/components/ui/WorkflowStatus';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { readSSEStream } from '@/lib/sse';
@@ -46,31 +50,17 @@ const EXAMPLES = [
 
 const STEP_ORDER = [
   '确认标的',
-  '提取代码',
-  '并行采数',
-  '笔记检索',
-  '组装 Prompt',
+  '识别代码',
+  '获取行情',
+  '检索资料',
+  '整理要点',
   '撰写研报',
-  '质量检查',
+  '核对报告',
 ];
 
 function parseStreamEvent(data: string): StreamEvent {
   return JSON.parse(data) as StreamEvent;
 }
-
-type EvalReport = {
-  ranAt: string;
-  passRate: number;
-  elapsedMs: number;
-  suites: Array<{
-    name: string;
-    total: number;
-    passed: number;
-    failed: number;
-    skipped?: number;
-  }>;
-  failures: Array<{ suite: string; id: string; detail: string }>;
-};
 
 export default function HomePage() {
   const [symbol, setSymbol] = useState('600519');
@@ -79,23 +69,6 @@ export default function HomePage() {
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [streamingReport, setStreamingReport] = useState('');
   const [result, setResult] = useState<ResearchResult | null>(null);
-  const [evalReport, setEvalReport] = useState<EvalReport | null>(null);
-
-  useEffect(() => {
-    async function loadEval() {
-      try {
-        const response = await fetch('/api/eval');
-        const data: unknown = await response.json();
-        if (!response.ok) return;
-        const payload = data as { report: EvalReport | null };
-        setEvalReport(payload.report);
-      } catch {
-        // ignore — eval report is optional
-      }
-    }
-
-    void loadEval();
-  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -192,66 +165,33 @@ export default function HomePage() {
   return (
     <main className="page">
       <PageHeader
-        eyebrow="工作台"
-        title="A 股投研"
-        description="单股研报、热点选股、投委会分析 — 三条 Workflow 统一在此入口。"
+        title="投研助手"
+        description="输入股票代码生成研报，或从热点新闻一键选股，再对候选股做深度分析。"
       />
 
       <div className="dashboard-grid">
         <Link href="/#research" className="dashboard-tile">
           <h2 className="dashboard-tile-title">生成研报</h2>
           <p className="dashboard-tile-desc">
-            输入 6 位代码，Research Workflow 流式输出 Markdown 研报。
+            输入 6 位代码，自动采数并生成结构化研报。
           </p>
-          <span className="dashboard-tile-tag">当前页</span>
+          <span className="dashboard-tile-tag">当前</span>
         </Link>
         <Link href="/screen" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">自动选股</h2>
+          <h2 className="dashboard-tile-title">智能选股</h2>
           <p className="dashboard-tile-desc">
-            扫描热点新闻与强势板块，无需手动输入主题。
+            扫描今日热点与强势板块，自动筛选候选股。
           </p>
-          <span className="dashboard-tile-tag">一键启动</span>
+        </Link>
+        <Link href="/screen/history" className="dashboard-tile">
+          <h2 className="dashboard-tile-title">选股记录</h2>
+          <p className="dashboard-tile-desc">回看每次选股的板块、候选池与摘要。</p>
         </Link>
         <Link href="/history" className="dashboard-tile">
-          <h2 className="dashboard-tile-title">历史研报</h2>
-          <p className="dashboard-tile-desc">本地 LibSQL 持久化，按代码筛选回看。</p>
+          <h2 className="dashboard-tile-title">我的研报</h2>
+          <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
         </Link>
       </div>
-
-      {evalReport && (
-        <section className="eval-card">
-          <div className="eval-card-header">
-            <h2 className="eval-card-title">Eval 摘要</h2>
-            <span className="muted">
-              {new Date(evalReport.ranAt).toLocaleString('zh-CN')}
-            </span>
-          </div>
-          <p className="eval-card-rate">
-            通过率 <strong>{evalReport.passRate}%</strong>
-            <span className="muted">
-              {' '}
-              · {(evalReport.elapsedMs / 1000).toFixed(1)}s
-            </span>
-          </p>
-          <div className="eval-suite-grid">
-            {evalReport.suites.map((suite) => (
-              <div key={suite.name} className="eval-suite">
-                <span className="eval-suite-name">{suite.name}</span>
-                <span>
-                  {suite.passed}/{suite.total}
-                  {suite.skipped ? ` (${suite.skipped} 跳过)` : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-          {evalReport.failures.length > 0 && (
-            <p className="muted eval-failures">
-              失败 {evalReport.failures.length} 项 · 运行{' '}
-              <code>pnpm eval:all</code> 更新
-            </p>
-          )}
-        </section>
-      )}
 
       <section id="research" className="section">
         <h2 className="section-title">单股研报</h2>
@@ -291,7 +231,7 @@ export default function HomePage() {
 
           {loading && (
             <WorkflowStatus
-              label="Research Workflow 执行中"
+              label="正在生成研报"
               steps={STEP_ORDER}
               currentStep={currentStep}
               horizontal
@@ -308,10 +248,7 @@ export default function HomePage() {
             <strong>{result.name}</strong>{' '}
             <span className="muted">({result.symbol})</span>
           </span>
-          <span className={`badge ${result.passed ? 'pass' : 'fail'}`}>
-            质检 {result.passed ? 'PASS' : 'FAIL'}
-          </span>
-          <span className="muted">{(result.elapsedMs / 1000).toFixed(1)}s</span>
+          <QualityBadge passed={result.passed} kind="report" />
           {result.reportId && (
             <Link href={`/history/${result.reportId}`} className="saved-link">
               已保存 · 查看
@@ -325,10 +262,8 @@ export default function HomePage() {
       )}
 
       {result && !result.passed && (
-        <div className="error" style={{ marginBottom: '1rem' }}>
-          缺少章节: {result.missingSections.join(', ') || '无'}
-          {result.missingKeywords.length > 0 &&
-            ` · 缺少关键词: ${result.missingKeywords.join(', ')}`}
+        <div className="notice notice--warn">
+          {formatMissingHint(result.missingSections, result.missingKeywords)}
         </div>
       )}
 
@@ -339,7 +274,7 @@ export default function HomePage() {
       )}
 
       <p className="disclaimer">
-        仅供学习研究，不构成投资建议。数据来自东方财富/腾讯公开接口与个人笔记库。
+        仅供学习研究，不构成投资建议。数据来自公开行情接口与研究笔记。
       </p>
     </main>
   );

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { ScreeningSummary } from '@/app/api/screenings/route';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { QualityBadge } from '@/components/ui/QualityBadge';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -73,9 +74,8 @@ export default function ScreeningHistoryPage() {
   return (
     <main className="page">
       <PageHeader
-        eyebrow="归档"
-        title="选股历史"
-        description="每次自动选股 Workflow 完成后会写入本地 LibSQL，可在此回看板块、候选池与摘要。"
+        title="选股记录"
+        description="每次智能选股的结果都会保存在这里，方便你回看和对比。"
       />
 
       <nav className="page-toolbar" aria-label="页面导航">
@@ -83,7 +83,7 @@ export default function ScreeningHistoryPage() {
           新建选股
         </Link>
         <Link href="/history" className="button button-secondary">
-          研报历史
+          我的研报
         </Link>
         <button
           type="button"
@@ -93,7 +93,7 @@ export default function ScreeningHistoryPage() {
             setSelected([]);
           }}
         >
-          {compareMode ? '取消对比' : '对比两次选股'}
+          {compareMode ? '取消对比' : '对比两次结果'}
         </button>
         {compareMode && selected.length === 2 && (
           <button type="button" className="button" onClick={startCompare}>
@@ -104,7 +104,7 @@ export default function ScreeningHistoryPage() {
 
       {compareMode && (
         <p className="compare-hint muted">
-          已选 {selected.length}/2 条记录。先选基准，再选目标。
+          已选 {selected.length}/2 条。先选较早的一次，再选较新的一次。
         </p>
       )}
 
@@ -114,7 +114,7 @@ export default function ScreeningHistoryPage() {
       {!loading && !error && sessions.length === 0 && (
         <div className="empty-state">
           暂无选股记录。去
-          <Link href="/screen">自动选股</Link>
+          <Link href="/screen">智能选股</Link>
           页面试试。
         </div>
       )}
@@ -150,16 +150,11 @@ export default function ScreeningHistoryPage() {
                     </span>
                   </div>
                   <div className="history-card-meta">
-                    <span className={`badge ${item.passed ? 'pass' : 'fail'}`}>
-                      选股 {item.passed ? 'PASS' : 'FAIL'}
-                    </span>
-                    <span>{item.mode === 'auto' ? '自动' : '指定主题'}</span>
+                    <QualityBadge passed={item.passed} kind="screen" />
+                    <span>{item.mode === 'auto' ? '智能选股' : '主题选股'}</span>
                     <span>
                       板块 {item.sectorCount} · 候选 {item.candidateCount}
                     </span>
-                    {item.elapsedMs !== null && (
-                      <span>{(item.elapsedMs / 1000).toFixed(1)}s</span>
-                    )}
                   </div>
                 </div>
               );
@@ -178,16 +173,11 @@ export default function ScreeningHistoryPage() {
                   </span>
                 </div>
                 <div className="history-card-meta">
-                  <span className={`badge ${item.passed ? 'pass' : 'fail'}`}>
-                    选股 {item.passed ? 'PASS' : 'FAIL'}
-                  </span>
-                  <span>{item.mode === 'auto' ? '自动' : '指定主题'}</span>
+                  <QualityBadge passed={item.passed} kind="screen" />
+                  <span>{item.mode === 'auto' ? '智能选股' : '主题选股'}</span>
                   <span>
                     板块 {item.sectorCount} · 候选 {item.candidateCount}
                   </span>
-                  {item.elapsedMs !== null && (
-                    <span>{(item.elapsedMs / 1000).toFixed(1)}s</span>
-                  )}
                 </div>
               </Link>
             );

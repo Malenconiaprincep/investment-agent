@@ -14,10 +14,10 @@ import type { CommitteeStreamEvent } from './committee-stream-types.js';
 export type { CommitteeStreamEvent } from './committee-stream-types.js';
 
 const STEP_LABELS: Record<string, string> = {
-  'parse-candidates': '解析候选池',
-  'parallel-analyze': '六组并行分析',
-  synthesize: '投委会综合',
-  'quality-check': '质量检查',
+  'parse-candidates': '整理候选池',
+  'parallel-analyze': '多维度分析',
+  synthesize: '综合结论',
+  'quality-check': '核对报告',
 };
 
 function mapWorkflowChunk(chunk: WorkflowStreamEvent): CommitteeStreamEvent[] {
