@@ -16,6 +16,7 @@ import {
   extractMarkdownDisclaimer,
   splitMarkdownSections,
 } from '@/lib/markdown-sections';
+import { resolveTailEntryDisplay } from '@/lib/tail-entry-display';
 
 type Sector = { name: string; reason: string; dataSource: string };
 type Candidate = {
@@ -320,6 +321,8 @@ function ScreenPageContent() {
 
       let summary = '';
       let finalResult: ScreenResult | null = null;
+      let pendingTailEntryRun: TailEntryRun | null = null;
+      let pendingTailEntryOutlook: TailEntryOutlook | null = null;
 
       await readSSEStream(response, (_eventName, data) => {
         const event = JSON.parse(data) as ScreenStreamEvent;
@@ -334,9 +337,11 @@ function ScreenPageContent() {
           setDiamondPicks(event.diamondPicks);
         }
         if (event.type === 'tailEntryOutlook') {
+          pendingTailEntryOutlook = event.outlook;
           setTailEntryOutlook(event.outlook);
         }
         if (event.type === 'tailEntryRun') {
+          pendingTailEntryRun = event.run;
           setTailEntryRun(event.run);
         }
         if (event.type === 'token') {
@@ -344,6 +349,9 @@ function ScreenPageContent() {
           setStreamingSummary(summary);
         }
         if (event.type === 'done') {
+          const mergedOutlook =
+            event.tailEntryOutlook ?? pendingTailEntryOutlook;
+          const mergedRun = event.tailEntryRun ?? pendingTailEntryRun;
           finalResult = {
             query: event.query,
             sectors: event.sectors,
@@ -360,12 +368,12 @@ function ScreenPageContent() {
             elapsedMs: event.elapsedMs,
             asOfDate: event.asOfDate,
             fetchErrors: event.fetchErrors,
-            tailEntryOutlook: event.tailEntryOutlook ?? null,
-            tailEntryRun: event.tailEntryRun ?? null,
+            tailEntryOutlook: mergedOutlook,
+            tailEntryRun: mergedRun,
           };
           setScreenResult(finalResult);
-          setTailEntryOutlook(event.tailEntryOutlook ?? null);
-          setTailEntryRun(event.tailEntryRun ?? null);
+          setTailEntryOutlook(mergedOutlook);
+          setTailEntryRun(mergedRun);
           setHotNews(event.hotNews);
           setAutoQuery(event.query);
           setSectors(event.sectors);
@@ -505,6 +513,18 @@ function ScreenPageContent() {
     screenResult?.tailEntryOutlook ?? tailEntryOutlook;
   const displayTailEntryRun = screenResult?.tailEntryRun ?? tailEntryRun;
   const isTailEntryLoading = loading && currentStep === '明日预判';
+  const resolvedTailEntry = resolveTailEntryDisplay({
+    run: displayTailEntryRun,
+    outlook: displayTailEntryOutlook,
+    fetchErrors: screenResult?.fetchErrors,
+    rotationSummary: displaySummary,
+    asOfDate: screenResult?.asOfDate,
+    screenCompleted: Boolean(screenResult && !loading),
+  });
+  const showTailEntryPanel =
+    isTailEntryLoading ||
+    Boolean(resolvedTailEntry.run) ||
+    Boolean(screenResult && !loading && !screenResult.asOfDate);
 
   const isScreenActive = loading && !screenResult;
   const isCommitteeActive = committeeLoading && !committeeResult;
@@ -612,6 +632,15 @@ function ScreenPageContent() {
           </div>
         )}
 
+        {showTailEntryPanel && (
+          <TailEntryOutlookPanel
+            run={resolvedTailEntry.run}
+            outlook={resolvedTailEntry.outlook}
+            loading={isTailEntryLoading}
+            rotationSummary={displaySummary}
+          />
+        )}
+
         {(displayHotNews.length > 0 || sectors.length > 0) && (
           <div className="insight-grid insight-grid--pair">
             {displayHotNews.length > 0 && (
@@ -656,14 +685,6 @@ function ScreenPageContent() {
               </section>
             )}
           </div>
-        )}
-
-        {(isTailEntryLoading || displayTailEntryRun) && (
-          <TailEntryOutlookPanel
-            run={displayTailEntryRun}
-            outlook={displayTailEntryOutlook}
-            loading={isTailEntryLoading}
-          />
         )}
 
         {summarySections.length > 0 && (

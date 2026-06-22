@@ -110,10 +110,11 @@ export function createTailEntryRun(input: {
   };
 }
 
-/** 旧记录无 tailEntryRun 字段时，从 fetchErrors 推断 */
+/** 旧记录无 tailEntryRun 字段时，从 fetchErrors / 摘要 markdown 推断 */
 export function inferTailEntryRun(
   fetchErrors: string[] | undefined,
   outlook?: TailEntryOutlook | null,
+  rotationSummary?: string | null,
 ): TailEntryRun | null {
   const line = fetchErrors?.find((item) => item.startsWith('tail-entry:'));
   if (outlook) {
@@ -127,6 +128,19 @@ export function inferTailEntryRun(
       outlook,
     });
   }
+  if (
+    !line &&
+    rotationSummary &&
+    (rotationSummary.includes('## 明日板块预判') ||
+      rotationSummary.includes('## 尾盘参考标的'))
+  ) {
+    return createTailEntryRun({
+      status: 'success',
+      message: '明日预判已生成，详见下方卡片或「市场解读」中的明日板块预判',
+      outlook: null,
+    });
+  }
+
   if (!line) return null;
 
   const detail = line.replace(/^tail-entry:\s*/, '').trim();

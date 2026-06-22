@@ -218,7 +218,11 @@ function mapScreeningRow(row: Record<string, unknown>): ScreeningSessionRecord {
     tailEntryOutlook: parseTailEntryOutlook(row.tail_entry_outlook),
     tailEntryRun:
       parseTailEntryRun(row.tail_entry_run) ??
-      inferTailEntryRun(undefined, parseTailEntryOutlook(row.tail_entry_outlook)),
+      inferTailEntryRun(
+        undefined,
+        parseTailEntryOutlook(row.tail_entry_outlook),
+        String(row.rotation_summary ?? ''),
+      ),
   };
 }
 

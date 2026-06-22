@@ -68,10 +68,13 @@ export function TailEntryOutlookPanel({
   run,
   outlook,
   loading = false,
+  rotationSummary,
 }: {
   run?: TailEntryRunView | null;
   outlook?: TailEntryOutlookView | null;
   loading?: boolean;
+  /** 无结构化卡片时，提示用户到市场解读查看 markdown */
+  rotationSummary?: string;
 }) {
   if (loading) {
     return (
@@ -95,6 +98,13 @@ export function TailEntryOutlookPanel({
     (outlook.sectorPicks.length > 0 ||
       outlook.topInflowStocks.length > 0 ||
       outlook.plans.length > 0);
+  const hasSummaryFallback =
+    !showData &&
+    Boolean(
+      rotationSummary &&
+        (rotationSummary.includes('## 明日板块预判') ||
+          rotationSummary.includes('## 尾盘参考标的')),
+    );
 
   return (
     <section className="pane-card insight-panel tail-entry-panel">
@@ -119,6 +129,12 @@ export function TailEntryOutlookPanel({
       {run.status === 'failed' && (
         <p className="muted">
           可稍后重试智能选股，或查看下方「市场解读」中的今日主线分析。
+        </p>
+      )}
+
+      {hasSummaryFallback && (
+        <p className="muted tail-entry-note">
+          结构化卡片暂无数据，请向下滚动查看「市场解读」中的「明日板块预判」「尾盘参考标的」章节。
         </p>
       )}
 

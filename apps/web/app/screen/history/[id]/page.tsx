@@ -9,6 +9,7 @@ import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { QualityBadge } from '@/components/ui/QualityBadge';
+import { resolveTailEntryDisplay } from '@/lib/tail-entry-display';
 
 type FeedbackSummary = {
   up: number;
@@ -207,6 +208,15 @@ export default function ScreeningHistoryDetailPage() {
       ? `自选股基准价起持有 ${backtest.holdDays} 个交易日，组合平均涨跌`
       : '自选股基准价至最新收盘，组合平均涨跌';
 
+  const resolvedTailEntry = session
+    ? resolveTailEntryDisplay({
+        run: session.tailEntryRun,
+        outlook: session.tailEntryOutlook ?? null,
+        rotationSummary: session.rotationSummary,
+        screenCompleted: true,
+      })
+    : { run: null, outlook: null };
+
   return (
     <main className="page">
       <p className="breadcrumb">
@@ -386,10 +396,11 @@ export default function ScreeningHistoryDetailPage() {
             )}
           </section>
 
-          {session.tailEntryRun && (
+          {resolvedTailEntry.run && (
             <TailEntryOutlookPanel
-              run={session.tailEntryRun}
-              outlook={session.tailEntryOutlook ?? null}
+              run={resolvedTailEntry.run}
+              outlook={resolvedTailEntry.outlook}
+              rotationSummary={session.rotationSummary}
             />
           )}
 
