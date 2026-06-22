@@ -65,7 +65,7 @@ export type TailEntryOutlookView = {
   }>;
   watchSignals: string[];
   avoidSectors: Array<{ name: string; reason: string }>;
-  dataSource: 'eastmoney';
+  dataSource: 'eastmoney' | 'iwencai';
 };
 
 export type TailEntryRunView = {

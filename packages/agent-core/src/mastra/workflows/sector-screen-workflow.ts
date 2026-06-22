@@ -170,7 +170,7 @@ const tailEntryOutlookSchema = z
         reason: z.string(),
       }),
     ),
-    dataSource: z.literal('eastmoney'),
+    dataSource: z.enum(['eastmoney', 'iwencai']),
   })
   .nullable();
 

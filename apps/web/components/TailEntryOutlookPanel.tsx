@@ -121,8 +121,8 @@ export function TailEntryOutlookPanel({
 
       {run.status !== 'skipped' && (
         <p className="muted tail-entry-note">
-          说明：问财「候选池」与东财「明日预判」是两条独立链路。候选池为空只表示问财未筛出
-          60/120 日趋势股，不代表明日预判未运行。
+          说明：问财「候选池」与「明日预判」是两条独立链路；数据优先东财实时接口，失败时自动改用问财
+          MCP。候选池为空只表示问财未筛出 60/120 日趋势股，不代表明日预判未运行。
         </p>
       )}
 

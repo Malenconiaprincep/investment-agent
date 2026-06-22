@@ -5,11 +5,17 @@ import {
 } from '../paper/trading-calendar.js';
 import { getCached, setCached } from './cache.js';
 import { freeFetchJson } from './free/http.js';
+import { isIwencaiMcpConfigured } from '../../mastra/mcp/iwencai.js';
+import {
+  fetchIwencaiBoardLeaderStocks,
+  fetchIwencaiConceptBoardRankings,
+  fetchIwencaiTopInflowStocks,
+} from './iwencai-tail-entry.js';
 
 const TTL_MS = 5 * 60 * 1000;
 const EM_UT = 'bd1d9ddb04089700cf9c0f827cacfc64';
 const EM_LIST_BASE =
-  'https://push2.eastmoney.com/api/qt/clist/get?np=1&fltt=2&invt=2&ut=' +
+  'https://push2delay.eastmoney.com/api/qt/clist/get?np=1&fltt=2&invt=2&ut=' +
   EM_UT;
 
 const AVOID_BOARD_PATTERN =
@@ -79,7 +85,7 @@ export type TailEntryOutlook = {
   plans: TailEntryPlan[];
   watchSignals: string[];
   avoidSectors: Array<{ name: string; reason: string }>;
-  dataSource: 'eastmoney';
+  dataSource: 'eastmoney' | 'iwencai';
 };
 
 export type TailEntryRunStatus = 'success' | 'failed' | 'skipped' | 'empty';
@@ -453,14 +459,33 @@ function buildWatchSignals(sectorPicks: TomorrowSectorPick[]): string[] {
 export async function buildTailEntryOutlook(
   input: BuildTailEntryOutlookInput = {},
 ): Promise<TailEntryOutlook> {
+  try {
+    return await buildTailEntryOutlookFromEastmoney(input);
+  } catch (eastmoneyError) {
+    if (!isIwencaiMcpConfigured()) {
+      throw eastmoneyError;
+    }
+    const detail =
+      eastmoneyError instanceof Error
+        ? eastmoneyError.message
+        : String(eastmoneyError);
+    console.warn(
+      `[tail-entry] 东财接口失败（${detail}），改用问财 MCP`,
+    );
+    return buildTailEntryOutlookFromIwencai(input);
+  }
+}
+
+async function assembleTailEntryOutlook(
+  input: BuildTailEntryOutlookInput,
+  boards: ConceptBoard[],
+  topInflowStocks: TailEntryStockPick[],
+  fetchBoardLeaders: (boardCode: string, limit: number) => Promise<TailEntryStockPick[]>,
+  dataSource: 'eastmoney' | 'iwencai',
+): Promise<TailEntryOutlook> {
   const hotThemes = input.hotThemes ?? [];
   const iwencaiSectors = input.sectorNames ?? [];
   const now = getBeijingNow();
-
-  const [boards, topInflowStocks] = await Promise.all([
-    fetchConceptBoardRankings(20),
-    fetchTopMainInflowStocks(10),
-  ]);
 
   const scored = boards
     .map((board) => {
@@ -483,7 +508,7 @@ export async function buildTailEntryOutlook(
 
   const sectorPicks: TomorrowSectorPick[] = [];
   for (const item of focusBoards) {
-    const leaders = await fetchBoardLeaderStocks(item.board.boardCode, 5);
+    const leaders = await fetchBoardLeaders(item.board.boardCode, 5);
     sectorPicks.push({
       boardCode: item.board.boardCode,
       name: item.board.name,
@@ -506,8 +531,46 @@ export async function buildTailEntryOutlook(
     plans: buildPlans(sectorPicks, topInflowStocks),
     watchSignals: buildWatchSignals(sectorPicks),
     avoidSectors,
-    dataSource: 'eastmoney',
+    dataSource,
   };
+}
+
+async function buildTailEntryOutlookFromEastmoney(
+  input: BuildTailEntryOutlookInput = {},
+): Promise<TailEntryOutlook> {
+  const [boards, topInflowStocks] = await Promise.all([
+    fetchConceptBoardRankings(20),
+    fetchTopMainInflowStocks(10),
+  ]);
+
+  return assembleTailEntryOutlook(
+    input,
+    boards,
+    topInflowStocks,
+    fetchBoardLeaderStocks,
+    'eastmoney',
+  );
+}
+
+async function buildTailEntryOutlookFromIwencai(
+  input: BuildTailEntryOutlookInput = {},
+): Promise<TailEntryOutlook> {
+  const [boards, topInflowStocks] = await Promise.all([
+    fetchIwencaiConceptBoardRankings(20),
+    fetchIwencaiTopInflowStocks(10),
+  ]);
+
+  if (boards.length === 0 && topInflowStocks.length === 0) {
+    throw new Error('问财 MCP 未返回板块或个股数据');
+  }
+
+  return assembleTailEntryOutlook(
+    input,
+    boards,
+    topInflowStocks,
+    (boardCode, limit) => fetchIwencaiBoardLeaderStocks(boardCode, limit),
+    'iwencai',
+  );
 }
 
 function priorityLabel(priority: TailEntryPriority, stars: number): string {
@@ -597,7 +660,9 @@ export function formatTailEntryOutlookMarkdown(outlook: TailEntryOutlook): strin
     lines.push(`1. ${signal}`);
   }
   lines.push('');
-  lines.push('数据来源：eastmoney（概念板块涨跌幅、主力资金流向）');
+  lines.push(
+    `数据来源：${outlook.dataSource === 'iwencai' ? '问财 MCP' : 'eastmoney'}（概念板块涨跌幅、主力资金流向）`,
+  );
 
   return lines.join('\n');
 }

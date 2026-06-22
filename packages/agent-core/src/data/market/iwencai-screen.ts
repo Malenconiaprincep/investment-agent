@@ -34,12 +34,12 @@ function walkValues(node: unknown, out: unknown[]): void {
   }
 }
 
-function extractSymbol(text: string): string | null {
+export function extractSymbol(text: string): string | null {
   const match = text.match(/\b([036]\d{5})\b/);
   return match?.[1] ?? null;
 }
 
-function pickName(obj: Record<string, unknown>): string | null {
+export function pickName(obj: Record<string, unknown>): string | null {
   for (const key of [
     'name',
     'stock_name',
@@ -58,7 +58,7 @@ function pickName(obj: Record<string, unknown>): string | null {
   return null;
 }
 
-function rowsFromQuery2Data(data: unknown): Record<string, unknown>[] {
+export function rowsFromQuery2Data(data: unknown): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
   if (!data || typeof data !== 'object') return rows;
 
