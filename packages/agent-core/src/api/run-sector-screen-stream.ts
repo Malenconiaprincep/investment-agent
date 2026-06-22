@@ -9,7 +9,12 @@ import {
   emitScreenStreamEvent,
   withScreenStreamEmitter,
 } from './screen-stream-context.js';
-import type { ScreenStreamEvent, ScreeningStreamCandidate } from './screen-stream-types.js';
+import type {
+  ScreenStreamEvent,
+  ScreeningStreamCandidate,
+  TailEntryOutlookView,
+  TailEntryRunView,
+} from './screen-stream-types.js';
 
 export type { ScreenStreamEvent } from './screen-stream-types.js';
 
@@ -20,6 +25,7 @@ const STEP_LABELS: Record<string, string> = {
   'enrich-basics': '补充信息',
   'scan-diamonds': '钻石信号检测',
   'score-factors': '因子打分',
+  'build-tail-entry-outlook': '明日预判',
   summarize: '生成摘要',
   'quality-check': '核对结果',
 };
@@ -70,6 +76,24 @@ function mapWorkflowChunk(chunk: WorkflowStreamEvent): ScreenStreamEvent[] {
         type: 'candidates',
         candidates,
         diamondPicks: (output.diamondPicks as ScreeningStreamCandidate[]) ?? [],
+      });
+    }
+    if (
+      chunk.payload.id === 'build-tail-entry-outlook' &&
+      output?.tailEntryRun
+    ) {
+      events.push({
+        type: 'tailEntryRun',
+        run: output.tailEntryRun as TailEntryRunView,
+      });
+    }
+    if (
+      chunk.payload.id === 'build-tail-entry-outlook' &&
+      output?.tailEntryOutlook
+    ) {
+      events.push({
+        type: 'tailEntryOutlook',
+        outlook: output.tailEntryOutlook as TailEntryOutlookView,
       });
     }
   }
@@ -125,6 +149,8 @@ export async function runSectorScreenStream(
         fetchErrors: output.fetchErrors ?? [],
         elapsedMs,
         sessionId: saved.id,
+        tailEntryOutlook: output.tailEntryOutlook ?? null,
+        tailEntryRun: output.tailEntryRun ?? null,
       });
 
       return { ...output, sessionId: saved.id };

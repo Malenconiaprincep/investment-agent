@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
+import { TailEntryOutlookPanel } from '@/components/TailEntryOutlookPanel';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
@@ -32,6 +33,51 @@ type ScreeningDetail = {
   passed: boolean;
   elapsedMs: number | null;
   createdAt: string;
+  tailEntryOutlook?: {
+    tradeDate: string;
+    nextTradeDate: string;
+    sectorPicks: Array<{
+      name: string;
+      pctChg: number;
+      netInflowYi: number;
+      priorityStars: number;
+      logic: string;
+      leaders: Array<{
+        symbol: string;
+        name: string;
+        pctChg: number;
+        netInflowWan: number;
+        tierLabel: string;
+        logic: string;
+        riskNote?: string;
+      }>;
+    }>;
+    topInflowStocks: Array<{
+      symbol: string;
+      name: string;
+      pctChg: number;
+      netInflowWan: number;
+      tierLabel: string;
+      logic: string;
+      riskNote?: string;
+    }>;
+    plans: Array<{
+      label: string;
+      sectors: string[];
+      symbols: string[];
+      note: string;
+    }>;
+    watchSignals: string[];
+    avoidSectors: Array<{ name: string; reason: string }>;
+  } | null;
+  tailEntryRun?: {
+    status: 'success' | 'failed' | 'skipped' | 'empty';
+    message: string;
+    sectorCount: number;
+    stockCount: number;
+    nextTradeDate?: string;
+    ranAt: string;
+  } | null;
   feedback?: FeedbackSummary;
   committee: {
     id: string;
@@ -339,6 +385,13 @@ export default function ScreeningHistoryDetailPage() {
               </>
             )}
           </section>
+
+          {session.tailEntryRun && (
+            <TailEntryOutlookPanel
+              run={session.tailEntryRun}
+              outlook={session.tailEntryOutlook ?? null}
+            />
+          )}
 
           {session.rotationSummary && (
             <section className="section">

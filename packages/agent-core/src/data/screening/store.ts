@@ -1,5 +1,7 @@
 import { createClient, type Client } from '@libsql/client';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
+import type { TailEntryOutlook, TailEntryRun } from '../market/tail-entry-outlook.js';
+import { inferTailEntryRun } from '../market/tail-entry-outlook.js';
 
 export type HotNewsItem = {
   title: string;
@@ -31,6 +33,8 @@ export type ScreeningSessionRecord = {
   passed: boolean;
   elapsedMs: number | null;
   createdAt: string;
+  tailEntryOutlook?: TailEntryOutlook | null;
+  tailEntryRun?: TailEntryRun | null;
 };
 
 export type ScreeningSessionSummary = Omit<
@@ -84,6 +88,8 @@ export type SaveScreeningInput = {
   passed: boolean;
   screenedAt: string;
   elapsedMs?: number;
+  tailEntryOutlook?: TailEntryOutlook | null;
+  tailEntryRun?: TailEntryRun | null;
 };
 
 export type ListScreeningSessionsOptions = {
@@ -148,6 +154,8 @@ async function ensureScreeningSessionColumns(db: Client) {
     `ALTER TABLE screening_sessions ADD COLUMN hot_news TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE screening_sessions ADD COLUMN hot_themes TEXT NOT NULL DEFAULT '[]'`,
     `ALTER TABLE screening_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'`,
+    `ALTER TABLE screening_sessions ADD COLUMN tail_entry_outlook TEXT NOT NULL DEFAULT 'null'`,
+    `ALTER TABLE screening_sessions ADD COLUMN tail_entry_run TEXT NOT NULL DEFAULT 'null'`,
   ];
   for (const sql of alters) {
     try {
@@ -171,6 +179,26 @@ async function ensureCommitteeSessionColumns(db: Client) {
   }
 }
 
+function parseTailEntryOutlook(raw: unknown): TailEntryOutlook | null {
+  if (raw == null || raw === 'null' || raw === '') return null;
+  try {
+    const parsed = JSON.parse(String(raw)) as TailEntryOutlook | null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseTailEntryRun(raw: unknown): TailEntryRun | null {
+  if (raw == null || raw === 'null' || raw === '') return null;
+  try {
+    const parsed = JSON.parse(String(raw)) as TailEntryRun | null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function mapScreeningRow(row: Record<string, unknown>): ScreeningSessionRecord {
   return {
     id: String(row.id),
@@ -187,6 +215,10 @@ function mapScreeningRow(row: Record<string, unknown>): ScreeningSessionRecord {
     elapsedMs:
       row.elapsed_ms == null ? null : Number(row.elapsed_ms),
     createdAt: String(row.created_at),
+    tailEntryOutlook: parseTailEntryOutlook(row.tail_entry_outlook),
+    tailEntryRun:
+      parseTailEntryRun(row.tail_entry_run) ??
+      inferTailEntryRun(undefined, parseTailEntryOutlook(row.tail_entry_outlook)),
   };
 }
 
@@ -220,8 +252,8 @@ export async function saveScreeningSession(
   await db.execute({
     sql: `INSERT INTO screening_sessions (
       id, query, sectors, candidates, rotation_summary,
-      hot_news, hot_themes, mode, passed, elapsed_ms, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      hot_news, hot_themes, mode, passed, elapsed_ms, created_at, tail_entry_outlook, tail_entry_run
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.query,
@@ -234,6 +266,8 @@ export async function saveScreeningSession(
       input.passed ? 1 : 0,
       input.elapsedMs ?? null,
       createdAt,
+      JSON.stringify(input.tailEntryOutlook ?? null),
+      JSON.stringify(input.tailEntryRun ?? null),
     ],
   });
 
@@ -249,6 +283,8 @@ export async function saveScreeningSession(
     passed: input.passed,
     elapsedMs: input.elapsedMs ?? null,
     createdAt,
+    tailEntryOutlook: input.tailEntryOutlook ?? null,
+    tailEntryRun: input.tailEntryRun ?? null,
   };
 }
 

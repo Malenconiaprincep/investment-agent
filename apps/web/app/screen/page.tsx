@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import { TailEntryOutlookPanel } from '@/components/TailEntryOutlookPanel';
 import { CommitteeTradePanel, type CommitteeTradePlanView } from '@/components/CommitteeTradePanel';
 import { StockKlineChart } from '@/components/charts/StockKlineChart';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
@@ -44,6 +45,53 @@ type Candidate = {
   } | null;
 };
 type HotNewsItem = { title: string; datetime: string; url: string | null };
+
+type TailEntryOutlook = {
+  tradeDate: string;
+  nextTradeDate: string;
+  sectorPicks: Array<{
+    name: string;
+    pctChg: number;
+    netInflowYi: number;
+    priorityStars: number;
+    logic: string;
+    leaders: Array<{
+      symbol: string;
+      name: string;
+      pctChg: number;
+      netInflowWan: number;
+      tierLabel: string;
+      logic: string;
+      riskNote?: string;
+    }>;
+  }>;
+  topInflowStocks: Array<{
+    symbol: string;
+    name: string;
+    pctChg: number;
+    netInflowWan: number;
+    tierLabel: string;
+    logic: string;
+    riskNote?: string;
+  }>;
+  plans: Array<{
+    label: string;
+    sectors: string[];
+    symbols: string[];
+    note: string;
+  }>;
+  watchSignals: string[];
+  avoidSectors: Array<{ name: string; reason: string }>;
+};
+
+type TailEntryRun = {
+  status: 'success' | 'failed' | 'skipped' | 'empty';
+  message: string;
+  sectorCount: number;
+  stockCount: number;
+  nextTradeDate?: string;
+  ranAt: string;
+};
 
 function formatNewsTime(isoOrLocal: string): string {
   const ts = Date.parse(isoOrLocal);
@@ -106,6 +154,8 @@ type ScreenResult = {
   elapsedMs: number;
   asOfDate?: string;
   fetchErrors?: string[];
+  tailEntryOutlook?: TailEntryOutlook | null;
+  tailEntryRun?: TailEntryRun | null;
 };
 
 type CommitteeResult = {
@@ -128,6 +178,8 @@ type ScreenStreamEvent =
     }
   | { type: 'sectors'; sectors: Sector[] }
   | { type: 'candidates'; candidates: Candidate[]; diamondPicks: Candidate[] }
+  | { type: 'tailEntryOutlook'; outlook: TailEntryOutlook }
+  | { type: 'tailEntryRun'; run: TailEntryRun }
   | {
       type: 'done';
       query: string;
@@ -145,6 +197,8 @@ type ScreenStreamEvent =
       elapsedMs: number;
       asOfDate?: string;
       fetchErrors: string[];
+      tailEntryOutlook?: TailEntryOutlook | null;
+      tailEntryRun?: TailEntryRun | null;
     }
   | { type: 'error'; message: string };
 
@@ -170,6 +224,7 @@ const SCREEN_STEPS = [
   '补充信息',
   '钻石信号检测',
   '因子打分',
+  '明日预判',
   '生成摘要',
   '核对结果',
 ];
@@ -199,6 +254,10 @@ function ScreenPageContent() {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [diamondPicks, setDiamondPicks] = useState<Candidate[]>([]);
+  const [tailEntryOutlook, setTailEntryOutlook] = useState<TailEntryOutlook | null>(
+    null,
+  );
+  const [tailEntryRun, setTailEntryRun] = useState<TailEntryRun | null>(null);
   const [screenResult, setScreenResult] = useState<ScreenResult | null>(null);
   const [committeeResult, setCommitteeResult] = useState<CommitteeResult | null>(
     null,
@@ -232,6 +291,8 @@ function ScreenPageContent() {
     setSectors([]);
     setCandidates([]);
     setDiamondPicks([]);
+    setTailEntryOutlook(null);
+    setTailEntryRun(null);
     setHotNews([]);
     setAutoQuery(null);
     setStreamingSummary('');
@@ -272,6 +333,12 @@ function ScreenPageContent() {
           setCandidates(event.candidates);
           setDiamondPicks(event.diamondPicks);
         }
+        if (event.type === 'tailEntryOutlook') {
+          setTailEntryOutlook(event.outlook);
+        }
+        if (event.type === 'tailEntryRun') {
+          setTailEntryRun(event.run);
+        }
         if (event.type === 'token') {
           summary += event.text;
           setStreamingSummary(summary);
@@ -293,8 +360,12 @@ function ScreenPageContent() {
             elapsedMs: event.elapsedMs,
             asOfDate: event.asOfDate,
             fetchErrors: event.fetchErrors,
+            tailEntryOutlook: event.tailEntryOutlook ?? null,
+            tailEntryRun: event.tailEntryRun ?? null,
           };
           setScreenResult(finalResult);
+          setTailEntryOutlook(event.tailEntryOutlook ?? null);
+          setTailEntryRun(event.tailEntryRun ?? null);
           setHotNews(event.hotNews);
           setAutoQuery(event.query);
           setSectors(event.sectors);
@@ -430,6 +501,10 @@ function ScreenPageContent() {
   const displayHotNews = screenResult?.hotNews ?? hotNews;
   const displayQuery = screenResult?.query ?? autoQuery;
   const displayDiamondPicks = screenResult?.diamondPicks ?? diamondPicks;
+  const displayTailEntryOutlook =
+    screenResult?.tailEntryOutlook ?? tailEntryOutlook;
+  const displayTailEntryRun = screenResult?.tailEntryRun ?? tailEntryRun;
+  const isTailEntryLoading = loading && currentStep === '明日预判';
 
   const isScreenActive = loading && !screenResult;
   const isCommitteeActive = committeeLoading && !committeeResult;
@@ -438,7 +513,7 @@ function ScreenPageContent() {
     <main className="page page--screen">
       <PageHeader
         title="智能选股"
-        description={`主线趋势选股：从近 ${lookbackDays} 日热点中识别市场主线，筛选契合主线且具备 60/120 日趋势性收益的标的，适合低频持有、少操作。`}
+        description={`主线趋势选股：从近 ${lookbackDays} 日热点中识别市场主线，筛选契合主线且具备 60/120 日趋势性收益的标的；收盘前还会自动生成明日板块预判与尾盘参考。`}
       />
 
       <div className="screen-stack">
@@ -581,6 +656,14 @@ function ScreenPageContent() {
               </section>
             )}
           </div>
+        )}
+
+        {(isTailEntryLoading || displayTailEntryRun) && (
+          <TailEntryOutlookPanel
+            run={displayTailEntryRun}
+            outlook={displayTailEntryOutlook}
+            loading={isTailEntryLoading}
+          />
         )}
 
         {summarySections.length > 0 && (

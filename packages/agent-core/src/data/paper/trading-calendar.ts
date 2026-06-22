@@ -11,6 +11,16 @@ export function formatTradeDate(date: Date = getBeijingNow()): string {
   return `${y}-${m}-${d}`;
 }
 
+/** 跳过周末，得到下一个自然工作日（不含法定节假日） */
+export function getNextTradeDateLabel(from: Date = getBeijingNow()): string {
+  const next = new Date(from);
+  next.setDate(next.getDate() + 1);
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next.setDate(next.getDate() + 1);
+  }
+  return formatTradeDate(next);
+}
+
 export function isWeekday(date: Date = getBeijingNow()): boolean {
   const day = date.getDay();
   return day >= 1 && day <= 5;

@@ -315,6 +315,93 @@ a:hover {
   font-size: 0.8125rem;
 }
 
+.tail-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.tail-entry-head .section-title {
+  margin-bottom: 0;
+}
+
+.tail-entry-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tail-entry-status--loading {
+  color: var(--muted);
+  padding: 0;
+  border-radius: 0;
+  font-weight: 400;
+}
+
+.tail-entry-status--success {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.tail-entry-status--empty {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.tail-entry-status--failed {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+.tail-entry-status--skipped {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.tail-entry-message {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.tail-entry-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+.tail-entry-panel .insight-block-title {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.tail-entry-stock-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.tail-entry-stock-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.tail-entry-risk {
+  color: #b45309;
+  font-size: 0.85rem;
+}
+
 .news-item-time {
   display: block;
   margin-top: 0.2rem;

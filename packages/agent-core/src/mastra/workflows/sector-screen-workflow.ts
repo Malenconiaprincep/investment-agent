@@ -23,6 +23,14 @@ import {
   formatFactorThesis,
   scoreAndRankCandidates,
 } from '../../data/screening/factor-score.js';
+import {
+  buildTailEntryOutlook,
+  createTailEntryRun,
+  formatTailEntryOutlookMarkdown,
+  mergeTailEntryOutlookIntoSummary,
+  type TailEntryOutlook,
+  type TailEntryRun,
+} from '../../data/market/tail-entry-outlook.js';
 
 const workflowInputSchema = z.object({
   /** 可选；留空则根据热门新闻 + 板块自动选股 */
@@ -115,6 +123,67 @@ const candidateSchema = z.object({
   diamond: candidateDiamondSchema,
   factorScore: factorScoreSchema,
 });
+
+const tailEntryStockPickSchema = z.object({
+  symbol: z.string(),
+  name: z.string(),
+  pctChg: z.number(),
+  netInflowWan: z.number(),
+  tier: z.enum(['first', 'second', 'speculative']),
+  tierLabel: z.string(),
+  logic: z.string(),
+  riskNote: z.string().optional(),
+});
+
+const tailEntryOutlookSchema = z
+  .object({
+    tradeDate: z.string(),
+    nextTradeDate: z.string(),
+    generatedAt: z.string(),
+    hotThemes: z.array(z.string()),
+    sectorPicks: z.array(
+      z.object({
+        boardCode: z.string(),
+        name: z.string(),
+        pctChg: z.number(),
+        netInflowYi: z.number(),
+        priority: z.enum(['high', 'medium', 'low', 'avoid']),
+        priorityStars: z.number(),
+        logic: z.string(),
+        leaders: z.array(tailEntryStockPickSchema),
+      }),
+    ),
+    topInflowStocks: z.array(tailEntryStockPickSchema),
+    plans: z.array(
+      z.object({
+        id: z.enum(['conservative', 'aggressive', 'speculative']),
+        label: z.string(),
+        sectors: z.array(z.string()),
+        symbols: z.array(z.string()),
+        note: z.string(),
+      }),
+    ),
+    watchSignals: z.array(z.string()),
+    avoidSectors: z.array(
+      z.object({
+        name: z.string(),
+        reason: z.string(),
+      }),
+    ),
+    dataSource: z.literal('eastmoney'),
+  })
+  .nullable();
+
+const tailEntryRunSchema = z
+  .object({
+    status: z.enum(['success', 'failed', 'skipped', 'empty']),
+    message: z.string(),
+    sectorCount: z.number(),
+    stockCount: z.number(),
+    nextTradeDate: z.string().optional(),
+    ranAt: z.string(),
+  })
+  .nullable();
 
 const discoverHotMarketStep = createStep({
   id: 'discover-hot-market',
@@ -462,6 +531,86 @@ const scoreFactorsStep = createStep({
   },
 });
 
+const buildTailEntryOutlookStep = createStep({
+  id: 'build-tail-entry-outlook',
+  description: '东财实时板块 + 资金流向，生成明日预判与尾盘参考',
+  inputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+  }),
+  outputSchema: z.object({
+    parsed: parsedQuerySchema,
+    sectors: z.array(sectorSchema),
+    candidates: z.array(candidateSchema),
+    diamondPicks: z.array(candidateSchema),
+    industrySummary: z.string().nullable(),
+    fetchErrors: z.array(z.string()),
+    bundle: z.unknown(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
+  }),
+  execute: async ({ inputData }) => {
+    const fetchErrors = [...inputData.fetchErrors];
+
+    if (inputData.parsed.asOfDate) {
+      const tailEntryRun = createTailEntryRun({
+        status: 'skipped',
+        message: '历史回放模式不生成明日预判',
+      });
+      emitScreenStreamEvent({ type: 'tailEntryRun', run: tailEntryRun });
+      return { ...inputData, tailEntryOutlook: null, tailEntryRun, fetchErrors };
+    }
+
+    try {
+      const tailEntryOutlook = await buildTailEntryOutlook({
+        hotThemes: inputData.parsed.hotThemes,
+        sectorNames: inputData.sectors.map((sector) => sector.name),
+        candidateSymbols: inputData.candidates.map((candidate) => candidate.symbol),
+      });
+
+      const hasData =
+        tailEntryOutlook.sectorPicks.length > 0 ||
+        tailEntryOutlook.topInflowStocks.length > 0;
+      const tailEntryRun = createTailEntryRun({
+        status: hasData ? 'success' : 'empty',
+        message: hasData
+          ? `已生成 ${tailEntryOutlook.sectorPicks.length} 个优先板块、${tailEntryOutlook.topInflowStocks.length} 只净流入龙头`
+          : '明日预判已执行，但东财未返回符合条件的板块或标的',
+        outlook: tailEntryOutlook,
+      });
+
+      fetchErrors.push(`tail-entry: ${tailEntryRun.message}`);
+
+      emitScreenStreamEvent({
+        type: 'tailEntryOutlook',
+        outlook: tailEntryOutlook,
+      });
+      emitScreenStreamEvent({ type: 'tailEntryRun', run: tailEntryRun });
+
+      return { ...inputData, tailEntryOutlook, tailEntryRun, fetchErrors };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const tailEntryRun = createTailEntryRun({
+        status: 'failed',
+        message: `明日预判已执行，但东财数据拉取失败：${detail}`,
+      });
+      fetchErrors.push(`tail-entry: ${tailEntryRun.message}`);
+      emitScreenStreamEvent({ type: 'tailEntryRun', run: tailEntryRun });
+      return {
+        ...inputData,
+        tailEntryOutlook: null,
+        tailEntryRun,
+        fetchErrors,
+      };
+    }
+  },
+});
+
 const summarizeStep = createStep({
   id: 'summarize',
   description: '板块轮动 Agent 生成摘要',
@@ -473,6 +622,8 @@ const summarizeStep = createStep({
     industrySummary: z.string().nullable(),
     fetchErrors: z.array(z.string()),
     bundle: z.unknown(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
   }),
   outputSchema: z.object({
     query: z.string(),
@@ -487,9 +638,14 @@ const summarizeStep = createStep({
     mode: z.enum(['auto', 'manual']),
     lookbackDays: z.number(),
     asOfDate: z.string().optional(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
   }),
   execute: async ({ inputData, mastra }) => {
     const agent = mastra.getAgent('sectorRotationAgent');
+    const tailEntryBlock = inputData.tailEntryOutlook
+      ? `\n=== 明日尾盘参考（东财结构化，系统将自动写入摘要） ===\n${JSON.stringify(inputData.tailEntryOutlook, null, 2)}\n`
+      : '';
     const prompt = `请根据以下问财板块/选股结果撰写板块轮动 Markdown 摘要。
 
 选股模式：${inputData.parsed.mode === 'auto' ? '主线趋势选股（热点主线+趋势性收益）' : '用户指定主题'}
@@ -511,10 +667,11 @@ ${JSON.stringify(inputData.diamondPicks, null, 2)}
 
 === 行业背景 ===
 ${inputData.industrySummary ?? '无'}
-
+${tailEntryBlock}
 === 采数异常 ===
 ${JSON.stringify(inputData.fetchErrors, null, 2)}
 
+说明：「明日板块预判」「尾盘参考标的」由系统根据东财数据自动生成并附加，你只需完成今日主线解读即可。
 必须在文末包含「免责声明：本内容不构成投资建议」。`;
 
     const stream = await agent.stream(prompt);
@@ -544,6 +701,21 @@ iwencai / eastmoney
 免责声明：本内容不构成投资建议。`;
     }
 
+    if (
+      inputData.tailEntryOutlook &&
+      !rotationSummary.includes('## 明日板块预判')
+    ) {
+      emitScreenStreamEvent({
+        type: 'token',
+        text: `\n\n${formatTailEntryOutlookMarkdown(inputData.tailEntryOutlook)}`,
+      });
+    }
+
+    rotationSummary = mergeTailEntryOutlookIntoSummary(
+      rotationSummary,
+      inputData.tailEntryOutlook,
+    );
+
     return {
       query: inputData.parsed.query,
       sectors: inputData.sectors,
@@ -557,6 +729,8 @@ iwencai / eastmoney
       mode: inputData.parsed.mode,
       lookbackDays: inputData.parsed.lookbackDays,
       asOfDate: inputData.parsed.asOfDate,
+      tailEntryOutlook: inputData.tailEntryOutlook,
+      tailEntryRun: inputData.tailEntryRun,
     };
   },
 });
@@ -577,6 +751,8 @@ const qualityCheckStep = createStep({
     mode: z.enum(['auto', 'manual']),
     lookbackDays: z.number(),
     asOfDate: z.string().optional(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
   }),
   outputSchema: z.object({
     query: z.string(),
@@ -594,6 +770,8 @@ const qualityCheckStep = createStep({
     screenedAt: z.string(),
     lookbackDays: z.number(),
     asOfDate: z.string().optional(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
   }),
   execute: async ({ inputData }) => {
     const quality = checkSectorScreenQuality(inputData);
@@ -612,7 +790,7 @@ const qualityCheckStep = createStep({
 
 export const sectorScreenWorkflow = createWorkflow({
   id: 'sector-screen-workflow',
-  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 钻石 → 因子打分 → 摘要',
+  description: '板块轮动选股：问财选板块 → 选股 → 补全 → 钻石 → 因子打分 → 明日预判 → 摘要',
   inputSchema: workflowInputSchema,
   outputSchema: z.object({
     query: z.string(),
@@ -629,6 +807,8 @@ export const sectorScreenWorkflow = createWorkflow({
     missingKeywords: z.array(z.string()),
     screenedAt: z.string(),
     asOfDate: z.string().optional(),
+    tailEntryOutlook: tailEntryOutlookSchema,
+    tailEntryRun: tailEntryRunSchema,
   }),
 })
   .then(discoverHotMarketStep)
@@ -637,6 +817,7 @@ export const sectorScreenWorkflow = createWorkflow({
   .then(enrichBasicsStep)
   .then(scanDiamondsStep)
   .then(scoreFactorsStep)
+  .then(buildTailEntryOutlookStep)
   .then(summarizeStep)
   .then(qualityCheckStep)
   .commit();
@@ -680,4 +861,6 @@ export type SectorScreenWorkflowOutput = {
   missingSections: string[];
   missingKeywords: string[];
   screenedAt: string;
+  tailEntryOutlook?: TailEntryOutlook | null;
+  tailEntryRun?: TailEntryRun | null;
 };

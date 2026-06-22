@@ -19,6 +19,7 @@ export const sectorRotationAgent = new Agent({
   ## 主线板块解读
   ## 候选池说明（须说明主线契合度与 60/120 日趋势）
   ## 数据来源
+- 「明日板块预判」「尾盘参考标的」由系统根据东财实时数据自动生成，你无需重复撰写
 - 数据来源须标注 iwencai / eastmoney
 - 不提供买卖建议，只做研究辅助`,
   model: DEFAULT_MODEL,

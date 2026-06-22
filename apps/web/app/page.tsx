@@ -176,7 +176,7 @@ export default function HomePage() {
             <Link href="/screen" className="dashboard-tile">
               <h2 className="dashboard-tile-title">智能选股</h2>
               <p className="dashboard-tile-desc">
-                扫描今日热点与强势板块，自动筛出候选股。
+                扫描今日热点与强势板块，自动筛出候选股，并给出明日板块预判与尾盘参考。
               </p>
             </Link>
             <Link href="/watchlist" className="dashboard-tile">

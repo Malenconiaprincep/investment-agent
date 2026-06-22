@@ -29,6 +29,54 @@ export type ScreeningStreamCandidate = {
   factorScore?: ScreeningCandidateFactor | null;
 };
 
+export type TailEntryStockPickView = {
+  symbol: string;
+  name: string;
+  pctChg: number;
+  netInflowWan: number;
+  tier: 'first' | 'second' | 'speculative';
+  tierLabel: string;
+  logic: string;
+  riskNote?: string;
+};
+
+export type TailEntryOutlookView = {
+  tradeDate: string;
+  nextTradeDate: string;
+  generatedAt: string;
+  hotThemes: string[];
+  sectorPicks: Array<{
+    boardCode: string;
+    name: string;
+    pctChg: number;
+    netInflowYi: number;
+    priority: 'high' | 'medium' | 'low' | 'avoid';
+    priorityStars: number;
+    logic: string;
+    leaders: TailEntryStockPickView[];
+  }>;
+  topInflowStocks: TailEntryStockPickView[];
+  plans: Array<{
+    id: 'conservative' | 'aggressive' | 'speculative';
+    label: string;
+    sectors: string[];
+    symbols: string[];
+    note: string;
+  }>;
+  watchSignals: string[];
+  avoidSectors: Array<{ name: string; reason: string }>;
+  dataSource: 'eastmoney';
+};
+
+export type TailEntryRunView = {
+  status: 'success' | 'failed' | 'skipped' | 'empty';
+  message: string;
+  sectorCount: number;
+  stockCount: number;
+  nextTradeDate?: string;
+  ranAt: string;
+};
+
 export type ScreenStreamEvent =
   | { type: 'step'; step: string; label: string }
   | { type: 'token'; text: string }
@@ -48,6 +96,8 @@ export type ScreenStreamEvent =
       candidates: ScreeningStreamCandidate[];
       diamondPicks: ScreeningStreamCandidate[];
     }
+  | { type: 'tailEntryOutlook'; outlook: TailEntryOutlookView }
+  | { type: 'tailEntryRun'; run: TailEntryRunView }
   | {
       type: 'done';
       query: string;
@@ -66,5 +116,7 @@ export type ScreenStreamEvent =
       sessionId: string;
       asOfDate?: string;
       fetchErrors: string[];
+      tailEntryOutlook?: TailEntryOutlookView | null;
+      tailEntryRun?: TailEntryRunView | null;
     }
   | { type: 'error'; message: string };
