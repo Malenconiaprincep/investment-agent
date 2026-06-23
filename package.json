@@ -19,6 +19,8 @@
     "agent:serve": "pnpm --filter @investment-agent/agent-core serve",
     "dev:all": "pnpm agent:serve & pnpm web:dev",
     "setup:iwencai": "pnpm --filter @investment-agent/agent-core setup:iwencai",
+    "monitor:poll": "pnpm --filter @investment-agent/agent-core monitor:poll",
+    "monitor:watch": "pnpm --filter @investment-agent/agent-core monitor:watch",
     "watchlist:snapshot": "pnpm --filter @investment-agent/agent-core watchlist:snapshot",
     "watchlist:weekly": "pnpm --filter @investment-agent/agent-core watchlist:weekly",
     "paper:schedule": "pnpm --filter @investment-agent/agent-core paper:schedule",

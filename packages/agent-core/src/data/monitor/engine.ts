@@ -1,0 +1,464 @@
+import {
+  extractThemesFromNews,
+  fetchHotNews,
+  isNoiseNewsTitle,
+  normalizeHotNewsKey,
+  pickNewsForThemes,
+  rankHotNews,
+  type HotNewsItem,
+} from '../market/hot-market-discovery.js';
+import { fetchIntradayQuotes, type IntradayQuote } from '../market/free/intraday-quote.js';
+import { extractSymbolsFromText } from '../market/news-enrichment.js';
+import { getDailyQuote } from '../market/services.js';
+import {
+  formatTradeDate,
+  getBeijingNow,
+  isTradingSession,
+  isWeekday,
+  TRADING_HOURS_LABEL,
+} from '../paper/trading-calendar.js';
+import { listWatchlistItems } from '../watchlist/store.js';
+import {
+  filterUnseenNews,
+  hasRecentAlert,
+  markNewsSeen,
+  saveMonitorAlert,
+  saveMonitorPollRun,
+  type MonitorAlertSeverity,
+  type MonitorAlertType,
+} from './store.js';
+
+export type MonitorPollResult = {
+  tradeDate: string;
+  marketOpen: boolean;
+  newsCount: number;
+  newNewsCount: number;
+  alertsCreated: number;
+  symbolsScanned: number;
+  alerts: Awaited<ReturnType<typeof saveMonitorAlert>>[];
+  hotNews: HotNewsItem[];
+  newNews: HotNewsItem[];
+  hotThemes: string[];
+  elapsedMs: number;
+  summary: string;
+};
+
+type SymbolContext = {
+  symbol: string;
+  name: string;
+  quote: IntradayQuote | null;
+  ret20dPct: number | null;
+  newsItems: HotNewsItem[];
+  themes: string[];
+  inWatchlist: boolean;
+};
+
+const NON_A_SHARE_PATTERN =
+  /港股|韩股|美股|欧股|日本|泰国|新加坡|SpaceX|期货|汇率|债券|央行|联合国/i;
+
+function isAShareRelevant(text: string): boolean {
+  if (NON_A_SHARE_PATTERN.test(text)) return false;
+  return /A股|沪深|创业板|科创板|涨停|板块|概念|[\d]{6}/.test(text) || !/股/.test(text);
+}
+
+function isLimitUp(pctChg: number, symbol: string): boolean {
+  const limit = symbol.startsWith('3') || symbol.startsWith('68') ? 19.5 : 9.5;
+  return pctChg >= limit;
+}
+
+function matchThemeInText(text: string, themes: string[]): string | null {
+  const lower = text.toLowerCase();
+  for (const theme of themes) {
+    const keyword = theme.replace(/概念|板块/g, '').trim();
+    if (keyword.length >= 2 && lower.includes(keyword.toLowerCase())) {
+      return theme;
+    }
+  }
+  return null;
+}
+
+async function calcRet20d(symbol: string): Promise<number | null> {
+  try {
+    const data = await getDailyQuote(symbol, 30);
+    const bars = data.quotes.filter((q) => q.close != null);
+    if (bars.length <= 20) return null;
+    const latest = bars[0].close!;
+    const base = bars[20].close!;
+    if (base === 0) return null;
+    return Number((((latest - base) / base) * 100).toFixed(2));
+  } catch {
+    return null;
+  }
+}
+
+async function buildSymbolContexts(input: {
+  symbols: Map<string, { name: string; news: HotNewsItem[]; inWatchlist: boolean }>;
+  quotes: Map<string, IntradayQuote>;
+  hotThemes: string[];
+}): Promise<SymbolContext[]> {
+  const contexts: SymbolContext[] = [];
+
+  for (const [symbol, meta] of input.symbols) {
+    const quote = input.quotes.get(symbol) ?? null;
+    const ret20dPct = await calcRet20d(symbol);
+    const themes = input.hotThemes.filter(
+      (theme) =>
+        meta.news.some((n) => matchThemeInText(n.title, [theme])) ||
+        matchThemeInText(meta.name, [theme]),
+    );
+
+    contexts.push({
+      symbol,
+      name: quote?.name ?? meta.name,
+      quote,
+      ret20dPct,
+      newsItems: meta.news,
+      themes,
+      inWatchlist: meta.inWatchlist,
+    });
+  }
+
+  return contexts;
+}
+
+async function createAlertIfNew(input: {
+  alertType: MonitorAlertType;
+  severity: MonitorAlertSeverity;
+  symbol: string | null;
+  name: string | null;
+  title: string;
+  summary: string;
+  newsTitle?: string | null;
+  newsUrl?: string | null;
+  pctChg?: number | null;
+  ret20dPct?: number | null;
+  theme?: string | null;
+  tradeDate: string;
+  alerts: Awaited<ReturnType<typeof saveMonitorAlert>>[];
+}) {
+  const duplicate = await hasRecentAlert({
+    symbol: input.symbol,
+    alertType: input.alertType,
+    tradeDate: input.tradeDate,
+  });
+  if (duplicate) return;
+
+  const saved = await saveMonitorAlert({
+    alertType: input.alertType,
+    severity: input.severity,
+    symbol: input.symbol,
+    name: input.name,
+    title: input.title,
+    summary: input.summary,
+    newsTitle: input.newsTitle ?? null,
+    newsUrl: input.newsUrl ?? null,
+    pctChg: input.pctChg ?? null,
+    ret20dPct: input.ret20dPct ?? null,
+    theme: input.theme ?? null,
+    tradeDate: input.tradeDate,
+  });
+  input.alerts.push(saved);
+}
+
+function collectNewsSymbols(
+  news: HotNewsItem[],
+): Map<string, { name: string; news: HotNewsItem[] }> {
+  const map = new Map<string, { name: string; news: HotNewsItem[] }>();
+
+  for (const item of news) {
+    const fromTitle = extractSymbolsFromText(item.title, item.title);
+    for (const entry of fromTitle) {
+      const existing = map.get(entry.symbol);
+      if (existing) {
+        existing.news.push(item);
+      } else {
+        map.set(entry.symbol, { name: entry.name, news: [item] });
+      }
+    }
+  }
+
+  return map;
+}
+
+/** 实时新闻 + 行情监控：优先捕捉「有催化、尚未大涨」 */
+export async function runMonitorPoll(options?: {
+  force?: boolean;
+}): Promise<MonitorPollResult> {
+  const started = Date.now();
+  const now = getBeijingNow();
+  const tradeDate = formatTradeDate(now);
+  const marketOpen = isTradingSession(now);
+  const alerts: Awaited<ReturnType<typeof saveMonitorAlert>>[] = [];
+
+  if (!options?.force && !isWeekday(now)) {
+    const summary = '周末休市，跳过盘中监控';
+    await saveMonitorPollRun({
+      tradeDate,
+      status: 'skipped',
+      newsCount: 0,
+      newNewsCount: 0,
+      alertCount: 0,
+      symbolsScanned: 0,
+      marketOpen: false,
+      elapsedMs: Date.now() - started,
+      summary,
+    });
+    return {
+      tradeDate,
+      marketOpen: false,
+      newsCount: 0,
+      newNewsCount: 0,
+      alertsCreated: 0,
+      symbolsScanned: 0,
+      alerts: [],
+      hotNews: [],
+      newNews: [],
+      hotThemes: [],
+      elapsedMs: Date.now() - started,
+      summary,
+    };
+  }
+
+  const { items: hotNews } = await fetchHotNews(30, { lookbackDays: 3 });
+  const themeNews = pickNewsForThemes(hotNews, undefined, 2);
+  const hotThemes = extractThemesFromNews(themeNews, 5);
+
+  const newsKeys = hotNews.map((item) => ({
+    key: normalizeHotNewsKey(item.title),
+    title: item.title,
+  }));
+  const unseenKeys = await filterUnseenNews(newsKeys);
+  const unseenSet = new Set(unseenKeys.map((item) => item.key));
+  const newNews = hotNews.filter((item) =>
+    unseenSet.has(normalizeHotNewsKey(item.title)),
+  );
+
+  const watchlist = await listWatchlistItems();
+
+  const { listScreeningSessions, getScreeningSession } = await import('../screening/store.js');
+  const sessions = await listScreeningSessions({ limit: 1 });
+  const latestScreen = sessions[0]?.id
+    ? await getScreeningSession(sessions[0].id)
+    : null;
+
+  type SymbolMeta = { name: string; news: HotNewsItem[]; inWatchlist: boolean };
+  const symbolMeta = new Map<string, SymbolMeta>();
+
+  for (const [symbol, meta] of collectNewsSymbols(rankHotNews(newNews))) {
+    symbolMeta.set(symbol, { ...meta, inWatchlist: false });
+  }
+
+  for (const [symbol, meta] of collectNewsSymbols(hotNews)) {
+    const existing = symbolMeta.get(symbol);
+    if (existing) {
+      existing.news = [...new Map([...existing.news, ...meta.news].map((n) => [n.title, n])).values()];
+      existing.name = meta.name || existing.name;
+    } else {
+      symbolMeta.set(symbol, { ...meta, inWatchlist: false });
+    }
+  }
+
+  for (const item of watchlist) {
+    const existing = symbolMeta.get(item.symbol);
+    if (existing) {
+      existing.inWatchlist = true;
+      existing.name = item.name;
+    } else {
+      symbolMeta.set(item.symbol, {
+        name: item.name,
+        news: [],
+        inWatchlist: true,
+      });
+    }
+  }
+
+  for (const candidate of latestScreen?.candidates ?? []) {
+    const existing = symbolMeta.get(candidate.symbol);
+    if (existing) {
+      existing.name = candidate.name;
+    } else {
+      symbolMeta.set(candidate.symbol, {
+        name: candidate.name,
+        news: [],
+        inWatchlist: false,
+      });
+    }
+  }
+
+  const quotes = marketOpen
+    ? await fetchIntradayQuotes([...symbolMeta.keys()])
+    : new Map<string, IntradayQuote>();
+
+  const contexts = await buildSymbolContexts({
+    symbols: symbolMeta,
+    quotes,
+    hotThemes,
+  });
+
+  for (const ctx of contexts) {
+    const pct = ctx.quote?.pctChg ?? null;
+
+    for (const news of ctx.newsItems) {
+      if (isNoiseNewsTitle(news.title)) continue;
+      const theme = matchThemeInText(news.title, hotThemes);
+
+      if (marketOpen && pct != null && pct >= -0.5 && pct <= 2.5 && !isLimitUp(pct, ctx.symbol)) {
+        const notChased = ctx.ret20dPct == null || ctx.ret20dPct < 25;
+        if (notChased) {
+          await createAlertIfNew({
+            alertType: 'pre_move',
+            severity: 'urgent',
+            symbol: ctx.symbol,
+            name: ctx.name,
+            title: `【潜伏】${ctx.name} 新闻催化，股价尚未启动`,
+            summary: `最新资讯提及 ${ctx.name}（${ctx.symbol}），当前涨幅 ${pct.toFixed(2)}%，20日涨幅 ${ctx.ret20dPct ?? '—'}%。适合关注是否提前布局，而非追涨已大涨标的。`,
+            newsTitle: news.title,
+            newsUrl: news.url,
+            pctChg: pct,
+            ret20dPct: ctx.ret20dPct,
+            theme,
+            tradeDate,
+            alerts,
+          });
+          continue;
+        }
+      }
+
+      await createAlertIfNew({
+        alertType: 'news_catalyst',
+        severity: pct != null && pct > 5 ? 'watch' : 'urgent',
+        symbol: ctx.symbol,
+        name: ctx.name,
+        title: `【资讯】${ctx.name} 出现新催化`,
+        summary: `新闻：${news.title.slice(0, 80)}${pct != null ? `；当前涨幅 ${pct.toFixed(2)}%` : ''}`,
+        newsTitle: news.title,
+        newsUrl: news.url,
+        pctChg: pct,
+        ret20dPct: ctx.ret20dPct,
+        theme,
+        tradeDate,
+        alerts,
+      });
+    }
+
+    if (!marketOpen || pct == null) continue;
+
+    const theme = ctx.themes[0] ?? null;
+    const notExtreme =
+      ctx.ret20dPct == null || (ctx.ret20dPct >= -10 && ctx.ret20dPct < 30);
+
+    if (
+      theme &&
+      pct >= 1.5 &&
+      pct <= 7 &&
+      !isLimitUp(pct, ctx.symbol) &&
+      notExtreme
+    ) {
+      await createAlertIfNew({
+        alertType: 'early_move',
+        severity: 'watch',
+        symbol: ctx.symbol,
+        name: ctx.name,
+        title: `【启动】${ctx.name} 主线 "${theme}" 下温和走强`,
+        summary: `涨幅 ${pct.toFixed(2)}%，20日 ${ctx.ret20dPct ?? '—'}%，处于「有催化、尚未极端」区间。`,
+        pctChg: pct,
+        ret20dPct: ctx.ret20dPct,
+        theme,
+        tradeDate,
+        alerts,
+      });
+    }
+
+    if (ctx.inWatchlist && Math.abs(pct) >= 3) {
+      await createAlertIfNew({
+        alertType: 'watchlist_surge',
+        severity: Math.abs(pct) >= 5 ? 'urgent' : 'watch',
+        symbol: ctx.symbol,
+        name: ctx.name,
+        title: `【自选】${ctx.name} 盘中波动 ${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`,
+        summary: `自选池标的出现明显波动，请结合持仓计划与最新资讯判断。`,
+        pctChg: pct,
+        ret20dPct: ctx.ret20dPct,
+        tradeDate,
+        alerts,
+      });
+    }
+  }
+
+  for (const theme of hotThemes.slice(0, 3)) {
+    if (!isAShareRelevant(theme)) continue;
+    const recent = newNews.find(
+      (item) =>
+        isAShareRelevant(item.title) && matchThemeInText(item.title, [theme]),
+    );
+    if (!recent) continue;
+
+    await createAlertIfNew({
+      alertType: 'theme_ignite',
+      severity: 'info',
+      symbol: null,
+      name: null,
+      title: `【主线】${theme} 出现新资讯`,
+      summary: recent.title.slice(0, 100),
+      newsTitle: recent.title,
+      newsUrl: recent.url,
+      theme,
+      tradeDate,
+      alerts,
+    });
+  }
+
+  await markNewsSeen(newsKeys);
+
+  const elapsedMs = Date.now() - started;
+  const summary = marketOpen
+    ? `扫描 ${contexts.length} 只，新增 ${alerts.length} 条提醒（新资讯 ${newNews.length} 条）`
+    : `非交易时段（${TRADING_HOURS_LABEL}），仅处理资讯 ${newNews.length} 条`;
+
+  await saveMonitorPollRun({
+    tradeDate,
+    status: 'success',
+    newsCount: hotNews.length,
+    newNewsCount: newNews.length,
+    alertCount: alerts.length,
+    symbolsScanned: contexts.length,
+    marketOpen,
+    elapsedMs,
+    summary,
+  });
+
+  return {
+    tradeDate,
+    marketOpen,
+    newsCount: hotNews.length,
+    newNewsCount: newNews.length,
+    alertsCreated: alerts.length,
+    symbolsScanned: contexts.length,
+    alerts,
+    hotNews: themeNews.slice(0, 12),
+    newNews: newNews.slice(0, 12),
+    hotThemes,
+    elapsedMs,
+    summary,
+  };
+}
+
+export async function getMonitorStatus() {
+  const now = getBeijingNow();
+  const { getLatestMonitorPollRun, listMonitorAlerts } = await import('./store.js');
+
+  const [lastRun, todayAlerts] = await Promise.all([
+    getLatestMonitorPollRun(),
+    listMonitorAlerts({ tradeDate: formatTradeDate(now), limit: 50 }),
+  ]);
+
+  return {
+    now: now.toISOString(),
+    tradeDate: formatTradeDate(now),
+    marketOpen: isTradingSession(now),
+    tradingHours: TRADING_HOURS_LABEL,
+    lastRun,
+    todayAlerts,
+    unacknowledgedCount: todayAlerts.filter((a) => !a.acknowledged).length,
+  };
+}

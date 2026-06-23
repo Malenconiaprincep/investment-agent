@@ -27,6 +27,8 @@
     "reports:list": "tsx src/cli/reports-json.ts list",
     "screenings:list": "tsx src/cli/screenings-json.ts list",
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
+    "monitor:poll": "tsx src/cli/scheduled-monitor.ts",
+    "monitor:watch": "tsx src/cli/monitor-watch.ts",
     "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
     "watchlist:weekly": "tsx src/cli/scheduled-weekly-review.ts",
     "paper:schedule": "tsx src/cli/scheduled-paper.ts",

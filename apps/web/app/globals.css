@@ -1878,6 +1878,117 @@ a:hover {
   margin-top: 0.75rem;
 }
 
+
+/* Real-time monitor */
+.monitor-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.monitor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  color: var(--muted);
+}
+
+.monitor-pill--live {
+  background: rgba(92, 184, 122, 0.15);
+  color: var(--success);
+}
+
+.monitor-meta {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.monitor-meta--accent {
+  color: var(--accent);
+}
+
+.monitor-highlight {
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(201, 146, 74, 0.35);
+  background: var(--accent-muted);
+}
+
+.monitor-highlight p {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.monitor-section {
+  margin-top: 0.5rem;
+}
+
+.monitor-section .section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.monitor-card {
+  border-left: 3px solid var(--border-strong);
+}
+
+.monitor-card--urgent {
+  border-left-color: var(--accent);
+}
+
+.monitor-card--watch {
+  border-left-color: var(--link);
+}
+
+.monitor-card--info {
+  border-left-color: var(--muted);
+}
+
+.monitor-card--read {
+  opacity: 0.72;
+}
+
+.monitor-type {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+  color: var(--muted);
+}
+
+.monitor-type--pre_move {
+  background: rgba(201, 146, 74, 0.2);
+  color: var(--accent);
+}
+
+.monitor-summary {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.monitor-news {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workflow-status-label::before {
     animation: none;

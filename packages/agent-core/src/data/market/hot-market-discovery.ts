@@ -159,7 +159,7 @@ function buildStockQueries(input: {
   return [...new Set(queries)];
 }
 
-function normalizeHotNewsKey(title: string): string {
+export function normalizeHotNewsKey(title: string): string {
   return title
     .replace(/【[^】]+】/g, '')
     .replace(/\s+/g, '')

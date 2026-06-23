@@ -6,6 +6,7 @@
   "regions": ["hkg1"],
   "crons": [
     { "path": "/api/cron/daily-snapshot", "schedule": "30 7 * * 1-5" },
+    { "path": "/api/cron/monitor-poll", "schedule": "*/15 1-3,5-7 * * 1-5" },
     { "path": "/api/cron/weekly-review", "schedule": "0 0 * * 1" },
     { "path": "/api/cron/diamond-scan", "schedule": "35 7 * * 1-5" },
     { "path": "/api/cron/paper-auto", "schedule": "5 7 * * 1-5" }

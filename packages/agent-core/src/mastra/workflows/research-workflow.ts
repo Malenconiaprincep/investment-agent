@@ -170,7 +170,7 @@ const searchNotesStep = createStep({
   execute: async ({ inputData, mastra }) => {
     const query = `${inputData.target.name} ${inputData.target.symbol} 风险 行业 投资逻辑`;
     const vectorStore = mastra.getVector('researchVectors');
-    const notes = await searchResearchNotes(vectorStore, query);
+    const { hits: notes } = await searchResearchNotes(vectorStore, query);
     return { ...inputData, notes };
   },
 });

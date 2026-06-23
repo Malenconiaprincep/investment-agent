@@ -3,6 +3,15 @@ type AgentCoreConfig = {
   token?: string;
 };
 
+function isLocalAgentCoreUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === '127.0.0.1' || host === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
 export function getAgentCoreConfig(): AgentCoreConfig {
   const baseUrl = process.env.AGENT_CORE_URL?.trim().replace(/\/$/, '');
   if (!baseUrl) {
@@ -69,6 +78,50 @@ export async function runAgentCoreFeedback(args: string[]): Promise<string> {
 
 export async function runAgentCoreWatchlistJson(args: string[]): Promise<string> {
   return callAgentCoreCli('watchlist', args);
+}
+
+async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const path = await import('node:path');
+  const execFileAsync = promisify(execFile);
+
+  const agentCoreRoot = path.resolve(process.cwd(), '../../packages/agent-core');
+  const { stdout } = await execFileAsync(
+    'pnpm',
+    ['exec', 'tsx', 'src/cli/monitor-json.ts', ...args],
+    {
+      cwd: agentCoreRoot,
+      env: process.env,
+      maxBuffer: 10 * 1024 * 1024,
+    },
+  );
+  return stdout;
+}
+
+export async function runAgentCoreMonitorJson(args: string[]): Promise<string> {
+  const { baseUrl } = getAgentCoreConfig();
+
+  if (isLocalAgentCoreUrl(baseUrl)) {
+    try {
+      return await runAgentCoreMonitorLocal(args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`本地监控执行失败: ${message}`);
+    }
+  }
+
+  try {
+    return await callAgentCoreCli('monitor', args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('未知模块: monitor')) {
+      throw new Error(
+        '远程 agent-core 未包含 monitor 模块，请重启 agent-core 服务后重试',
+      );
+    }
+    throw error;
+  }
 }
 
 export async function runAgentCorePaperJson(args: string[]): Promise<string> {

@@ -22,6 +22,12 @@ const NAV: NavItem[] = [
       pathname === '/screen' || pathname.startsWith('/screen/'),
   },
   {
+    href: '/monitor',
+    label: '实时监控',
+    isActive: (pathname) =>
+      pathname === '/monitor' || pathname.startsWith('/monitor/'),
+  },
+  {
     href: '/watchlist',
     label: '我的自选',
     isActive: (pathname) =>
