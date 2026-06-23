@@ -31,6 +31,10 @@ import {
   type MonitorAlertSeverity,
   type MonitorAlertType,
 } from './store.js';
+import type {
+  MonitorPaperAction,
+  MonitorPaperRecommendation,
+} from '../paper/monitor-bridge.js';
 
 export type MonitorPollResult = {
   tradeDate: string;
@@ -43,6 +47,8 @@ export type MonitorPollResult = {
   hotNews: HotNewsItem[];
   newNews: HotNewsItem[];
   hotThemes: string[];
+  recommendations: MonitorPaperRecommendation[];
+  paperActions: MonitorPaperAction[];
   elapsedMs: number;
   summary: string;
   skipped?: boolean;
@@ -264,6 +270,8 @@ export async function runMonitorPoll(options?: {
       hotNews: [],
       newNews: [],
       hotThemes: [],
+      recommendations: [],
+      paperActions: [],
       elapsedMs: Date.now() - started,
       summary,
     };
@@ -487,6 +495,26 @@ export async function runMonitorPoll(options?: {
     summary,
   });
 
+  let recommendations: MonitorPaperRecommendation[] = [];
+  let paperActions: MonitorPaperAction[] = [];
+  try {
+    const { runMonitorPaperBridge } = await import('../paper/monitor-bridge.js');
+    const bridgeResult = await runMonitorPaperBridge({ alerts, tradeDate });
+    recommendations = bridgeResult.recommendations;
+    paperActions = bridgeResult.paperActions;
+  } catch (error) {
+    paperActions = [
+      {
+        kind: 'buy',
+        status: 'error',
+        symbol: 'monitor',
+        name: '消息雷达',
+        reason: '消息推荐桥接失败',
+        error: error instanceof Error ? error.message : String(error),
+      },
+    ];
+  }
+
   return {
     tradeDate,
     marketOpen,
@@ -498,6 +526,8 @@ export async function runMonitorPoll(options?: {
     hotNews: themeNews.slice(0, 12),
     newNews: newNews.slice(0, 12),
     hotThemes,
+    recommendations,
+    paperActions,
     elapsedMs,
     summary,
   };
@@ -524,6 +554,8 @@ function emptySkippedResult(input: {
     hotNews: [],
     newNews: [],
     hotThemes: [],
+    recommendations: [],
+    paperActions: [],
     elapsedMs: Date.now() - input.started,
     summary: input.summary,
     skipped: true,

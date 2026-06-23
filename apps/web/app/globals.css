@@ -2090,6 +2090,18 @@ a:hover {
   opacity: 0.72;
 }
 
+.monitor-recommendation--auto_buy {
+  border-left-color: var(--accent);
+}
+
+.monitor-recommendation--watch {
+  border-left-color: var(--link);
+}
+
+.monitor-recommendation--info {
+  border-left-color: var(--muted);
+}
+
 .monitor-type {
   display: inline-block;
   margin-right: 0.5rem;
@@ -2105,6 +2117,29 @@ a:hover {
 .monitor-type--pre_move {
   background: rgba(201, 146, 74, 0.2);
   color: var(--accent);
+}
+
+.monitor-recommendation-type--auto_buy {
+  background: rgba(201, 146, 74, 0.2);
+  color: var(--accent);
+}
+
+.monitor-recommendation-type--watch {
+  background: rgba(126, 184, 218, 0.15);
+  color: var(--link);
+}
+
+.monitor-recommendation-type--info {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.monitor-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
 }
 
 .monitor-summary {

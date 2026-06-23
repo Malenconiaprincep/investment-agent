@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { cors } from 'hono/cors';
 import { stream } from 'hono/streaming';
 import { runResearchWorkflowStream } from '../api/run-research-workflow-stream.js';
@@ -82,6 +83,12 @@ const SSE_HEADERS = {
   'X-Accel-Buffering': 'no',
 } as const;
 
+function applySseHeaders(c: Context) {
+  for (const [key, value] of Object.entries(SSE_HEADERS)) {
+    c.header(key, value);
+  }
+}
+
 app.post('/stream/research', async (c) => {
   if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
 
@@ -99,6 +106,9 @@ app.post('/stream/research', async (c) => {
 
   if (!input) return jsonError('请提供 symbol 或 query', 400);
 
+  applySseHeaders(c);
+  applySseHeaders(c);
+  applySseHeaders(c);
   return stream(c, async (s) => {
     await s.write(': stream-open\n\n');
     try {
@@ -113,7 +123,7 @@ app.post('/stream/research', async (c) => {
         }),
       );
     }
-  }, SSE_HEADERS);
+  });
 });
 
 app.post('/stream/screen', async (c) => {
@@ -142,7 +152,7 @@ app.post('/stream/screen', async (c) => {
         }),
       );
     }
-  }, SSE_HEADERS);
+  });
 });
 
 app.post('/stream/committee', async (c) => {
@@ -151,6 +161,7 @@ app.post('/stream/committee', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     candidates?: Array<{ symbol: string; name: string }>;
     screeningSessionId?: string;
+    maxAnalyze?: number;
   };
 
   if (!body.candidates?.length) {
@@ -164,6 +175,7 @@ app.post('/stream/committee', async (c) => {
         {
           candidates: body.candidates!,
           screeningSessionId: body.screeningSessionId,
+          maxAnalyze: body.maxAnalyze ?? 3,
         },
         async (event) => {
           await s.write(sseLine(event));
@@ -177,7 +189,7 @@ app.post('/stream/committee', async (c) => {
         }),
       );
     }
-  }, SSE_HEADERS);
+  });
 });
 
 export { app };

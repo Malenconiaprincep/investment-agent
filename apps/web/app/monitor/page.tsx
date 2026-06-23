@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 
 type MonitorAlert = {
   id: string;
@@ -34,6 +35,40 @@ type MonitorStatus = {
     newNewsCount: number;
   } | null;
   todayAlerts: MonitorAlert[];
+};
+
+type MonitorPaperRecommendation = {
+  alertId: string;
+  alertType: string;
+  level: 'auto_buy' | 'watch' | 'info';
+  symbol: string | null;
+  name: string | null;
+  reason: string;
+  status: 'recommended' | 'bought' | 'skipped' | 'error';
+  skipReason?: string;
+  error?: string;
+  shares?: number;
+  price?: number;
+  tradeId?: string;
+};
+
+type MonitorPaperAction = {
+  kind: 'buy' | 'sell';
+  status: 'bought' | 'sold' | 'skipped' | 'error';
+  symbol: string;
+  name: string;
+  reason: string;
+  alertId?: string;
+  shares?: number;
+  price?: number;
+  tradeId?: string;
+  error?: string;
+};
+
+type MonitorPollResponse = {
+  recommendations?: MonitorPaperRecommendation[];
+  paperActions?: MonitorPaperAction[];
+  error?: string;
 };
 
 const ALERT_LABEL: Record<string, string> = {
@@ -80,6 +115,12 @@ export default function MonitorPage() {
   const [autoScan, setAutoScan] = useState(true);
   const [nextScanAt, setNextScanAt] = useState<number | null>(null);
   const [countdown, setCountdown] = useState('');
+  const [lastRecommendations, setLastRecommendations] = useState<
+    MonitorPaperRecommendation[]
+  >([]);
+  const [lastPaperActions, setLastPaperActions] = useState<MonitorPaperAction[]>(
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const scanningRef = useRef(false);
   const marketOpenRef = useRef(false);
@@ -110,8 +151,10 @@ export default function MonitorPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'poll' }),
         });
-        const data = await res.json();
+        const data = (await res.json()) as MonitorPollResponse;
         if (!res.ok) throw new Error(data.error ?? '扫描失败');
+        setLastRecommendations(data.recommendations ?? []);
+        setLastPaperActions(data.paperActions ?? []);
         await load();
       } catch (err) {
         if (!options?.silent) {
@@ -183,8 +226,8 @@ export default function MonitorPage() {
   return (
     <main className="page page--list">
       <PageHeader
-        title="实时监控"
-        description="打开本页即可自动扫描：结合 7×24 快讯与盘中行情，优先提示「有催化、尚未大涨」的标的。"
+        title="消息雷达"
+        description="打开本页即可自动扫描：结合 7×24 快讯与盘中行情，生成消息推荐；高置信潜伏机会会自动写入模拟盘。"
       />
 
       <div className="list-stack">
@@ -264,6 +307,28 @@ export default function MonitorPage() {
           </div>
         )}
 
+        {lastRecommendations.length > 0 && (
+          <section className="monitor-section">
+            <h2 className="section-title">消息推荐</h2>
+            <div className="history-list">
+              {lastRecommendations.map((item) => (
+                <RecommendationCard key={item.alertId} item={item} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {lastPaperActions.length > 0 && (
+          <section className="monitor-section">
+            <h2 className="section-title">自动交易记录</h2>
+            <div className="history-list">
+              {lastPaperActions.map((item, index) => (
+                <PaperActionCard key={`${item.kind}-${item.symbol}-${index}`} item={item} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {preMoveAlerts.length > 0 && (
           <section className="monitor-section">
             <h2 className="section-title">潜伏机会</h2>
@@ -287,6 +352,102 @@ export default function MonitorPage() {
         )}
       </div>
     </main>
+  );
+}
+
+function recommendationLabel(level: MonitorPaperRecommendation['level']) {
+  if (level === 'auto_buy') return '自动买入候选';
+  if (level === 'watch') return '观察推荐';
+  return '消息记录';
+}
+
+function statusLabel(status: MonitorPaperRecommendation['status']) {
+  if (status === 'bought') return '已自动买入';
+  if (status === 'skipped') return '已跳过';
+  if (status === 'error') return '执行失败';
+  return '待观察';
+}
+
+function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
+  return (
+    <article className={`history-card monitor-card monitor-recommendation monitor-recommendation--${item.level}`}>
+      <div className="history-card-main">
+        <span className={`monitor-type monitor-recommendation-type--${item.level}`}>
+          {recommendationLabel(item.level)}
+        </span>
+        <strong>
+          {item.name ?? '未识别标的'}
+          {item.symbol ? ` (${item.symbol})` : ''}
+        </strong>
+        <span className="history-card-time">{statusLabel(item.status)}</span>
+      </div>
+
+      <p className="monitor-summary">
+        {item.skipReason ?? item.error ?? item.reason}
+      </p>
+
+      {(item.shares || item.price) && (
+        <div className="history-card-meta">
+          {item.shares ? <span>股数 {item.shares}</span> : null}
+          {item.price ? <span>价格 {item.price.toFixed(2)}</span> : null}
+        </div>
+      )}
+
+      <div className="monitor-card-actions">
+        {item.status === 'bought' && (
+          <Link href="/paper" className="saved-link">
+            查看模拟盘
+          </Link>
+        )}
+        {item.symbol && (
+          <Link href={`/?symbol=${item.symbol}`} className="saved-link">
+            生成研报
+          </Link>
+        )}
+        {item.symbol && item.name && (
+          <AddToWatchlistButton
+            symbol={item.symbol}
+            name={item.name}
+            reason="消息雷达推荐"
+            sourceType="signal"
+            sourceId={item.alertId}
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function paperActionLabel(item: MonitorPaperAction) {
+  if (item.status === 'bought') return '自动买入';
+  if (item.status === 'sold') return '自动卖出';
+  if (item.status === 'skipped') return '跳过';
+  return '失败';
+}
+
+function PaperActionCard({ item }: { item: MonitorPaperAction }) {
+  return (
+    <article className={`history-card monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
+      <div className="history-card-main">
+        <span className="monitor-type monitor-recommendation-type--auto_buy">
+          {paperActionLabel(item)}
+        </span>
+        <strong>
+          {item.name} ({item.symbol})
+        </strong>
+        <span className="history-card-time">
+          {item.kind === 'buy' ? '买入检查' : '卖出检查'}
+        </span>
+      </div>
+      <p className="monitor-summary">{item.error ?? item.reason}</p>
+      <div className="history-card-meta">
+        {item.shares ? <span>股数 {item.shares}</span> : null}
+        {item.price ? <span>价格 {item.price.toFixed(2)}</span> : null}
+        <Link href="/paper" className="saved-link">
+          交易流水
+        </Link>
+      </div>
+    </article>
   );
 }
 

@@ -50,6 +50,21 @@ function fmtMoney(v: number) {
   return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 }
 
+function formatTradeSource(trade: Trade) {
+  if (trade.note?.startsWith('monitor:')) return '消息雷达';
+  if (trade.note?.startsWith('monitor-exit:')) return '规则卖出';
+  return trade.source === 'auto' ? '自动' : '手动';
+}
+
+function formatTradeNote(note: string | null) {
+  if (!note) return '—';
+  if (note.startsWith('monitor:')) return '消息推荐自动买入';
+  if (note.startsWith('monitor-exit:')) {
+    return `消息雷达卖出检查：${note.replace('monitor-exit:', '')}`;
+  }
+  return note;
+}
+
 export default function PaperTradingPage() {
   const [data, setData] = useState<PaperPayload | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -277,8 +292,8 @@ export default function PaperTradingPage() {
                       <td>{t.shares}</td>
                       <td>{t.price.toFixed(2)}</td>
                       <td>{t.amount.toFixed(0)}</td>
-                      <td>{t.source === 'auto' ? '自动' : '手动'}</td>
-                      <td className="paper-trade-note">{t.note ?? '—'}</td>
+                      <td>{formatTradeSource(t)}</td>
+                      <td className="paper-trade-note">{formatTradeNote(t.note)}</td>
                     </tr>
                   ))}
                 </tbody>
