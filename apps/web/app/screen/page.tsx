@@ -567,7 +567,7 @@ function ScreenPageContent() {
               选股记录
             </Link>
             <Link href="/monitor" className="button button-secondary">
-              实时监控
+              消息雷达
             </Link>
           </div>
 

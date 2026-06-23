@@ -90,6 +90,12 @@ function buildRecommendation(alert: MonitorAlert): MonitorPaperRecommendation {
   };
 }
 
+export function buildMonitorRecommendations(
+  alerts: MonitorAlert[],
+): MonitorPaperRecommendation[] {
+  return alerts.map((alert) => buildRecommendation(alert));
+}
+
 export function isMonitorBuyForAlert(note: string | null, alertId: string): boolean {
   return note?.startsWith(`monitor:${alertId}:`) ?? false;
 }
@@ -346,7 +352,7 @@ export async function runMonitorPaperBridge(input: {
   alerts: MonitorAlert[];
   tradeDate: string;
 }): Promise<MonitorPaperBridgeResult> {
-  const recommendations = input.alerts.map((alert) => buildRecommendation(alert));
+  const recommendations = buildMonitorRecommendations(input.alerts);
   const paperActions: MonitorPaperAction[] = [];
 
   for (let i = 0; i < input.alerts.length; i++) {
@@ -361,4 +367,33 @@ export async function runMonitorPaperBridge(input: {
   paperActions.push(...(await autoSellExitsFromMonitor(input.tradeDate)));
 
   return { recommendations, paperActions };
+}
+
+export async function listRecentMonitorPaperActions(
+  limit = 20,
+): Promise<MonitorPaperAction[]> {
+  const trades = await listPaperTrades(limit);
+  return trades
+    .filter(
+      (trade) =>
+        trade.source === 'auto' &&
+        (trade.note?.startsWith('monitor:') ||
+          trade.note?.startsWith('monitor-exit:')),
+    )
+    .map((trade) => {
+      const isExit = trade.note?.startsWith('monitor-exit:') ?? false;
+      return {
+        kind: isExit ? 'sell' : 'buy',
+        status: isExit ? 'sold' : 'bought',
+        symbol: trade.symbol,
+        name: trade.name,
+        reason: isExit
+          ? trade.note!.replace('monitor-exit:', '')
+          : '消息推荐自动买入',
+        alertId: !isExit ? trade.note?.split(':')[1] : undefined,
+        shares: trade.shares,
+        price: trade.price,
+        tradeId: trade.id,
+      };
+    });
 }

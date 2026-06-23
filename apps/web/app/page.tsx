@@ -180,7 +180,7 @@ export default function HomePage() {
               </p>
             </Link>
             <Link href="/monitor" className="dashboard-tile">
-              <h2 className="dashboard-tile-title">实时监控</h2>
+              <h2 className="dashboard-tile-title">消息雷达</h2>
               <p className="dashboard-tile-desc">
                 盘中结合快讯与行情扫描，优先提示有催化、尚未大涨的机会。
               </p>

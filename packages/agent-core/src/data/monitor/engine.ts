@@ -628,10 +628,15 @@ export async function runMonitorPollManaged(options?: {
 export async function getMonitorStatus() {
   const now = getBeijingNow();
   const { getLatestMonitorPollRun, listMonitorAlerts } = await import('./store.js');
+  const {
+    buildMonitorRecommendations,
+    listRecentMonitorPaperActions,
+  } = await import('../paper/monitor-bridge.js');
 
-  const [lastRun, todayAlerts] = await Promise.all([
+  const [lastRun, todayAlerts, paperActions] = await Promise.all([
     getLatestMonitorPollRun(),
     listMonitorAlerts({ tradeDate: formatTradeDate(now), limit: 50 }),
+    listRecentMonitorPaperActions(20),
   ]);
 
   return {
@@ -641,6 +646,8 @@ export async function getMonitorStatus() {
     tradingHours: TRADING_HOURS_LABEL,
     lastRun,
     todayAlerts,
+    recommendations: buildMonitorRecommendations(todayAlerts),
+    paperActions,
     unacknowledgedCount: todayAlerts.filter((a) => !a.acknowledged).length,
   };
 }
