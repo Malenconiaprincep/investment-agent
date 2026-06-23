@@ -2,14 +2,17 @@ import {
   acknowledgeMonitorAlert,
   listMonitorAlerts,
 } from '../data/monitor/store.js';
-import { getMonitorStatus, runMonitorPoll } from '../data/monitor/engine.js';
+import {
+  getMonitorStatus,
+  runMonitorPollManaged,
+} from '../data/monitor/engine.js';
 
 export async function dispatchMonitor(args: string[]): Promise<string> {
   const command = args[0];
 
   if (command === 'poll') {
     const force = args.includes('--force');
-    return JSON.stringify(await runMonitorPoll({ force }));
+    return JSON.stringify(await runMonitorPollManaged({ force }));
   }
 
   if (command === 'status') {

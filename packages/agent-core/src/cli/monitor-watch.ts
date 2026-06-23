@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { runMonitorPoll } from '../data/monitor/engine.js';
+import { runMonitorPollManaged } from '../data/monitor/engine.js';
 import {
   formatTradeDate,
   getBeijingNow,
@@ -65,7 +65,7 @@ async function main() {
       });
     } else {
       try {
-        const result = await runMonitorPoll({ force });
+        const result = await runMonitorPollManaged({ force });
         logLine({
           event: 'monitor-watch-poll',
           tradeDate: result.tradeDate,

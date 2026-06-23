@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
-import { runMonitorPoll } from '../data/monitor/engine.js';
+import { runMonitorPollManaged } from '../data/monitor/engine.js';
 
 /** 盘中每 5–15 分钟：cd /path && pnpm monitor:poll */
 async function main() {
   const force = process.argv.includes('--force');
-  const result = await runMonitorPoll({ force });
+  const result = await runMonitorPollManaged({ force });
   console.log(JSON.stringify(result, null, 2));
 }
 

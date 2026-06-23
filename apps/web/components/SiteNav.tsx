@@ -12,44 +12,52 @@ type NavItem = {
 const NAV: NavItem[] = [
   {
     href: '/',
-    label: '首页',
+    label: '研究',
     isActive: (pathname) => pathname === '/',
   },
   {
     href: '/screen',
-    label: '智能选股',
+    label: '扫描',
     isActive: (pathname) =>
-      pathname === '/screen' || pathname.startsWith('/screen/'),
-  },
-  {
-    href: '/monitor',
-    label: '实时监控',
-    isActive: (pathname) =>
-      pathname === '/monitor' || pathname.startsWith('/monitor/'),
+      pathname === '/screen' ||
+      pathname === '/monitor' ||
+      pathname.startsWith('/monitor/'),
   },
   {
     href: '/watchlist',
-    label: '我的自选',
+    label: '跟踪',
     isActive: (pathname) =>
       pathname === '/watchlist' ||
       pathname.startsWith('/watchlist/') ||
       pathname === '/signals' ||
-      pathname.startsWith('/signals/') ||
+      pathname.startsWith('/signals/'),
+  },
+  {
+    href: '/paper',
+    label: '验证',
+    isActive: (pathname) =>
       pathname === '/paper' ||
-      pathname.startsWith('/paper/') ||
-      pathname === '/reviews' ||
-      pathname.startsWith('/reviews/'),
+      pathname.startsWith('/paper/'),
   },
   {
     href: '/history',
-    label: '我的研报',
+    label: '档案',
     isActive: (pathname) =>
-      pathname === '/history' || pathname.startsWith('/history/'),
+      pathname === '/history' ||
+      pathname.startsWith('/history/') ||
+      pathname === '/screen/history' ||
+      pathname.startsWith('/screen/history/') ||
+      pathname === '/reviews' ||
+      pathname.startsWith('/reviews/'),
   },
 ];
 
 export function SiteNav() {
   const pathname = usePathname();
+
+  if (pathname === '/login') {
+    return null;
+  }
 
   return (
     <header className="site-header">
@@ -76,6 +84,12 @@ export function SiteNav() {
             );
           })}
         </nav>
+
+        <form action="/api/auth/logout" method="post">
+          <button className="site-nav-button" type="submit">
+            退出
+          </button>
+        </form>
       </div>
     </header>
   );

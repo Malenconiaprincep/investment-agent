@@ -566,6 +566,9 @@ function ScreenPageContent() {
             <Link href="/screen/history" className="button button-secondary">
               选股记录
             </Link>
+            <Link href="/monitor" className="button button-secondary">
+              实时监控
+            </Link>
           </div>
 
           {showAdvanced && (

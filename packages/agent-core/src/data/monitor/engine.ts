@@ -20,10 +20,14 @@ import {
 import { listWatchlistItems } from '../watchlist/store.js';
 import {
   filterUnseenNews,
+  getMonitorRuntimeState,
+  hasAlertDedupeKey,
   hasRecentAlert,
   markNewsSeen,
+  saveAlertDedupeKey,
   saveMonitorAlert,
   saveMonitorPollRun,
+  setMonitorRuntimeState,
   type MonitorAlertSeverity,
   type MonitorAlertType,
 } from './store.js';
@@ -41,6 +45,7 @@ export type MonitorPollResult = {
   hotThemes: string[];
   elapsedMs: number;
   summary: string;
+  skipped?: boolean;
 };
 
 type SymbolContext = {
@@ -75,6 +80,38 @@ function matchThemeInText(text: string, themes: string[]): string | null {
     }
   }
   return null;
+}
+
+function newsKey(item: HotNewsItem): string {
+  return normalizeHotNewsKey(item.title);
+}
+
+function newsSource(item: HotNewsItem): string | null {
+  if (!item.url) return null;
+  try {
+    return new URL(item.url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function pushUniqueNews(target: HotNewsItem[], item: HotNewsItem) {
+  if (target.some((existing) => newsKey(existing) === newsKey(item))) return;
+  target.push(item);
+}
+
+function attachNewsByKnownNames(
+  symbols: Map<string, { name: string; news: HotNewsItem[]; inWatchlist: boolean }>,
+  news: HotNewsItem[],
+) {
+  for (const item of news) {
+    const title = item.title;
+    for (const meta of symbols.values()) {
+      const name = meta.name.trim();
+      if (name.length < 2 || /^\d{6}$/.test(name)) continue;
+      if (title.includes(name)) pushUniqueNews(meta.news, item);
+    }
+  }
 }
 
 async function calcRet20d(symbol: string): Promise<number | null> {
@@ -135,13 +172,20 @@ async function createAlertIfNew(input: {
   theme?: string | null;
   tradeDate: string;
   alerts: Awaited<ReturnType<typeof saveMonitorAlert>>[];
+  dedupeKey?: string;
 }) {
-  const duplicate = await hasRecentAlert({
-    symbol: input.symbol,
-    alertType: input.alertType,
-    tradeDate: input.tradeDate,
-  });
-  if (duplicate) return;
+  if (input.dedupeKey && (await hasAlertDedupeKey(input.dedupeKey))) {
+    return;
+  }
+
+  if (!input.dedupeKey) {
+    const duplicate = await hasRecentAlert({
+      symbol: input.symbol,
+      alertType: input.alertType,
+      tradeDate: input.tradeDate,
+    });
+    if (duplicate) return;
+  }
 
   const saved = await saveMonitorAlert({
     alertType: input.alertType,
@@ -157,6 +201,12 @@ async function createAlertIfNew(input: {
     theme: input.theme ?? null,
     tradeDate: input.tradeDate,
   });
+  if (input.dedupeKey) {
+    await saveAlertDedupeKey({
+      dedupeKey: input.dedupeKey,
+      alertId: saved.id,
+    });
+  }
   input.alerts.push(saved);
 }
 
@@ -224,13 +274,16 @@ export async function runMonitorPoll(options?: {
   const hotThemes = extractThemesFromNews(themeNews, 5);
 
   const newsKeys = hotNews.map((item) => ({
-    key: normalizeHotNewsKey(item.title),
+    key: newsKey(item),
     title: item.title,
+    url: item.url,
+    publishedAt: item.datetime || null,
+    source: newsSource(item),
   }));
   const unseenKeys = await filterUnseenNews(newsKeys);
   const unseenSet = new Set(unseenKeys.map((item) => item.key));
   const newNews = hotNews.filter((item) =>
-    unseenSet.has(normalizeHotNewsKey(item.title)),
+    unseenSet.has(newsKey(item)),
   );
 
   const watchlist = await listWatchlistItems();
@@ -285,6 +338,8 @@ export async function runMonitorPoll(options?: {
     }
   }
 
+  attachNewsByKnownNames(symbolMeta, hotNews);
+
   const quotes = marketOpen
     ? await fetchIntradayQuotes([...symbolMeta.keys()])
     : new Map<string, IntradayQuote>();
@@ -319,6 +374,7 @@ export async function runMonitorPoll(options?: {
             theme,
             tradeDate,
             alerts,
+            dedupeKey: `pre_move:${ctx.symbol}:${newsKey(news)}`,
           });
           continue;
         }
@@ -338,6 +394,7 @@ export async function runMonitorPoll(options?: {
         theme,
         tradeDate,
         alerts,
+        dedupeKey: `news_catalyst:${ctx.symbol}:${newsKey(news)}`,
       });
     }
 
@@ -366,6 +423,7 @@ export async function runMonitorPoll(options?: {
         theme,
         tradeDate,
         alerts,
+        dedupeKey: `early_move:${ctx.symbol}:${tradeDate}:${theme ?? 'none'}`,
       });
     }
 
@@ -381,6 +439,7 @@ export async function runMonitorPoll(options?: {
         ret20dPct: ctx.ret20dPct,
         tradeDate,
         alerts,
+        dedupeKey: `watchlist_surge:${ctx.symbol}:${tradeDate}`,
       });
     }
   }
@@ -405,6 +464,7 @@ export async function runMonitorPoll(options?: {
       theme,
       tradeDate,
       alerts,
+      dedupeKey: `theme_ignite:${theme}:${newsKey(recent)}`,
     });
   }
 
@@ -441,6 +501,96 @@ export async function runMonitorPoll(options?: {
     elapsedMs,
     summary,
   };
+}
+
+const MONITOR_STATE_KEY = 'monitor-poll';
+const DEFAULT_MIN_INTERVAL_MS = 90 * 1000;
+const DEFAULT_LOCK_TIMEOUT_MS = 3 * 60 * 1000;
+
+function emptySkippedResult(input: {
+  tradeDate: string;
+  marketOpen: boolean;
+  summary: string;
+  started: number;
+}): MonitorPollResult {
+  return {
+    tradeDate: input.tradeDate,
+    marketOpen: input.marketOpen,
+    newsCount: 0,
+    newNewsCount: 0,
+    alertsCreated: 0,
+    symbolsScanned: 0,
+    alerts: [],
+    hotNews: [],
+    newNews: [],
+    hotThemes: [],
+    elapsedMs: Date.now() - input.started,
+    summary: input.summary,
+    skipped: true,
+  };
+}
+
+export async function runMonitorPollManaged(options?: {
+  force?: boolean;
+  minIntervalMs?: number;
+  lockTimeoutMs?: number;
+}): Promise<MonitorPollResult> {
+  const started = Date.now();
+  const now = getBeijingNow();
+  const tradeDate = formatTradeDate(now);
+  const marketOpen = isTradingSession(now);
+  const minIntervalMs = options?.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
+  const lockTimeoutMs = options?.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
+
+  const state = await getMonitorRuntimeState(MONITOR_STATE_KEY);
+  if (!options?.force && state?.running && state.startedAt) {
+    const runningFor = Date.now() - Date.parse(state.startedAt);
+    if (Number.isFinite(runningFor) && runningFor < lockTimeoutMs) {
+      return emptySkippedResult({
+        tradeDate,
+        marketOpen,
+        started,
+        summary: '已有监控扫描正在进行，跳过本次重复触发',
+      });
+    }
+  }
+
+  if (!options?.force && state?.finishedAt) {
+    const sinceLast = Date.now() - Date.parse(state.finishedAt);
+    if (Number.isFinite(sinceLast) && sinceLast < minIntervalMs) {
+      return emptySkippedResult({
+        tradeDate,
+        marketOpen,
+        started,
+        summary: '距离上次扫描较近，复用已有结果',
+      });
+    }
+  }
+
+  await setMonitorRuntimeState(MONITOR_STATE_KEY, {
+    running: true,
+    startedAt: new Date(started).toISOString(),
+  });
+
+  try {
+    const result = await runMonitorPoll({ force: options?.force });
+    await setMonitorRuntimeState(MONITOR_STATE_KEY, {
+      running: false,
+      startedAt: new Date(started).toISOString(),
+      finishedAt: new Date().toISOString(),
+      summary: result.summary,
+    });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await setMonitorRuntimeState(MONITOR_STATE_KEY, {
+      running: false,
+      startedAt: new Date(started).toISOString(),
+      finishedAt: new Date().toISOString(),
+      error: message,
+    });
+    throw error;
+  }
 }
 
 export async function getMonitorStatus() {

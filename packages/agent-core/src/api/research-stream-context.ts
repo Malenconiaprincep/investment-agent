@@ -1,17 +1,18 @@
 import type { ResearchStreamEvent } from './run-research-workflow-stream.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-let currentEmitter: ((event: ResearchStreamEvent) => void) | null = null;
+type ResearchStreamEmitter = (event: ResearchStreamEvent) => void;
+
+const researchStreamEmitterStorage =
+  new AsyncLocalStorage<ResearchStreamEmitter>();
 
 export function withResearchStreamEmitter<T>(
-  emit: (event: ResearchStreamEvent) => void,
+  emit: ResearchStreamEmitter,
   fn: () => Promise<T>,
 ): Promise<T> {
-  currentEmitter = emit;
-  return fn().finally(() => {
-    currentEmitter = null;
-  });
+  return researchStreamEmitterStorage.run(emit, fn);
 }
 
 export function emitResearchStreamEvent(event: ResearchStreamEvent): void {
-  currentEmitter?.(event);
+  researchStreamEmitterStorage.getStore()?.(event);
 }

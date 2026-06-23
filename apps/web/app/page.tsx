@@ -166,28 +166,34 @@ export default function HomePage() {
   return (
     <main className="page page--workspace">
       <PageHeader
-        title="投研助手"
-        description="输入股票代码生成研报，或从热点新闻一键选股，再对候选股做深度分析。"
+        title="单股研究"
+        description="输入股票代码生成结构化研报，适合作为自选跟踪、智能扫描和模拟验证前的第一步。"
       />
 
       <div className="page-workspace">
         <aside className="page-pane page-pane--sidebar page-pane--scroll">
           <div className="dashboard-grid dashboard-grid--compact">
             <Link href="/screen" className="dashboard-tile">
-              <h2 className="dashboard-tile-title">智能选股</h2>
+              <h2 className="dashboard-tile-title">智能扫描</h2>
               <p className="dashboard-tile-desc">
                 扫描今日热点与强势板块，自动筛出候选股，并给出明日板块预判与尾盘参考。
               </p>
             </Link>
+            <Link href="/monitor" className="dashboard-tile">
+              <h2 className="dashboard-tile-title">实时监控</h2>
+              <p className="dashboard-tile-desc">
+                盘中结合快讯与行情扫描，优先提示有催化、尚未大涨的机会。
+              </p>
+            </Link>
             <Link href="/watchlist" className="dashboard-tile">
-              <h2 className="dashboard-tile-title">我的自选</h2>
+              <h2 className="dashboard-tile-title">自选跟踪</h2>
               <p className="dashboard-tile-desc">
                 加入关注后每日跟踪，出现买卖信号会提醒。
               </p>
             </Link>
             <Link href="/history" className="dashboard-tile">
-              <h2 className="dashboard-tile-title">我的研报</h2>
-              <p className="dashboard-tile-desc">已生成的研报自动保存，随时回看。</p>
+              <h2 className="dashboard-tile-title">历史档案</h2>
+              <p className="dashboard-tile-desc">已生成的研报、选股记录和复盘，集中回看。</p>
             </Link>
           </div>
 

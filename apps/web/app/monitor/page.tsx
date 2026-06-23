@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 type MonitorAlert = {
@@ -44,6 +44,11 @@ const ALERT_LABEL: Record<string, string> = {
   theme_ignite: '主线',
 };
 
+/** 盘中每 5 分钟；非交易时段每 10 分钟扫资讯 */
+const SCAN_INTERVAL_OPEN_MS = 5 * 60 * 1000;
+const SCAN_INTERVAL_CLOSED_MS = 10 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 30 * 1000;
+
 function fmtTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString('zh-CN', {
@@ -61,18 +66,32 @@ function fmtPct(v: number | null | undefined) {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
+function fmtCountdown(ms: number) {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export default function MonitorPage() {
   const [status, setStatus] = useState<MonitorStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
+  const [autoScan, setAutoScan] = useState(true);
+  const [nextScanAt, setNextScanAt] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const scanningRef = useRef(false);
+  const marketOpenRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/monitor');
-      const data = await res.json();
+      const data = (await res.json()) as MonitorStatus & { error?: string };
       if (!res.ok) throw new Error(data.error ?? '加载失败');
       setStatus(data);
+      marketOpenRef.current = data.marketOpen;
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
@@ -80,40 +99,92 @@ export default function MonitorPage() {
     }
   }, []);
 
+  const runPoll = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (scanningRef.current) return;
+      scanningRef.current = true;
+      setPolling(true);
+      try {
+        const res = await fetch('/api/monitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'poll' }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '扫描失败');
+        await load();
+      } catch (err) {
+        if (!options?.silent) {
+          setError(err instanceof Error ? err.message : '扫描失败');
+        }
+      } finally {
+        scanningRef.current = false;
+        setPolling(false);
+      }
+    },
+    [load],
+  );
+
   useEffect(() => {
     void load();
-    const timer = setInterval(() => void load(), 60_000);
+    const timer = setInterval(() => void load(), REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [load]);
 
-  async function runPoll() {
-    setPolling(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/monitor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'poll' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? '扫描失败');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '扫描失败');
-    } finally {
-      setPolling(false);
+  useEffect(() => {
+    if (!autoScan) {
+      setNextScanAt(null);
+      return;
     }
-  }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const scheduleNext = () => {
+      const interval = marketOpenRef.current
+        ? SCAN_INTERVAL_OPEN_MS
+        : SCAN_INTERVAL_CLOSED_MS;
+      setNextScanAt(Date.now() + interval);
+      timeoutId = setTimeout(() => void scanLoop(false), interval);
+    };
+
+    async function scanLoop(isFirst: boolean) {
+      if (cancelled) return;
+      await runPoll({ silent: !isFirst });
+      if (cancelled) return;
+      scheduleNext();
+    }
+
+    void scanLoop(true);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [autoScan, runPoll]);
+
+  useEffect(() => {
+    if (!nextScanAt || !autoScan) {
+      setCountdown('');
+      return;
+    }
+    const tick = () => setCountdown(fmtCountdown(nextScanAt - Date.now()));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [nextScanAt, autoScan]);
 
   const alerts = status?.todayAlerts ?? [];
-  const urgentAlerts = alerts.filter((a) => a.severity === 'urgent' && !a.acknowledged);
+  const urgentAlerts = alerts.filter(
+    (a) => a.severity === 'urgent' && !a.acknowledged,
+  );
   const preMoveAlerts = alerts.filter((a) => a.alertType === 'pre_move');
 
   return (
     <main className="page page--list">
       <PageHeader
         title="实时监控"
-        description="结合 7×24 快讯与盘中行情，优先提示「有新闻催化、尚未大涨」的标的，避免事后追涨。"
+        description="打开本页即可自动扫描：结合 7×24 快讯与盘中行情，优先提示「有催化、尚未大涨」的标的。"
       />
 
       <div className="list-stack">
@@ -124,13 +195,22 @@ export default function MonitorPage() {
             >
               {status?.marketOpen ? '● 交易中' : '○ 非交易时段'}
             </span>
+            {autoScan && (
+              <span
+                className={`monitor-pill${polling ? ' monitor-pill--scanning' : ' monitor-pill--auto'}`}
+              >
+                {polling ? '⟳ 扫描中' : '◉ 自动监控'}
+              </span>
+            )}
             <span className="monitor-meta">
               {status?.tradingHours ?? 'A 股交易时段 9:30–11:30、13:00–15:00'}
             </span>
+            {autoScan && countdown && !polling && (
+              <span className="monitor-meta">下次扫描 {countdown}</span>
+            )}
             {status?.lastRun && (
               <span className="monitor-meta">
-                上次扫描 {fmtTime(status.lastRun.createdAt)} ·{' '}
-                {status.lastRun.summary}
+                上次 {fmtTime(status.lastRun.createdAt)} · {status.lastRun.summary}
               </span>
             )}
             {status && status.unacknowledgedCount > 0 && (
@@ -141,6 +221,14 @@ export default function MonitorPage() {
           </div>
 
           <nav className="page-toolbar">
+            <button
+              type="button"
+              className={`button${autoScan ? ' button-secondary' : ''}`}
+              disabled={polling}
+              onClick={() => setAutoScan((v) => !v)}
+            >
+              {autoScan ? '暂停自动' : '开启自动'}
+            </button>
             <button
               type="button"
               className="button"
@@ -170,7 +258,9 @@ export default function MonitorPage() {
 
         {!loading && alerts.length === 0 && (
           <div className="empty-state">
-            今日暂无提醒。点击「立即扫描」拉取最新资讯与行情，或等待 Cron 自动轮询。
+            {autoScan
+              ? '正在自动扫描资讯与行情，有新提醒会出现在下方。首次扫描可能需要 1–2 分钟。'
+              : '今日暂无提醒。点击「开启自动」或「立即扫描」开始监控。'}
           </div>
         )}
 

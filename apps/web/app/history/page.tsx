@@ -60,18 +60,21 @@ export default function HistoryPage() {
   return (
     <main className="page page--list">
       <PageHeader
-        title="我的研报"
-        description="已生成的研报会自动保存，可按股票代码筛选回看。"
+        title="档案"
+        description="集中回看已生成的研报、选股记录和每周复盘。研报可按股票代码筛选。"
       />
 
       <div className="list-stack">
         <div className="list-stack-head">
           <nav className="page-toolbar" aria-label="页面导航">
             <Link href="/" className="button button-secondary">
-              返回首页
+              新建研究
             </Link>
             <Link href="/screen/history" className="button button-secondary">
               选股记录
+            </Link>
+            <Link href="/reviews" className="button button-secondary">
+              每周复盘
             </Link>
           </nav>
 

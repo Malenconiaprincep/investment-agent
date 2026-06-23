@@ -58,11 +58,8 @@ export default function WatchlistPage() {
             <Link href="/signals" className="button button-secondary">
               信号提醒
             </Link>
-            <Link href="/reviews" className="button button-secondary">
-              每周复盘
-            </Link>
-            <Link href="/paper" className="button button-secondary">
-              模拟操盘
+            <Link href="/" className="button button-secondary">
+              单股研究
             </Link>
           </nav>
 

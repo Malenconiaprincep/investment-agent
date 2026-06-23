@@ -13,6 +13,7 @@
     "screen": "pnpm --filter @investment-agent/agent-core screen",
     "committee": "pnpm --filter @investment-agent/agent-core committee",
     "research": "pnpm --filter @investment-agent/agent-core research",
+    "test": "pnpm --filter @investment-agent/agent-core test && pnpm --filter @investment-agent/web test",
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev",
     "web:build": "pnpm --filter @investment-agent/web build",

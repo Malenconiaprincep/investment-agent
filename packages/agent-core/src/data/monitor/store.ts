@@ -42,6 +42,24 @@ export type MonitorPollRun = {
   createdAt: string;
 };
 
+export type MonitorNewsEvent = {
+  newsKey: string;
+  title: string;
+  url: string | null;
+  source: string | null;
+  publishedAt: string | null;
+  firstSeenAt: string;
+};
+
+export type MonitorRuntimeState = {
+  running?: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+  lastRunId?: string;
+  summary?: string;
+  error?: string;
+};
+
 let client: Client | null = null;
 let migrated = false;
 
@@ -89,6 +107,25 @@ async function getDb(): Promise<Client> {
         news_key TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         first_seen_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS monitor_news_events (
+        news_key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        url TEXT,
+        source TEXT,
+        published_at TEXT,
+        first_seen_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_monitor_news_events_seen ON monitor_news_events(first_seen_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS monitor_alert_dedupe (
+        dedupe_key TEXT PRIMARY KEY,
+        alert_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS monitor_runtime_state (
+        state_key TEXT PRIMARY KEY,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )`,
     ]);
     migrated = true;
@@ -171,6 +208,27 @@ export async function hasRecentAlert(input: {
   });
 
   return result.rows.length > 0;
+}
+
+export async function hasAlertDedupeKey(dedupeKey: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT dedupe_key FROM monitor_alert_dedupe WHERE dedupe_key = ? LIMIT 1`,
+    args: [dedupeKey],
+  });
+  return result.rows.length > 0;
+}
+
+export async function saveAlertDedupeKey(input: {
+  dedupeKey: string;
+  alertId: string;
+}): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO monitor_alert_dedupe (dedupe_key, alert_id, created_at)
+          VALUES (?, ?, ?)`,
+    args: [input.dedupeKey, input.alertId, new Date().toISOString()],
+  });
 }
 
 export async function listMonitorAlerts(input?: {
@@ -263,7 +321,15 @@ export async function getLatestMonitorPollRun(): Promise<MonitorPollRun | null> 
   };
 }
 
-export async function markNewsSeen(items: Array<{ key: string; title: string }>) {
+type NewsSeenInput = {
+  key: string;
+  title: string;
+  url?: string | null;
+  source?: string | null;
+  publishedAt?: string | null;
+};
+
+export async function markNewsSeen(items: NewsSeenInput[]) {
   if (items.length === 0) return;
   const db = await getDb();
   const now = new Date().toISOString();
@@ -272,6 +338,19 @@ export async function markNewsSeen(items: Array<{ key: string; title: string }>)
     await db.execute({
       sql: `INSERT OR IGNORE INTO monitor_news_seen (news_key, title, first_seen_at) VALUES (?, ?, ?)`,
       args: [item.key, item.title, now],
+    });
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO monitor_news_events
+            (news_key, title, url, source, published_at, first_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        item.key,
+        item.title,
+        item.url ?? null,
+        item.source ?? null,
+        item.publishedAt ?? null,
+        now,
+      ],
     });
   }
 }
@@ -285,11 +364,43 @@ export async function filterUnseenNews(
 
   for (const item of items) {
     const result = await db.execute({
-      sql: `SELECT news_key FROM monitor_news_seen WHERE news_key = ? LIMIT 1`,
+      sql: `SELECT news_key FROM monitor_news_events WHERE news_key = ? LIMIT 1`,
       args: [item.key],
     });
     if (result.rows.length === 0) unseen.push(item);
   }
 
   return unseen;
+}
+
+export async function getMonitorRuntimeState(
+  key = 'default',
+): Promise<MonitorRuntimeState | null> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT state_json FROM monitor_runtime_state WHERE state_key = ? LIMIT 1`,
+    args: [key],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  try {
+    return JSON.parse(String(row.state_json)) as MonitorRuntimeState;
+  } catch {
+    return null;
+  }
+}
+
+export async function setMonitorRuntimeState(
+  key: string,
+  state: MonitorRuntimeState,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO monitor_runtime_state (state_key, state_json, updated_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(state_key) DO UPDATE SET
+            state_json = excluded.state_json,
+            updated_at = excluded.updated_at`,
+    args: [key, JSON.stringify(state), new Date().toISOString()],
+  });
 }

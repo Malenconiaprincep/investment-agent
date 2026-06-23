@@ -1,17 +1,18 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { CommitteeStreamEvent } from './committee-stream-types.js';
 
-let currentEmitter: ((event: CommitteeStreamEvent) => void) | null = null;
+type CommitteeStreamEmitter = (event: CommitteeStreamEvent) => void;
+
+const committeeStreamEmitterStorage =
+  new AsyncLocalStorage<CommitteeStreamEmitter>();
 
 export function withCommitteeStreamEmitter<T>(
-  emit: (event: CommitteeStreamEvent) => void,
+  emit: CommitteeStreamEmitter,
   fn: () => Promise<T>,
 ): Promise<T> {
-  currentEmitter = emit;
-  return fn().finally(() => {
-    currentEmitter = null;
-  });
+  return committeeStreamEmitterStorage.run(emit, fn);
 }
 
 export function emitCommitteeStreamEvent(event: CommitteeStreamEvent): void {
-  currentEmitter?.(event);
+  committeeStreamEmitterStorage.getStore()?.(event);
 }

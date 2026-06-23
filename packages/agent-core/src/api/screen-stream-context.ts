@@ -1,17 +1,17 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ScreenStreamEvent } from './screen-stream-types.js';
 
-let currentEmitter: ((event: ScreenStreamEvent) => void) | null = null;
+type ScreenStreamEmitter = (event: ScreenStreamEvent) => void;
+
+const screenStreamEmitterStorage = new AsyncLocalStorage<ScreenStreamEmitter>();
 
 export function withScreenStreamEmitter<T>(
-  emit: (event: ScreenStreamEvent) => void,
+  emit: ScreenStreamEmitter,
   fn: () => Promise<T>,
 ): Promise<T> {
-  currentEmitter = emit;
-  return fn().finally(() => {
-    currentEmitter = null;
-  });
+  return screenStreamEmitterStorage.run(emit, fn);
 }
 
 export function emitScreenStreamEvent(event: ScreenStreamEvent): void {
-  currentEmitter?.(event);
+  screenStreamEmitterStorage.getStore()?.(event);
 }

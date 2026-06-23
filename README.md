@@ -58,7 +58,31 @@ pnpm ingest
 
 首次运行会下载本地 embedding 模型，可能需要几分钟。
 
-### 5. 启动 Agent
+### 5. 本地启动服务
+
+本项目当前按本地自用设计：先启动 `agent-core` HTTP 服务，再启动 Next.js Web UI。最简单方式：
+
+```bash
+pnpm dev:all
+```
+
+也可以拆开两个终端运行：
+
+```bash
+pnpm agent:serve
+pnpm web:dev
+```
+
+打开 [http://localhost:3000](http://localhost:3000)，使用本地原型账号登录：
+
+```text
+账号：admin
+密码：admin
+```
+
+Web 侧通过 `apps/web/.env.local` 里的 `AGENT_CORE_URL` 连接本地 `agent-core`，默认地址为 `http://127.0.0.1:4000`。
+
+### 6. Agent 调试入口
 
 **方式一：Mastra Studio（可视化调试）**
 
@@ -76,7 +100,7 @@ pnpm chat
 pnpm chat 分析贵州茅台 600519
 ```
 
-### 6. 运行五步投研 Workflow（Phase 3）
+### 7. 运行五步投研 Workflow（Phase 3）
 
 ```bash
 pnpm research 600519
@@ -85,20 +109,25 @@ pnpm research 分析平安银行 000001
 pnpm eval:workflow
 ```
 
-### 7. Web UI（Phase 4）
+### 8. Web UI（Phase 4）
 
 ```bash
 pnpm web:dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，输入股票代码（如 `600519`）生成结构化研报。
+打开 [http://localhost:3000](http://localhost:3000)，登录后输入股票代码（如 `600519`）生成结构化研报。
 
-### 8. 运行 Eval 测试
+### 9. 运行 Eval 与单元测试
 
 ```bash
+pnpm test
 pnpm eval
 pnpm eval market-research-report   # Phase 2 验收
 ```
+
+## 本地桌面应用方向
+
+后续可以把当前本地服务模式包进 Electron：Electron 负责桌面壳，内部启动或连接本地 Next Web 与 `agent-core` HTTP 服务。当前的 `admin/admin` 登录只是本地原型门面，认证逻辑集中在 `apps/web/lib/local-auth.ts`，未来可以替换为首次启动设置、本地配置文件或系统钥匙串。
 
 ## 项目结构
 

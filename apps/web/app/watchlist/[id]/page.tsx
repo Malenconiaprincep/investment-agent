@@ -253,7 +253,7 @@ export default function WatchlistDetailPage() {
                   href={`/demo/stock/${data.item.symbol}`}
                   className="button button-secondary"
                 >
-                  全屏 K 线
+                  技术图表
                 </Link>
               </div>
             </div>

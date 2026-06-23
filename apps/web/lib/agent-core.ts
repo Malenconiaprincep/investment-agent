@@ -12,6 +12,13 @@ function isLocalAgentCoreUrl(baseUrl: string): boolean {
   }
 }
 
+function shouldUseLocalMonitorExec(baseUrl: string): boolean {
+  return (
+    process.env.AGENT_CORE_MONITOR_LOCAL_EXEC === '1' &&
+    isLocalAgentCoreUrl(baseUrl)
+  );
+}
+
 export function getAgentCoreConfig(): AgentCoreConfig {
   const baseUrl = process.env.AGENT_CORE_URL?.trim().replace(/\/$/, '');
   if (!baseUrl) {
@@ -82,11 +89,28 @@ export async function runAgentCoreWatchlistJson(args: string[]): Promise<string>
 
 async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
   const { execFile } = await import('node:child_process');
+  const { existsSync } = await import('node:fs');
   const { promisify } = await import('node:util');
   const path = await import('node:path');
   const execFileAsync = promisify(execFile);
 
-  const agentCoreRoot = path.resolve(process.cwd(), '../../packages/agent-core');
+  let dir = process.cwd();
+  let agentCoreRoot = '';
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, 'packages/agent-core');
+    if (existsSync(path.join(candidate, 'package.json'))) {
+      agentCoreRoot = candidate;
+      break;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  if (!agentCoreRoot) {
+    throw new Error('未找到 packages/agent-core，请从项目根目录启动 Web');
+  }
+
   const { stdout } = await execFileAsync(
     'pnpm',
     ['exec', 'tsx', 'src/cli/monitor-json.ts', ...args],
@@ -102,7 +126,7 @@ async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
 export async function runAgentCoreMonitorJson(args: string[]): Promise<string> {
   const { baseUrl } = getAgentCoreConfig();
 
-  if (isLocalAgentCoreUrl(baseUrl)) {
+  if (shouldUseLocalMonitorExec(baseUrl)) {
     try {
       return await runAgentCoreMonitorLocal(args);
     } catch (error) {
