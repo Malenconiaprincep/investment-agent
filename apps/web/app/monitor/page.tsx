@@ -168,6 +168,9 @@ export default function MonitorPage() {
     (a) => a.severity === 'urgent' && !a.acknowledged,
   );
   const preMoveAlerts = alerts.filter((a) => a.alertType === 'pre_move');
+  const actionableRecommendations = lastRecommendations.filter(
+    (item) => item.symbol && item.level !== 'info',
+  );
 
   return (
     <main className="page page--list">
@@ -238,11 +241,11 @@ export default function MonitorPage() {
           </div>
         )}
 
-        {lastRecommendations.length > 0 && (
+        {actionableRecommendations.length > 0 && (
           <section className="monitor-section">
             <h2 className="section-title">消息推荐</h2>
             <div className="history-list">
-              {lastRecommendations.map((item) => (
+              {actionableRecommendations.map((item) => (
                 <RecommendationCard key={item.alertId} item={item} />
               ))}
             </div>
