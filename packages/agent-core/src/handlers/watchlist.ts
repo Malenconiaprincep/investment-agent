@@ -102,6 +102,7 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
     return JSON.stringify({
       symbol: basic.symbol,
       name: basic.name,
+      industry: basic.industry ?? null,
       kline,
       diamondHistory,
       latestDiamond,

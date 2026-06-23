@@ -5,6 +5,7 @@ import {
   TRADING_HOURS_LABEL,
 } from '../paper/trading-calendar.js';
 import { runMonitorPollManaged } from './engine.js';
+import { purgeExpiredMonitorData } from './store.js';
 
 let started = false;
 let timer: NodeJS.Timeout | null = null;
@@ -25,6 +26,22 @@ function isEnabled(): boolean {
 async function tick(intervalMs: number) {
   const now = getBeijingNow();
   const tradeDate = formatTradeDate(now);
+
+  try {
+    const purged = await purgeExpiredMonitorData();
+    if (
+      purged.alertsDeleted > 0 ||
+      purged.newsEventsDeleted > 0 ||
+      purged.pollRunsDeleted > 0
+    ) {
+      console.log(
+        `[monitor-bg] 清理 ${purged.cutoffTradeDate} 之前数据：提醒 ${purged.alertsDeleted}、新闻 ${purged.newsEventsDeleted}`,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[monitor-bg] 清理过期数据失败：${message}`);
+  }
 
   if (!isWeekday(now)) {
     console.log(`[monitor-bg] ${tradeDate} 周末休市，跳过扫描`);

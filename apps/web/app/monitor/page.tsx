@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
+import { MonitorStockInsight } from '@/components/monitor/MonitorStockInsight';
 
 type MonitorAlert = {
   id: string;
@@ -49,6 +50,9 @@ type MonitorPaperRecommendation = {
   level: 'auto_buy' | 'watch' | 'info';
   symbol: string | null;
   name: string | null;
+  theme: string | null;
+  pctChg: number | null;
+  ret20dPct: number | null;
   reason: string;
   status: 'recommended' | 'bought' | 'skipped' | 'error';
   skipReason?: string;
@@ -87,6 +91,23 @@ const ALERT_LABEL: Record<string, string> = {
 
 const REFRESH_INTERVAL_MS = 30 * 1000;
 
+const THEME_NEWS_PREVIEW = 5;
+
+function consolidateThemeAlerts(alerts: MonitorAlert[]): MonitorAlert[] {
+  const byTheme = new Map<string, MonitorAlert>();
+  for (const alert of alerts) {
+    if (alert.alertType !== 'theme_ignite') continue;
+    const key = alert.theme ?? alert.newsTitle ?? alert.id;
+    const existing = byTheme.get(key);
+    if (!existing || alert.createdAt > existing.createdAt) {
+      byTheme.set(key, alert);
+    }
+  }
+  return [...byTheme.values()].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt),
+  );
+}
+
 function fmtTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString('zh-CN', {
@@ -97,11 +118,6 @@ function fmtTime(iso: string) {
   } catch {
     return iso;
   }
-}
-
-function fmtPct(v: number | null | undefined) {
-  if (v == null) return '—';
-  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
 export default function MonitorPage() {
@@ -172,6 +188,10 @@ export default function MonitorPage() {
     (a) => a.severity === 'urgent' && !a.acknowledged,
   );
   const preMoveAlerts = alerts.filter((a) => a.alertType === 'pre_move');
+  const themeAlerts = useMemo(
+    () => consolidateThemeAlerts(alerts),
+    [alerts],
+  );
   const actionableRecommendations = lastRecommendations.filter(
     (item) => item.symbol && item.level !== 'info',
   );
@@ -323,7 +343,10 @@ export default function MonitorPage() {
         {actionableRecommendations.length > 0 && (
           <section className="monitor-section">
             <h2 className="section-title">消息推荐</h2>
-            <div className="history-list">
+            <p className="muted monitor-section-hint">
+              含股票名称、所属板块与近 120 日 K 线（滚动进入视口后加载）。
+            </p>
+            <div className="monitor-stock-grid">
               {actionableRecommendations.map((item) => (
                 <RecommendationCard key={item.alertId} item={item} />
               ))}
@@ -334,7 +357,7 @@ export default function MonitorPage() {
         {lastPaperActions.length > 0 && (
           <section className="monitor-section">
             <h2 className="section-title">自动交易记录</h2>
-            <div className="history-list">
+            <div className="monitor-stock-grid">
               {lastPaperActions.map((item, index) => (
                 <PaperActionCard key={`${item.kind}-${item.symbol}-${index}`} item={item} />
               ))}
@@ -345,7 +368,7 @@ export default function MonitorPage() {
         {preMoveAlerts.length > 0 && (
           <section className="monitor-section">
             <h2 className="section-title">潜伏机会</h2>
-            <div className="history-list">
+            <div className="monitor-stock-grid">
               {preMoveAlerts.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} />
               ))}
@@ -353,18 +376,62 @@ export default function MonitorPage() {
           </section>
         )}
 
-        {alerts.length > 0 && (
-          <section className="monitor-section">
-            <h2 className="section-title">全部提醒</h2>
-            <div className="history-list">
-              {alerts.map((alert) => (
-                <AlertCard key={alert.id} alert={alert} />
-              ))}
-            </div>
-          </section>
+        {themeAlerts.length > 0 && (
+          <ThemeNewsFeed alerts={themeAlerts} />
         )}
       </div>
     </main>
+  );
+}
+
+function ThemeNewsFeed({ alerts }: { alerts: MonitorAlert[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? alerts : alerts.slice(0, THEME_NEWS_PREVIEW);
+  const hiddenCount = Math.max(0, alerts.length - THEME_NEWS_PREVIEW);
+
+  return (
+    <section className="monitor-section">
+      <div className="monitor-section-head">
+        <h2 className="section-title">主线快讯</h2>
+        <span className="muted monitor-section-count">{alerts.length} 条</span>
+      </div>
+      <p className="muted monitor-section-hint">
+        仅展示各主线最新一条，当天保留、次日晚自动清理。
+      </p>
+      <ul className="monitor-news-feed">
+        {visible.map((alert) => (
+          <li key={alert.id} className="monitor-news-feed-item">
+            <span className="monitor-news-feed-time">{fmtTime(alert.createdAt)}</span>
+            {alert.theme ? (
+              <span className="monitor-news-feed-theme">{alert.theme}</span>
+            ) : null}
+            {alert.newsUrl ? (
+              <a
+                href={alert.newsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="monitor-news-feed-title"
+              >
+                {alert.newsTitle ?? alert.summary}
+              </a>
+            ) : (
+              <span className="monitor-news-feed-title">
+                {alert.newsTitle ?? alert.summary}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="button button-secondary monitor-news-feed-toggle"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? '收起' : `展开其余 ${hiddenCount} 条`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -383,17 +450,25 @@ function statusLabel(status: MonitorPaperRecommendation['status']) {
 
 function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
   return (
-    <article className={`history-card monitor-card monitor-recommendation monitor-recommendation--${item.level}`}>
-      <div className="history-card-main">
+    <article className={`monitor-stock-card monitor-recommendation monitor-recommendation--${item.level}`}>
+      <div className="monitor-stock-card-head">
         <span className={`monitor-type monitor-recommendation-type--${item.level}`}>
           {recommendationLabel(item.level)}
         </span>
-        <strong>
-          {item.name ?? '未识别标的'}
-          {item.symbol ? ` (${item.symbol})` : ''}
-        </strong>
         <span className="history-card-time">{statusLabel(item.status)}</span>
       </div>
+
+      {item.symbol ? (
+        <MonitorStockInsight
+          symbol={item.symbol}
+          fallbackName={item.name}
+          theme={item.theme}
+          pctChg={item.pctChg}
+          ret20dPct={item.ret20dPct}
+        />
+      ) : (
+        <strong>{item.name ?? '未识别标的'}</strong>
+      )}
 
       <p className="monitor-summary">
         {item.skipReason ?? item.error ?? item.reason}
@@ -417,10 +492,10 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
             生成研报
           </Link>
         )}
-        {item.symbol && item.name && (
+        {item.symbol && (
           <AddToWatchlistButton
             symbol={item.symbol}
-            name={item.name}
+            name={item.name && !/^\d{6}$/.test(item.name) ? item.name : item.symbol}
             reason="消息雷达推荐"
             sourceType="signal"
             sourceId={item.alertId}
@@ -440,18 +515,18 @@ function paperActionLabel(item: MonitorPaperAction) {
 
 function PaperActionCard({ item }: { item: MonitorPaperAction }) {
   return (
-    <article className={`history-card monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
-      <div className="history-card-main">
+    <article className={`monitor-stock-card monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
+      <div className="monitor-stock-card-head">
         <span className="monitor-type monitor-recommendation-type--auto_buy">
           {paperActionLabel(item)}
         </span>
-        <strong>
-          {item.name} ({item.symbol})
-        </strong>
         <span className="history-card-time">
           {item.kind === 'buy' ? '买入检查' : '卖出检查'}
         </span>
       </div>
+
+      <MonitorStockInsight symbol={item.symbol} fallbackName={item.name} />
+
       <p className="monitor-summary">{item.error ?? item.reason}</p>
       <div className="history-card-meta">
         {item.shares ? <span>股数 {item.shares}</span> : null}
@@ -469,28 +544,34 @@ function AlertCard({ alert }: { alert: MonitorAlert }) {
 
   return (
     <article
-      className={`history-card monitor-card monitor-card--${alert.severity}${alert.acknowledged ? ' monitor-card--read' : ''}`}
+      className={`monitor-stock-card monitor-card monitor-card--${alert.severity}${alert.acknowledged ? ' monitor-card--read' : ''}`}
     >
-      <div className="history-card-main">
+      <div className="monitor-stock-card-head">
         <span className={`monitor-type monitor-type--${alert.alertType}`}>
           {typeLabel}
         </span>
-        <strong>{alert.title}</strong>
         <span className="history-card-time">{fmtTime(alert.createdAt)}</span>
       </div>
 
+      {alert.symbol ? (
+        <MonitorStockInsight
+          symbol={alert.symbol}
+          fallbackName={alert.name}
+          theme={alert.theme}
+          pctChg={alert.pctChg}
+          ret20dPct={alert.ret20dPct}
+        />
+      ) : (
+        <strong>{alert.title}</strong>
+      )}
+
       <p className="monitor-summary">{alert.summary}</p>
 
-      <div className="history-card-meta">
-        {alert.symbol && (
-          <span>
-            {alert.name} ({alert.symbol})
-          </span>
-        )}
-        {alert.pctChg != null && <span>涨幅 {fmtPct(alert.pctChg)}</span>}
-        {alert.ret20dPct != null && <span>20日 {fmtPct(alert.ret20dPct)}</span>}
-        {alert.theme && <span>主线 {alert.theme}</span>}
-      </div>
+      {!alert.symbol && (
+        <div className="history-card-meta">
+          {alert.theme && <span>主线 {alert.theme}</span>}
+        </div>
+      )}
 
       {alert.newsTitle && (
         <p className="monitor-news">

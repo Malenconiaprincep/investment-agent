@@ -1,5 +1,9 @@
 import { createClient, type Client } from '@libsql/client';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
+import {
+  getMonitorRetentionCutoffTradeDate,
+  monitorRetentionCutoffInstant,
+} from './retention.js';
 
 export type MonitorAlertType =
   | 'news_catalyst'
@@ -403,4 +407,58 @@ export async function setMonitorRuntimeState(
             updated_at = excluded.updated_at`,
     args: [key, JSON.stringify(state), new Date().toISOString()],
   });
+}
+
+export type MonitorPurgeResult = {
+  cutoffTradeDate: string;
+  alertsDeleted: number;
+  pollRunsDeleted: number;
+  newsEventsDeleted: number;
+  newsSeenDeleted: number;
+  dedupeDeleted: number;
+};
+
+/** 清理过期消息雷达数据：默认次日晚 20:00 后删除前一日及更早记录 */
+export async function purgeExpiredMonitorData(): Promise<MonitorPurgeResult> {
+  const db = await getDb();
+  const cutoffTradeDate = getMonitorRetentionCutoffTradeDate();
+  const cutoffInstant = monitorRetentionCutoffInstant(cutoffTradeDate);
+
+  const [
+    alerts,
+    pollRuns,
+    newsEvents,
+    newsSeen,
+    dedupe,
+  ] = await Promise.all([
+    db.execute({
+      sql: `DELETE FROM monitor_alerts WHERE trade_date < ?`,
+      args: [cutoffTradeDate],
+    }),
+    db.execute({
+      sql: `DELETE FROM monitor_poll_runs WHERE trade_date < ?`,
+      args: [cutoffTradeDate],
+    }),
+    db.execute({
+      sql: `DELETE FROM monitor_news_events WHERE first_seen_at < ?`,
+      args: [cutoffInstant],
+    }),
+    db.execute({
+      sql: `DELETE FROM monitor_news_seen WHERE first_seen_at < ?`,
+      args: [cutoffInstant],
+    }),
+    db.execute({
+      sql: `DELETE FROM monitor_alert_dedupe WHERE created_at < ?`,
+      args: [cutoffInstant],
+    }),
+  ]);
+
+  return {
+    cutoffTradeDate,
+    alertsDeleted: alerts.rowsAffected,
+    pollRunsDeleted: pollRuns.rowsAffected,
+    newsEventsDeleted: newsEvents.rowsAffected,
+    newsSeenDeleted: newsSeen.rowsAffected,
+    dedupeDeleted: dedupe.rowsAffected,
+  };
 }

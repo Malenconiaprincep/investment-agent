@@ -21,6 +21,9 @@ export type MonitorPaperRecommendation = {
   level: 'auto_buy' | 'watch' | 'info';
   symbol: string | null;
   name: string | null;
+  theme: string | null;
+  pctChg: number | null;
+  ret20dPct: number | null;
   reason: string;
   status: 'recommended' | 'bought' | 'skipped' | 'error';
   skipReason?: string;
@@ -86,6 +89,9 @@ function buildRecommendation(alert: MonitorAlert): MonitorPaperRecommendation {
     alertType: alert.alertType,
     symbol: alert.symbol,
     name: alert.name,
+    theme: alert.theme,
+    pctChg: alert.pctChg,
+    ret20dPct: alert.ret20dPct,
     ...classified,
   };
 }

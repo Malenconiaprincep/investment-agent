@@ -9,7 +9,7 @@ import {
 } from '../market/hot-market-discovery.js';
 import { fetchIntradayQuotes, type IntradayQuote } from '../market/free/intraday-quote.js';
 import { extractSymbolsFromText } from '../market/news-enrichment.js';
-import { getDailyQuote } from '../market/services.js';
+import { getDailyQuote, getStockBasic } from '../market/services.js';
 import {
   formatTradeDate,
   getBeijingNow,
@@ -28,6 +28,7 @@ import {
   saveMonitorAlert,
   saveMonitorPollRun,
   setMonitorRuntimeState,
+  purgeExpiredMonitorData,
   type MonitorAlertSeverity,
   type MonitorAlertType,
 } from './store.js';
@@ -132,6 +133,33 @@ async function calcRet20d(symbol: string): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+function isUnresolvedName(name: string | undefined, symbol: string): boolean {
+  if (!name) return true;
+  const trimmed = name.trim();
+  return trimmed === symbol || /^\d{6}$/.test(trimmed);
+}
+
+async function resolveUnresolvedSymbolNames(
+  symbols: Map<string, { name: string; news: HotNewsItem[]; inWatchlist: boolean }>,
+) {
+  const pending = [...symbols.entries()].filter(([symbol, meta]) =>
+    isUnresolvedName(meta.name, symbol),
+  );
+  if (pending.length === 0) return;
+
+  await Promise.all(
+    pending.map(async ([symbol]) => {
+      try {
+        const basic = await getStockBasic(symbol);
+        const meta = symbols.get(symbol);
+        if (meta && basic.name) meta.name = basic.name;
+      } catch {
+        // 保留原名称
+      }
+    }),
+  );
 }
 
 async function buildSymbolContexts(input: {
@@ -246,6 +274,10 @@ export async function runMonitorPoll(options?: {
   const marketOpen = isTradingSession(now);
   const alerts: Awaited<ReturnType<typeof saveMonitorAlert>>[] = [];
 
+  await purgeExpiredMonitorData().catch(() => {
+    // 清理失败不阻断扫描
+  });
+
   if (!options?.force && !isWeekday(now)) {
     const summary = '周末休市，跳过盘中监控';
     await saveMonitorPollRun({
@@ -347,6 +379,8 @@ export async function runMonitorPoll(options?: {
   }
 
   attachNewsByKnownNames(symbolMeta, hotNews);
+
+  await resolveUnresolvedSymbolNames(symbolMeta);
 
   const quotes = marketOpen
     ? await fetchIntradayQuotes([...symbolMeta.keys()])
@@ -472,7 +506,7 @@ export async function runMonitorPoll(options?: {
       theme,
       tradeDate,
       alerts,
-      dedupeKey: `theme_ignite:${theme}:${newsKey(recent)}`,
+      dedupeKey: `theme_ignite:${theme}:${tradeDate}`,
     });
   }
 
