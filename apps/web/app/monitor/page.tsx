@@ -31,8 +31,12 @@ type MonitorStatus = {
   lastRun: {
     createdAt: string;
     summary: string;
+    newsCount: number;
     alertCount: number;
     newNewsCount: number;
+    symbolsScanned: number;
+    marketOpen: boolean;
+    elapsedMs: number;
   } | null;
   todayAlerts: MonitorAlert[];
   recommendations: MonitorPaperRecommendation[];
@@ -171,6 +175,34 @@ export default function MonitorPage() {
   const actionableRecommendations = lastRecommendations.filter(
     (item) => item.symbol && item.level !== 'info',
   );
+  const alertTypeCounts = alerts.reduce<Record<string, number>>((acc, alert) => {
+    acc[alert.alertType] = (acc[alert.alertType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const autoBuyCandidates = actionableRecommendations.filter(
+    (item) => item.level === 'auto_buy',
+  );
+  const boughtActions = lastPaperActions.filter((item) => item.status === 'bought');
+  const soldActions = lastPaperActions.filter((item) => item.status === 'sold');
+  const skippedActions = lastPaperActions.filter(
+    (item) => item.status === 'skipped',
+  );
+  const errorActions = lastPaperActions.filter((item) => item.status === 'error');
+  const noBuyReason =
+    boughtActions.length > 0
+      ? null
+      : autoBuyCandidates.length > 0
+        ? autoBuyCandidates
+            .map((item) => item.skipReason ?? item.error)
+            .filter(Boolean)
+            .join('；') || '已有候选，但尚未执行买入'
+        : alerts.length === 0
+          ? '暂无提醒'
+          : alerts.every((item) => !item.symbol)
+            ? '本次提醒没有识别到具体股票代码'
+            : preMoveAlerts.length === 0
+              ? '没有出现“潜伏机会”类型提醒'
+              : '没有满足 urgent + pre_move 的自动买入条件';
 
   return (
     <main className="page page--list">
@@ -232,6 +264,53 @@ export default function MonitorPage() {
               <strong>优先关注（{urgentAlerts.length}）</strong>
               <p>以下标的出现新催化且涨幅尚小，适合提前跟踪而非追涨已大涨股。</p>
             </div>
+          )}
+
+          {!loading && (
+            <section className="monitor-diagnostics" aria-label="分析诊断">
+              <div className="monitor-diagnostics-head">
+                <strong>分析诊断</strong>
+                {status?.lastRun ? (
+                  <span>上次扫描 {fmtTime(status.lastRun.createdAt)}</span>
+                ) : (
+                  <span>等待首次扫描</span>
+                )}
+              </div>
+              <div className="monitor-diagnostics-grid">
+                <div>
+                  <span>新闻</span>
+                  <strong>{status?.lastRun?.newsCount ?? 0}</strong>
+                  <small>新资讯 {status?.lastRun?.newNewsCount ?? 0}</small>
+                </div>
+                <div>
+                  <span>股票</span>
+                  <strong>{status?.lastRun?.symbolsScanned ?? 0}</strong>
+                  <small>有代码提醒 {alerts.filter((a) => a.symbol).length}</small>
+                </div>
+                <div>
+                  <span>提醒</span>
+                  <strong>{status?.lastRun?.alertCount ?? alerts.length}</strong>
+                  <small>
+                    潜伏 {alertTypeCounts.pre_move ?? 0} / 主线{' '}
+                    {alertTypeCounts.theme_ignite ?? 0}
+                  </small>
+                </div>
+                <div>
+                  <span>交易</span>
+                  <strong>{boughtActions.length + soldActions.length}</strong>
+                  <small>
+                    买 {boughtActions.length} / 卖 {soldActions.length}
+                  </small>
+                </div>
+              </div>
+              <p className="monitor-diagnostics-reason">
+                {noBuyReason ? `未买入原因：${noBuyReason}` : '已触发自动买入。'}
+                {skippedActions.length > 0
+                  ? `；跳过 ${skippedActions.length} 条`
+                  : ''}
+                {errorActions.length > 0 ? `；失败 ${errorActions.length} 条` : ''}
+              </p>
+            </section>
           )}
         </div>
 
