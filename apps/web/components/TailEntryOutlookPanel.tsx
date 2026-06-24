@@ -46,8 +46,23 @@ function formatNextDate(isoDate: string): string {
 }
 
 function formatInflowWan(value: number): string {
-  if (value >= 10000) return `${(value / 10000).toFixed(1)} 亿`;
-  return `${Math.round(value)} 万`;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 10000) return `${(n / 10000).toFixed(1)} 亿`;
+  return `${Math.round(n)} 万`;
+}
+
+function formatNetInflowYi(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 0) return `${n.toFixed(1)} 亿`;
+  return `-${Math.abs(n).toFixed(1)} 亿`;
+}
+
+function formatPctChg(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toFixed(2)}%`;
 }
 
 function stars(count: number): string {
@@ -150,8 +165,9 @@ export function TailEntryOutlookPanel({
                     <span className="muted">
                       {' '}
                       · {stars(sector.priorityStars)} · 涨{' '}
-                      {sector.pctChg.toFixed(2)}% · 净流入{' '}
-                      {sector.netInflowYi.toFixed(1)} 亿 · {sector.logic}
+                      {formatPctChg(sector.pctChg)} · 主力{' '}
+                      {formatNetInflowYi(sector.netInflowYi)} ·{' '}
+                      {sector.logic ?? '—'}
                     </span>
                   </li>
                 ))}
@@ -170,7 +186,7 @@ export function TailEntryOutlookPanel({
                       <span className="candidate-card-code">{stock.symbol}</span>
                     </strong>
                     <span className="muted">
-                      涨 {stock.pctChg.toFixed(2)}% · 净流入{' '}
+                      涨 {formatPctChg(stock.pctChg)} · 净流入{' '}
                       {formatInflowWan(stock.netInflowWan)} · {stock.tierLabel}
                     </span>
                     {stock.riskNote && (

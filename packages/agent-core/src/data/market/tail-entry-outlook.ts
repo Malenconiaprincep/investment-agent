@@ -173,8 +173,26 @@ type EmListRow = {
   f14?: string;
   f2?: number;
   f3?: number;
-  f62?: number;
+  /** 东财无数据时可能为 "-" 字符串 */
+  f62?: number | string;
 };
+
+function parseEmMoneyFlow(value: unknown, scale: 'yi' | 'wan'): number {
+  if (value == null || value === '' || value === '-') return 0;
+  const n =
+    typeof value === 'number'
+      ? value
+      : Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return 0;
+  return scale === 'yi' ? n / 1e8 : n / 1e4;
+}
+
+export function formatNetInflowYi(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 0) return `${n.toFixed(1)} 亿`;
+  return `-${Math.abs(n).toFixed(1)} 亿`;
+}
 
 type EmListResponse = {
   data?: {
@@ -210,7 +228,7 @@ function toConceptBoard(row: EmListRow): ConceptBoard | null {
     boardCode,
     name,
     pctChg: Number(row.f3 ?? 0),
-    netInflowYi: Number(row.f62 ?? 0) / 1e8,
+    netInflowYi: parseEmMoneyFlow(row.f62, 'yi'),
   };
 }
 
@@ -220,7 +238,7 @@ function toStockPick(row: EmListRow): TailEntryStockPick | null {
   if (!/^\d{6}$/.test(symbol) || !name) return null;
 
   const pctChg = Number(row.f3 ?? 0);
-  const netInflowWan = Number(row.f62 ?? 0) / 1e4;
+  const netInflowWan = parseEmMoneyFlow(row.f62, 'wan');
   const isLimitUp = pctChg >= 9.9;
 
   return {
@@ -601,10 +619,7 @@ export function formatTailEntryOutlookMarkdown(outlook: TailEntryOutlook): strin
     lines.push('| 优先级 | 板块 | 今日涨幅 | 主力净流入 | 延续逻辑 |');
     lines.push('|--------|------|----------|------------|----------|');
     for (const sector of outlook.sectorPicks) {
-      const inflow =
-        sector.netInflowYi >= 0
-          ? `${sector.netInflowYi.toFixed(1)} 亿`
-          : `-${Math.abs(sector.netInflowYi).toFixed(1)} 亿`;
+      const inflow = formatNetInflowYi(sector.netInflowYi);
       lines.push(
         `| ${priorityLabel(sector.priority, sector.priorityStars)} | ${sector.name} | ${sector.pctChg.toFixed(2)}% | ${inflow} | ${sector.logic} |`,
       );
