@@ -1,4 +1,4 @@
-export type MarketDataSource = 'eastmoney' | 'tencent' | 'iwencai';
+export type MarketDataSource = 'eastmoney' | 'tencent' | 'local-csv' | 'iwencai';
 
 export type DataMeta = {
   dataSource: MarketDataSource;

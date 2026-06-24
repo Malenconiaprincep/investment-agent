@@ -3,6 +3,10 @@ import { buildEtfTailPickCandidate } from '../etf/rules.js';
 import { fetchIntradayQuotes } from '../market/free/intraday-quote.js';
 import { getDailyQuote } from '../market/services.js';
 import {
+  hasLocalEtfDailyCsv,
+  LOCAL_ETF_LOAD_ALL_DAYS,
+} from '../market/local-csv/etf-daily.js';
+import {
   buildTradeGroups,
   createFixedHoldTrade,
   summarizeTrades,
@@ -32,7 +36,9 @@ export type RunEtfBacktestInput = {
 };
 
 const DEFAULT_DAYS = 250;
-const DEFAULT_HOLD_DAYS = [5];
+const DEFAULT_HOLD_DAYS = [1];
+const BENCHMARK_SYMBOL = '510300';
+const BENCHMARK_NAME = '沪深300ETF';
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
@@ -48,6 +54,14 @@ function normalizeHoldDays(holdDays: number[] | undefined): number[] {
 function estimateTurnover(close: number, volume: number | null): number {
   if (!volume || volume <= 0) return 0;
   return Math.round(close * volume * 100);
+}
+
+function dailyTurnover(
+  bar: { close: number | null; vol: number | null; amount?: number | null },
+): number {
+  if (bar.amount != null && bar.amount > 0) return Math.round(bar.amount);
+  if (bar.close == null) return 0;
+  return estimateTurnover(bar.close, bar.vol);
 }
 
 function avg(values: number[]): number | null {
@@ -81,6 +95,47 @@ function buildEquityCurve(trades: BacktestTrade[]): BacktestEquityPoint[] {
         closedTrades: closedTrades.length,
       };
     });
+}
+
+function buildBenchmarkCurve(
+  bars: Array<{ tradeDate: string; close: number | null }>,
+  dateRange: { startDate: string; endDate: string },
+): BacktestEquityPoint[] {
+  const inRange = bars
+    .filter(
+      (bar): bar is { tradeDate: string; close: number } =>
+        bar.close != null && isTradeDateInRange(bar.tradeDate, dateRange),
+    )
+    .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
+  const startClose = inRange[0]?.close;
+  if (!startClose || startClose <= 0) return [];
+
+  return inRange.map((bar) => {
+    const returnPct = round(((bar.close - startClose) / startClose) * 100);
+    return {
+      tradeDate: bar.tradeDate,
+      equity: round(100 + returnPct, 4),
+      returnPct,
+      closedTrades: 0,
+    };
+  });
+}
+
+async function buildBenchmark(
+  dateRange: { startDate: string; endDate: string },
+  days: number,
+): Promise<BacktestRunResult['benchmark'] | undefined> {
+  const quoteDays = hasLocalEtfDailyCsv(BENCHMARK_SYMBOL)
+    ? LOCAL_ETF_LOAD_ALL_DAYS
+    : days;
+  const data = await getDailyQuote(BENCHMARK_SYMBOL, quoteDays);
+  const curve = buildBenchmarkCurve(data.quotes, dateRange);
+  return {
+    symbol: BENCHMARK_SYMBOL,
+    name: BENCHMARK_NAME,
+    curve,
+    finalReturnPct: curve.at(-1)?.returnPct ?? null,
+  };
 }
 
 function buildSymbolSummaries(trades: BacktestTrade[]): BacktestSymbolSummary[] {
@@ -203,10 +258,15 @@ export async function runEtfTailRulesBacktest(
   const realtimeQuotes = await fetchIntradayQuotes(
     ETF_POOL_19.map((item) => item.symbol),
   ).catch(() => new Map());
+  let usedLocalCsv = false;
 
   for (const item of ETF_POOL_19) {
     try {
-      const data = await getDailyQuote(item.symbol, days);
+      const quoteDays = hasLocalEtfDailyCsv(item.symbol)
+        ? LOCAL_ETF_LOAD_ALL_DAYS
+        : days;
+      if (quoteDays === LOCAL_ETF_LOAD_ALL_DAYS) usedLocalCsv = true;
+      const data = await getDailyQuote(item.symbol, quoteDays);
       const bars = data.quotes.filter((bar) => bar.close != null);
       symbols.push({ symbol: item.symbol, name: item.name, assetType: 'etf' });
 
@@ -224,7 +284,7 @@ export async function runEtfTailRulesBacktest(
           name: realtime?.name || item.name,
           price: decisionPrice,
           changePct: decisionChangePct,
-          dailyTurnover: realtime?.amount ?? estimateTurnover(latest.close, latest.vol),
+          dailyTurnover: realtime?.amount ?? dailyTurnover(latest),
           intradayVolume: realtime?.volume ?? latest.vol ?? null,
           bars,
         });
@@ -253,7 +313,7 @@ export async function runEtfTailRulesBacktest(
           name: item.name,
           price: bar.close,
           changePct,
-          dailyTurnover: estimateTurnover(bar.close, bar.vol),
+          dailyTurnover: dailyTurnover(bar),
           intradayVolume: bar.vol ?? null,
           bars: bars.slice(index),
         });
@@ -314,6 +374,7 @@ export async function runEtfTailRulesBacktest(
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
   });
+  const benchmark = await buildBenchmark(dateRange, days).catch(() => undefined);
 
   return {
     strategy: 'etf-tail-rules',
@@ -346,6 +407,7 @@ export async function runEtfTailRulesBacktest(
       },
     ]),
     equityCurve: buildEquityCurve(sortedTrades),
+    benchmark,
     symbolSummaries: buildSymbolSummaries(sortedTrades),
     currentDecisions: currentDecisions.sort((a, b) => {
       const order = { buy: 0, wait_pullback: 1, watch: 2, sell: 3 };
@@ -354,9 +416,17 @@ export async function runEtfTailRulesBacktest(
     }),
     notes: [
       `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计该区间内触发的买入信号。`,
-      `ETF 回测复用现有 8 条尾盘规则；默认含义是尾盘触发买入信号后持有 ${holdDays.join('/')} 个交易日。`,
-      '行情接口只能拉取“截至今天的最近 N 根日 K”，不能获取未来数据；结束日期会自动限制在今天。',
-      '历史回测使用腾讯前复权日 K；历史成交额使用日 K 收盘价 * 成交量 * 100 估算。',
+      `ETF 回测复用现有 8 条尾盘规则；默认按日线可验证的最早退出模拟：尾盘买入后持有 ${holdDays.join('/')} 个交易日，在卖出日收盘价退出。`,
+      usedLocalCsv
+        ? '历史回测优先使用本地 ETF 前复权 CSV（含真实成交额）；缺失时退回腾讯前复权日 K。'
+        : '历史回测使用腾讯前复权日 K；历史成交额使用日 K 收盘价 * 成交量 * 100 估算。',
+      usedLocalCsv
+        ? '本地 CSV 不受“最近 N 根”限制，可覆盖更长回测区间；结束日期仍会自动限制在今天。'
+        : '行情接口只能拉取“截至今天的最近 N 根日 K”，不能获取未来数据；结束日期会自动限制在今天。',
+      benchmark
+        ? `大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益。`
+        : '大盘基准暂未生成，通常是 510300 行情缺失或读取失败。',
+      'T0/T1 是基金交易制度；当前只有日 K 收盘价，无法严谨模拟 T0 盘中同日卖出，因此 T0/T1 都按下一交易日收盘退出评估。',
       '当前尾盘决策优先使用东财实时行情，实时行情不可用时退回最新日 K。',
       input.includeWaitPullback
         ? '已纳入“等回踩”信号，并按触发日收盘价模拟入场。'

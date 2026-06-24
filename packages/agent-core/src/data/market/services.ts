@@ -8,6 +8,11 @@ import {
 } from './free/eastmoney.js';
 import { fetchNewsBrowser } from './free/news-browser.js';
 import { fetchDailyKlines } from './free/tencent.js';
+import {
+  fetchLocalEtfDailyKlines,
+  hasLocalEtfDailyCsv,
+  LOCAL_ETF_LOAD_ALL_DAYS,
+} from './local-csv/etf-daily.js';
 import { buildMeta } from './meta.js';
 import { isEtfSymbol } from './asset-type.js';
 import { toSymbol, toTsCode } from './symbols.js';
@@ -50,6 +55,18 @@ export async function getStockBasic(symbol: string) {
 export async function getDailyQuote(symbol: string, days = 5) {
   const tsCode = toTsCode(symbol);
   const code = toSymbol(tsCode);
+
+  if (isEtfSymbol(code) && hasLocalEtfDailyCsv(code)) {
+    const { quotes, cached } = fetchLocalEtfDailyKlines(code, days);
+    const latest = quotes[0];
+    return {
+      tsCode,
+      quotes,
+      latestClose: latest?.close ?? null,
+      latestPctChg: latest?.pctChg ?? null,
+      ...buildMeta('local-csv', cached),
+    };
+  }
 
   const { quotes, cached } = await fetchDailyKlines(code, days);
   const withPct = quotes.map((quote, index) => {

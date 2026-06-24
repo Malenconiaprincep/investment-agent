@@ -2040,10 +2040,46 @@ a:hover {
   stroke-linejoin: round;
 }
 
+.equity-line--benchmark {
+  stroke: #7c8aa5;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  opacity: 0.85;
+}
+
 .equity-zero {
   stroke: var(--border-strong);
   stroke-width: 1;
   stroke-dasharray: 4 4;
+}
+
+.equity-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 0.65rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.equity-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.equity-legend-swatch {
+  width: 1.25rem;
+  height: 0.15rem;
+  border-radius: 999px;
+}
+
+.equity-legend-swatch--strategy {
+  background: var(--accent);
+}
+
+.equity-legend-swatch--benchmark {
+  background: #7c8aa5;
 }
 
 .equity-chart-axis {

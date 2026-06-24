@@ -64,6 +64,13 @@ export type BacktestEquityPoint = {
   closedTrades: number;
 };
 
+export type BacktestBenchmark = {
+  symbol: string;
+  name: string;
+  curve: BacktestEquityPoint[];
+  finalReturnPct: number | null;
+};
+
 export type BacktestSymbolSummary = BacktestMetrics & {
   symbol: string;
   name: string;
@@ -102,6 +109,7 @@ export type BacktestRunResult = {
   metrics: BacktestMetrics;
   groups: BacktestGroup[];
   equityCurve?: BacktestEquityPoint[];
+  benchmark?: BacktestBenchmark;
   symbolSummaries?: BacktestSymbolSummary[];
   currentDecisions?: BacktestCurrentDecision[];
   notes: string[];

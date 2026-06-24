@@ -34,6 +34,9 @@ function resolvePackageRoot(): string {
 const packageRoot = resolvePackageRoot();
 const dataDirFromEnv = process.env.INVESTMENT_AGENT_DATA_DIR?.trim();
 export const PACKAGE_ROOT = packageRoot;
+export const MARKET_CSV_DIR = process.env.INVESTMENT_AGENT_MARKET_CSV_DIR?.trim()
+  ? path.resolve(process.env.INVESTMENT_AGENT_MARKET_CSV_DIR)
+  : path.join(packageRoot, 'data/market-csv');
 export const DATA_DIR = dataDirFromEnv
   ? path.resolve(dataDirFromEnv)
   : path.join(packageRoot, 'src/data');
