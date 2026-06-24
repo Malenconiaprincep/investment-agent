@@ -24,10 +24,23 @@ import {
   isTradeDateInRange,
   resolveBacktestDateRange,
 } from './date-range.js';
+import {
+  evaluateEtfNewsSentiment,
+  filterNewsForTradeDate,
+  getEtfNewsProfile,
+  loadBacktestNewsTimeline,
+  shouldBlockEtfEntryByNews,
+  type EtfNewsFilterMode,
+} from './etf-news.js';
+import {
+  buildPortfolioEquityCurve,
+  filterTradesByPortfolioRules,
+} from './portfolio.js';
 import type {
   BacktestCurrentDecision,
   BacktestEquityPoint,
   BacktestExitReason,
+  BacktestRunConfig,
   BacktestRunResult,
   BacktestSignal,
   BacktestSymbolSummary,
@@ -42,13 +55,22 @@ export type RunEtfBacktestInput = {
   holdDays?: number[];
   maxHoldDays?: number;
   minSettlementDays?: number;
+  /** 入场允许的最大规则失败数，默认 0 = 严格全过 */
   maxFailCount?: number;
+  /** 持仓期间允许的最大规则失败数，默认 2 = 放宽失效出场 */
+  exitMaxFailCount?: number;
+  maxConcurrentPositions?: number;
+  noSymbolOverlap?: boolean;
+  newsFilter?: EtfNewsFilterMode;
+  newsLookbackDays?: number;
   includeWaitPullback?: boolean;
 };
 
 const DEFAULT_DAYS = 250;
-const DEFAULT_MAX_HOLD_DAYS = 20;
+const DEFAULT_MAX_HOLD_DAYS = 30;
 const DEFAULT_MIN_SETTLEMENT_DAYS = 1;
+const DEFAULT_EXIT_MAX_FAIL_COUNT = 2;
+const DEFAULT_MAX_CONCURRENT = 5;
 
 type BenchmarkCandidate = {
   symbol: string;
@@ -120,7 +142,7 @@ function resolveMinSettlementDays(input: RunEtfBacktestInput): number {
 type EtfStrategyExitOptions = {
   minSettlementDays: number;
   maxHoldDays: number;
-  maxFailCount: number;
+  exitMaxFailCount: number;
   symbol: string;
   exchangeCode: string;
   name: string;
@@ -202,8 +224,9 @@ function createEtfStrategyTrade(
     }
 
     if (
-      currentCandidate.failCount > options.maxFailCount ||
-      currentCandidate.operationPlan.action === 'avoid'
+      currentCandidate.failCount > options.exitMaxFailCount ||
+      (currentCandidate.failCount > 2 &&
+        currentCandidate.operationPlan.action === 'avoid')
     ) {
       return makeTrade(
         index,
@@ -253,39 +276,6 @@ function dailyTurnover(
   if (bar.amount != null && bar.amount > 0) return Math.round(bar.amount);
   if (bar.close == null) return 0;
   return estimateTurnover(bar.close, bar.vol);
-}
-
-function avg(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function buildEquityCurve(trades: BacktestTrade[]): BacktestEquityPoint[] {
-  const byExitDate = new Map<string, BacktestTrade[]>();
-  for (const trade of trades) {
-    if (!trade.exitDate || trade.returnPct == null) continue;
-    const items = byExitDate.get(trade.exitDate) ?? [];
-    items.push(trade);
-    byExitDate.set(trade.exitDate, items);
-  }
-
-  let equity = 100;
-  return [...byExitDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([tradeDate, closedTrades]) => {
-      const avgReturn = avg(
-        closedTrades
-          .map((trade) => trade.returnPct)
-          .filter((value): value is number => value != null),
-      ) ?? 0;
-      equity *= 1 + avgReturn / 100;
-      return {
-        tradeDate,
-        equity: round(equity, 4),
-        returnPct: round(equity - 100),
-        closedTrades: closedTrades.length,
-      };
-    });
 }
 
 function buildBenchmarkCurve(
@@ -369,6 +359,9 @@ function decideCurrentAction(input: {
   changePct: number;
   dataSource: 'realtime' | 'daily';
   candidate: ReturnType<typeof buildEtfTailPickCandidate>;
+  newsLabel?: BacktestCurrentDecision['newsLabel'];
+  newsNet?: number;
+  newsHeadlines?: string[];
 }): BacktestCurrentDecision {
   const failedRules = input.candidate.ruleChecks
     .filter((rule) => !rule.passed)
@@ -377,6 +370,10 @@ function decideCurrentAction(input: {
   const action = input.candidate.operationPlan.action;
 
   if (input.candidate.status === 'passed' && action === 'buy_zone') {
+    const newsHint =
+      input.newsLabel && input.newsLabel !== '无相关'
+        ? `；近端新闻${input.newsLabel}${input.newsNet != null ? `（净分 ${input.newsNet}）` : ''}`
+        : '';
     return {
       symbol: input.symbol,
       name: input.name,
@@ -388,8 +385,11 @@ function decideCurrentAction(input: {
       failCount: input.candidate.failCount,
       passedRules,
       failedRules,
-      reason: '严格通过 8 条 ETF 尾盘规则，价格在买入区附近。',
+      reason: `严格通过 8 条 ETF 尾盘规则，价格在买入区附近${newsHint}。`,
       dataSource: input.dataSource,
+      newsLabel: input.newsLabel,
+      newsNet: input.newsNet,
+      newsHeadlines: input.newsHeadlines,
     };
   }
 
@@ -457,13 +457,39 @@ export async function runEtfTailRulesBacktest(
     input.startDate || input.endDate
       ? computeKlineDaysForRange(dateRange, 45 + maxHoldDays)
       : Math.max(60, Math.floor(input.days ?? DEFAULT_DAYS));
-  const maxFailCount = Math.max(0, Math.floor(input.maxFailCount ?? 0));
-  const trades: BacktestTrade[] = [];
+  const entryMaxFailCount = Math.max(0, Math.floor(input.maxFailCount ?? 0));
+  const exitMaxFailCount = Math.max(
+    0,
+    Math.floor(input.exitMaxFailCount ?? DEFAULT_EXIT_MAX_FAIL_COUNT),
+  );
+  const maxConcurrentPositions = Math.max(
+    1,
+    Math.floor(input.maxConcurrentPositions ?? DEFAULT_MAX_CONCURRENT),
+  );
+  const noSymbolOverlap = input.noSymbolOverlap !== false;
+  const newsFilter: EtfNewsFilterMode = input.newsFilter ?? 'avoid_bearish';
+  const newsLookbackDays = Math.max(
+    1,
+    Math.floor(input.newsLookbackDays ?? 3),
+  );
+
+  const rawTrades: BacktestTrade[] = [];
+  let newsBlockedCount = 0;
   const symbols: BacktestRunResult['symbols'] = [];
   const currentDecisions: BacktestCurrentDecision[] = [];
-  const realtimeQuotes = await fetchIntradayQuotes(
-    ETF_POOL_19.map((item) => item.symbol),
-  ).catch(() => new Map());
+  const [realtimeQuotes, newsTimeline] = await Promise.all([
+    fetchIntradayQuotes(ETF_POOL_19.map((item) => item.symbol)).catch(
+      () => new Map(),
+    ),
+    loadBacktestNewsTimeline({
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+    }).catch(() => ({
+      news: [],
+      sources: [] as string[],
+      warning: '新闻加载失败，已跳过',
+    })),
+  ]);
   let usedLocalCsv = false;
 
   for (const item of ETF_POOL_19) {
@@ -494,6 +520,16 @@ export async function runEtfTailRulesBacktest(
           intradayVolume: realtime?.volume ?? latest.vol ?? null,
           bars,
         });
+        const newsProfile = getEtfNewsProfile(item.symbol, item.name);
+        const todayNews = filterNewsForTradeDate({
+          news: newsTimeline.news,
+          tradeDate: latest.tradeDate,
+          lookbackDays: newsLookbackDays,
+        });
+        const todaySentiment = evaluateEtfNewsSentiment({
+          profile: newsProfile,
+          news: todayNews,
+        });
         currentDecisions.push(
           decideCurrentAction({
             symbol: item.symbol,
@@ -502,6 +538,9 @@ export async function runEtfTailRulesBacktest(
             changePct: decisionChangePct,
             dataSource: decisionSource,
             candidate: decisionCandidate,
+            newsLabel: todaySentiment.label,
+            newsNet: todaySentiment.net,
+            newsHeadlines: todaySentiment.headlines,
           }),
         );
       }
@@ -524,7 +563,7 @@ export async function runEtfTailRulesBacktest(
           bars: bars.slice(index),
         });
 
-        if (candidate.failCount > maxFailCount) continue;
+        if (candidate.failCount > entryMaxFailCount) continue;
         if (
           candidate.operationPlan.action === 'wait_pullback' &&
           !input.includeWaitPullback
@@ -535,6 +574,22 @@ export async function runEtfTailRulesBacktest(
           candidate.operationPlan.action !== 'buy_zone' &&
           candidate.operationPlan.action !== 'wait_pullback'
         ) {
+          continue;
+        }
+
+        const newsProfile = getEtfNewsProfile(item.symbol, item.name);
+        const entryNews = filterNewsForTradeDate({
+          news: newsTimeline.news,
+          tradeDate: bar.tradeDate,
+          lookbackDays: newsLookbackDays,
+        });
+        const newsSentiment = evaluateEtfNewsSentiment({
+          profile: newsProfile,
+          news: entryNews,
+        });
+        const newsGate = shouldBlockEtfEntryByNews(newsSentiment, newsFilter);
+        if (newsGate.blocked) {
+          newsBlockedCount += 1;
           continue;
         }
 
@@ -559,18 +614,24 @@ export async function runEtfTailRulesBacktest(
             ma30: candidate.ma30,
             volumeRatio: candidate.volumeRatio,
             estimatedTurnover: candidate.dailyTurnover,
+            newsLabel: newsSentiment.label,
+            newsNet: newsSentiment.net,
+            newsBullish: newsSentiment.bullish,
+            newsBearish: newsSentiment.bearish,
+            newsHeadlines: newsSentiment.headlines,
+            newsGateReason: newsGate.reason,
           },
         };
         const trade = createEtfStrategyTrade(signal, bars, candidate, {
           minSettlementDays,
           maxHoldDays,
-          maxFailCount,
+          exitMaxFailCount,
           symbol: item.symbol,
           exchangeCode: item.exchangeCode,
           name: item.name,
           dailyTurnover,
         });
-        if (trade) trades.push(trade);
+        if (trade) rawTrades.push(trade);
       }
     } catch (error) {
       symbols.push({
@@ -582,12 +643,30 @@ export async function runEtfTailRulesBacktest(
     }
   }
 
-  const sortedTrades = trades.sort((a, b) => {
+  const portfolioTrades = filterTradesByPortfolioRules(rawTrades, {
+    maxConcurrent: maxConcurrentPositions,
+    noSymbolOverlap,
+  });
+  const portfolioSkippedCount = rawTrades.length - portfolioTrades.length;
+
+  const sortedTrades = portfolioTrades.sort((a, b) => {
     if (a.entryDate !== b.entryDate) return a.entryDate.localeCompare(b.entryDate);
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
   });
   const benchmark = await buildBenchmark(dateRange, days).catch(() => undefined);
+
+  const config: BacktestRunConfig = {
+    entryMaxFailCount,
+    exitMaxFailCount,
+    maxConcurrentPositions,
+    noSymbolOverlap,
+    newsFilter,
+    newsLookbackDays,
+    rawSignalCount: rawTrades.length,
+    newsBlockedCount,
+    portfolioSkippedCount,
+  };
 
   return {
     strategy: 'etf-tail-rules',
@@ -632,10 +711,24 @@ export async function runEtfTailRulesBacktest(
         predicate: (trade) =>
           trade.signal.metadata?.operationAction === 'wait_pullback',
       },
+      {
+        key: 'news-bullish',
+        label: '新闻利好入场',
+        predicate: (trade) => trade.signal.metadata?.newsLabel === '利好',
+      },
+      {
+        key: 'news-bearish-blocked',
+        label: '新闻拦截（未入场）',
+        predicate: () => false,
+      },
     ]),
-    equityCurve: buildEquityCurve(sortedTrades),
+    equityCurve: buildPortfolioEquityCurve(
+      sortedTrades,
+      maxConcurrentPositions,
+    ),
     benchmark,
     symbolSummaries: buildSymbolSummaries(sortedTrades),
+    config,
     currentDecisions: currentDecisions.sort((a, b) => {
       const order = { buy: 0, wait_pullback: 1, watch: 2, sell: 3 };
       if (order[a.action] !== order[b.action]) return order[a.action] - order[b.action];
@@ -643,7 +736,20 @@ export async function runEtfTailRulesBacktest(
     }),
     notes: [
       `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计该区间内触发的买入信号。`,
-      `ETF 回测复用现有 8 条尾盘规则；尾盘买入后最早 T+${minSettlementDays} 起按策略出场：技术止损（20 日低 / MA30×0.97）、入场计划止盈价、规则失效，或最多持有 ${maxHoldDays} 个交易日兜底。`,
+      `ETF 回测复用现有 8 条尾盘规则；尾盘买入后最早 T+${minSettlementDays} 起按策略出场：技术止损、止盈价、规则失效（允许 ${exitMaxFailCount} 条规则失败），或最多持有 ${maxHoldDays} 个交易日兜底。`,
+      `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一 ETF 不重复开仓' : ''}；原始信号 ${config.rawSignalCount} 笔，新闻拦截 ${newsBlockedCount} 笔，组合过滤后 ${sortedTrades.length} 笔。`,
+      newsFilter === 'off'
+        ? '新闻过滤已关闭。'
+        : newsFilter === 'require_bullish'
+          ? `新闻过滤：买入前 ${newsLookbackDays} 日内需有相关利好（净分 > 0）。`
+          : `新闻过滤：买入前 ${newsLookbackDays} 日内拦截明显利空新闻。`,
+      newsTimeline.sources.length > 0
+        ? `新闻来源：${newsTimeline.sources.join('、')}。`
+        : '未拉到足够新闻数据，远端新闻仅覆盖近端窗口；长区间历史需设置 BACKTEST_NEWS_HISTORICAL=1 并按月抽样问财。',
+      newsTimeline.warning,
+      newsTimeline.timedOut
+        ? `新闻加载已超时（默认 ${Math.round(Number(process.env.BACKTEST_NEWS_TIMEOUT_MS ?? 12000) / 1000)} 秒内未完成），避免阻塞回测。`
+        : undefined,
       `A 股 ETF 多为 T+1 可卖；回测在买入后第 ${minSettlementDays} 个交易日起逐日评估上述退出条件，卖出价优先用触发的止损/止盈价，否则用当日收盘价。`,
       usedLocalCsv
         ? '历史回测优先使用本地 ETF 前复权 CSV（含真实成交额）；缺失时退回腾讯前复权日 K。'
@@ -658,6 +764,6 @@ export async function runEtfTailRulesBacktest(
       input.includeWaitPullback
         ? '已纳入“等回踩”信号，并按触发日收盘价模拟入场。'
         : '默认只回测“可关注买入区”信号，跳过“等回踩”。',
-    ],
+    ].filter((note): note is string => Boolean(note)),
   };
 }

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { BacktestEquityChart } from '@/components/charts/BacktestEquityChart';
 import { PageHeader } from '@/components/ui/PageHeader';
 
-type Strategy = 'diamond' | 'diamond-momentum' | 'etf';
+type Strategy = 'diamond' | 'diamond-momentum' | 'etf' | 'etf-momentum';
 
 type BacktestMetrics = {
   tradeCount: number;
@@ -56,6 +56,25 @@ type BacktestCurrentDecision = {
   failedRules: string[];
   reason: string;
   dataSource: 'realtime' | 'daily';
+  newsLabel?: '利好' | '利空' | '中性' | '无相关';
+  newsNet?: number;
+  newsHeadlines?: string[];
+};
+
+type BacktestRunConfig = {
+  entryMaxFailCount?: number;
+  exitMaxFailCount?: number;
+  maxConcurrentPositions?: number;
+  noSymbolOverlap?: boolean;
+  newsFilter?: 'off' | 'avoid_bearish' | 'require_bullish';
+  newsLookbackDays?: number;
+  rawSignalCount?: number;
+  newsBlockedCount?: number;
+  portfolioSkippedCount?: number;
+  momentumDays?: number;
+  rebalanceDays?: number;
+  topN?: number;
+  trendMaDays?: number;
 };
 
 type BacktestTrade = {
@@ -70,6 +89,12 @@ type BacktestTrade = {
   holdDays: number;
   returnPct: number | null;
   exitReason: string;
+  signal?: {
+    metadata?: {
+      newsLabel?: string;
+      newsNet?: number;
+    };
+  };
 };
 
 type BacktestResult = {
@@ -92,6 +117,7 @@ type BacktestResult = {
   benchmark?: BacktestBenchmark;
   symbolSummaries?: BacktestSymbolSummary[];
   currentDecisions?: BacktestCurrentDecision[];
+  config?: BacktestRunConfig;
   notes: string[];
 };
 
@@ -111,7 +137,12 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
     value: 'etf',
     label: 'ETF 尾盘规则',
-    help: '回测 19 只 ETF 池的 8 条尾盘筛选规则，按止盈止损与规则失效出场。',
+    help: '8 条尾盘规则 + 新闻过滤 + 组合约束；默认最多 5 只同时持有。',
+  },
+  {
+    value: 'etf-momentum',
+    label: 'ETF 动量轮动',
+    help: '每 10 个交易日选 20 日动量最强且站上 MA20 的前 2 只 ETF。',
   },
 ];
 
@@ -217,12 +248,29 @@ function calcMaxDrawdownPct(points: BacktestEquityPoint[] | undefined): number |
   return Number(maxDrawdown.toFixed(2));
 }
 
+function parseEquityDate(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const key = value.replace(/-/g, '').slice(0, 8);
+  if (key.length !== 8) return null;
+  const date = new Date(
+    Number(key.slice(0, 4)),
+    Number(key.slice(4, 6)) - 1,
+    Number(key.slice(6, 8)),
+  );
+  const time = date.getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
 function calcAnnualReturnPct(points: BacktestEquityPoint[] | undefined): number | null {
   if (!points?.length) return null;
   const finalReturn = points.at(-1)?.returnPct;
   if (finalReturn == null) return null;
-  const periods = Math.max(points.length, 1);
-  return Number((((1 + finalReturn / 100) ** (252 / periods) - 1) * 100).toFixed(2));
+  const startTime = parseEquityDate(points[0].tradeDate);
+  const endTime = parseEquityDate(points.at(-1)?.tradeDate);
+  if (startTime == null || endTime == null || endTime <= startTime) return finalReturn;
+  const years = (endTime - startTime) / (365 * 24 * 60 * 60 * 1000);
+  if (years <= 0) return finalReturn;
+  return Number((((1 + finalReturn / 100) ** (1 / years) - 1) * 100).toFixed(2));
 }
 
 function calcSharpe(points: BacktestEquityPoint[] | undefined): number | null {
@@ -245,12 +293,17 @@ function calcSharpe(points: BacktestEquityPoint[] | undefined): number | null {
 
 export default function BacktestPage() {
   const defaultRange = rangeFromPresetDays(365);
-  const [strategy, setStrategy] = useState<Strategy>('etf');
+  const [strategy, setStrategy] = useState<Strategy>('etf-momentum');
   const [symbols, setSymbols] = useState('600519,000001');
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
   const [holdDays] = useState('1,3,5,10,20');
   const [includeWaitPullback, setIncludeWaitPullback] = useState(false);
+  const [newsFilter, setNewsFilter] = useState<'avoid_bearish' | 'require_bullish' | 'off'>(
+    'avoid_bearish',
+  );
+  const [exitMaxFail, setExitMaxFail] = useState('2');
+  const [maxConcurrent, setMaxConcurrent] = useState('5');
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -267,7 +320,7 @@ export default function BacktestPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ strategy });
-      if (strategy === 'etf') {
+      if (strategy === 'etf' || strategy === 'etf-momentum') {
         params.set('startDate', startDate);
         params.set('endDate', endDate);
       } else {
@@ -280,14 +333,19 @@ export default function BacktestPage() {
         const klineDays = Math.ceil(calendarDays * 5 / 7) + 45;
         params.set('days', String(klineDays));
       }
-      if (strategy !== 'etf') {
+      if (strategy !== 'etf' && strategy !== 'etf-momentum') {
         params.set('symbols', symbols);
       }
-      if (strategy !== 'etf' && holdDays.trim()) {
+      if (strategy !== 'etf' && strategy !== 'etf-momentum' && holdDays.trim()) {
         params.set('holdDays', holdDays.trim());
       }
       if (strategy === 'etf' && includeWaitPullback) {
         params.set('includeWaitPullback', '1');
+      }
+      if (strategy === 'etf') {
+        params.set('exitMaxFail', exitMaxFail);
+        params.set('maxConcurrent', maxConcurrent);
+        params.set('newsFilter', newsFilter);
       }
 
       const response = await fetch(`/api/backtest?${params.toString()}`);
@@ -381,7 +439,7 @@ export default function BacktestPage() {
           </div>
         </div>
 
-        {strategy !== 'etf' && (
+        {strategy !== 'etf' && strategy !== 'etf-momentum' && (
           <label className="form-field">
             <span>股票池</span>
             <input
@@ -394,14 +452,56 @@ export default function BacktestPage() {
         )}
 
         {strategy === 'etf' && (
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={includeWaitPullback}
-              onChange={(event) => setIncludeWaitPullback(event.target.checked)}
-            />
-            纳入“等回踩”信号（仍按触发日收盘价模拟入场）
-          </label>
+          <>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={includeWaitPullback}
+                onChange={(event) => setIncludeWaitPullback(event.target.checked)}
+              />
+              纳入“等回踩”信号（仍按触发日收盘价模拟入场）
+            </label>
+            <div className="backtest-etf-options">
+              <label className="form-field">
+                <span>新闻过滤</span>
+                <select
+                  className="input"
+                  value={newsFilter}
+                  onChange={(event) =>
+                    setNewsFilter(
+                      event.target.value as 'avoid_bearish' | 'require_bullish' | 'off',
+                    )
+                  }
+                >
+                  <option value="avoid_bearish">拦截明显利空（默认）</option>
+                  <option value="require_bullish">要求相关利好</option>
+                  <option value="off">关闭新闻过滤</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span>失效出场容忍</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={4}
+                  value={exitMaxFail}
+                  onChange={(event) => setExitMaxFail(event.target.value)}
+                />
+              </label>
+              <label className="form-field">
+                <span>最大同时持仓</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={maxConcurrent}
+                  onChange={(event) => setMaxConcurrent(event.target.value)}
+                />
+              </label>
+            </div>
+          </>
         )}
 
         <div className="page-toolbar">
@@ -414,7 +514,7 @@ export default function BacktestPage() {
             {loading ? '回测中…' : '开始回测'}
           </button>
           <span className="muted">
-            {activeStrategy.help} 这里按日历天理解；ETF 默认按日线可验证的最早退出，即尾盘买入后下一个交易日收盘卖出。
+            {activeStrategy.help} 回测区间按日历天理解，ETF 策略统一使用真实日 K。
           </span>
         </div>
       </section>
@@ -465,7 +565,8 @@ export default function BacktestPage() {
             </div>
           </section>
 
-          {result.strategy === 'etf-tail-rules' ? (
+          {result.strategy === 'etf-tail-rules' ||
+          result.strategy === 'etf-momentum-rotation' ? (
             <EtfStrategyReport result={result} />
           ) : (
             <GenericBacktestDetails result={result} />
@@ -543,6 +644,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
   const sharpe = calcSharpe(result.equityCurve);
   const startDate = result.equityCurve?.[0]?.tradeDate ?? null;
   const endDate = result.equityCurve?.at(-1)?.tradeDate ?? null;
+  const isMomentum = result.strategy === 'etf-momentum-rotation';
   const panels: Array<{ id: BacktestPanel; label: string; hint: string }> = [
     { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
     { id: 'current', label: '当前动作', hint: '今天尾盘买卖建议' },
@@ -574,7 +676,9 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               <div>
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
-                  区间 {fmtTradeDate(startDate)} 至 {fmtTradeDate(endDate)}。规则：尾盘严格通过 8 条 ETF 规则则买入，T+1 起按技术止损、计划止盈价或规则失效出场（最多持有 {result.holdDays[0] ?? 20} 个交易日兜底）；多笔同日平仓按等权平均收益复利。基准优先用上证指数，不可用时退回沪深300ETF。
+                  {isMomentum
+                    ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 2} 只 ETF 等权持有。`
+                    : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：8 条 ETF 尾盘规则 + 买入前 ${result.config?.newsLookbackDays ?? 3} 日新闻过滤；最多同时持有 ${result.config?.maxConcurrentPositions ?? 5} 只；失效出场允许 ${result.config?.exitMaxFailCount ?? 2} 条规则失败；收益曲线按组合槽位复利。`}
                 </p>
               </div>
               <strong className={returnClass(finalReturn)}>累计 {fmtPct(finalReturn)}</strong>
@@ -590,7 +694,17 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               <SummaryMetric label="胜率" value={fmtPct(result.metrics.winRatePct)} />
               <SummaryMetric label="交易次数" value={`${result.metrics.validTradeCount}/${result.metrics.tradeCount}`} />
               <SummaryMetric label="单笔最高收益" value={fmtPct(result.metrics.bestReturnPct)} tone={result.metrics.bestReturnPct} />
-              <SummaryMetric label="单笔最低收益" value={fmtPct(result.metrics.worstReturnPct)} tone={result.metrics.worstReturnPct} />
+              {isMomentum ? (
+                <>
+                  <SummaryMetric label="调仓周期" value={`${result.config?.rebalanceDays ?? 10} 日`} />
+                  <SummaryMetric label="持仓数量" value={`Top ${result.config?.topN ?? 2}`} />
+                </>
+              ) : (
+                <>
+                  <SummaryMetric label="新闻拦截" value={String(result.config?.newsBlockedCount ?? 0)} />
+                  <SummaryMetric label="组合过滤" value={String(result.config?.portfolioSkippedCount ?? 0)} />
+                </>
+              )}
             </div>
 
             <BacktestEquityChart
@@ -625,7 +739,9 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               <div>
                 <h2 className="section-title">当前尾盘动作</h2>
                 <p className="muted">
-                  买入 = 严格通过；观察/等回踩 = 条件接近但不能追；卖出/回避 = 若已持有则按规则退出或降仓。
+                  {isMomentum
+                    ? '轮动持有 = 当前动量排名进入目标持仓；等待轮动 = 暂未进入前排或趋势过滤不足。'
+                    : '买入 = 严格通过；观察/等回踩 = 条件接近但不能追；卖出/回避 = 若已持有则按规则退出或降仓。'}
                 </p>
               </div>
             </div>
@@ -677,6 +793,7 @@ function CurrentDecisionTable({ decisions }: { decisions: BacktestCurrentDecisio
             <th>涨跌</th>
             <th>通过</th>
             <th>失败项</th>
+            <th>新闻</th>
             <th>数据</th>
             <th>理由</th>
           </tr>
@@ -694,6 +811,10 @@ function CurrentDecisionTable({ decisions }: { decisions: BacktestCurrentDecisio
               <td className={returnClass(item.changePct)}>{fmtPct(item.changePct)}</td>
               <td>{item.passedRules}/8</td>
               <td>{item.failedRules.length > 0 ? item.failedRules.join('、') : '—'}</td>
+              <td>
+                {item.newsLabel ?? '—'}
+                {item.newsNet != null ? ` (${item.newsNet > 0 ? '+' : ''}${item.newsNet})` : ''}
+              </td>
               <td>{item.dataSource === 'realtime' ? '实时' : '日K'}</td>
               <td>{item.reason}</td>
             </tr>
@@ -808,6 +929,7 @@ function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
               <th>卖出价</th>
               <th>持有天数</th>
               <th>收益</th>
+              <th>新闻</th>
               <th>退出原因</th>
             </tr>
           </thead>
@@ -825,6 +947,12 @@ function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
                 <td>{trade.holdDays}</td>
                 <td className={returnClass(trade.returnPct)}>
                   {fmtPct(trade.returnPct)}
+                </td>
+                <td>
+                  {String(trade.signal?.metadata?.newsLabel ?? '—')}
+                  {trade.signal?.metadata?.newsNet != null
+                    ? ` (${trade.signal.metadata.newsNet > 0 ? '+' : ''}${trade.signal.metadata.newsNet})`
+                    : ''}
                 </td>
                 <td>{fmtExitReason(trade.exitReason)}</td>
               </tr>

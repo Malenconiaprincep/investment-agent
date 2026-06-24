@@ -2,6 +2,7 @@ import {
   runDiamondBacktest,
   type BacktestSymbolInput,
 } from '../data/backtest/diamond.js';
+import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
 import { runEtfTailRulesBacktest } from '../data/backtest/etf.js';
 import { computeScreeningBacktest } from '../data/screening/backtest.js';
 import { getScreeningSession } from '../data/screening/store.js';
@@ -44,6 +45,43 @@ function parseMaxFailCount(args: string[]): number | undefined {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
 }
 
+function parseExitMaxFailCount(args: string[]): number | undefined {
+  const arg = args.find((item) => item.startsWith('--exit-max-fail='));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=')[1]);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+}
+
+function parseMaxConcurrent(args: string[]): number | undefined {
+  const arg = args.find((item) => item.startsWith('--max-concurrent='));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=')[1]);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : undefined;
+}
+
+function parseNewsFilter(args: string[]): 'off' | 'avoid_bearish' | 'require_bullish' | undefined {
+  const arg = args.find((item) => item.startsWith('--news-filter='));
+  const value = arg?.split('=')[1]?.trim();
+  if (value === 'off' || value === 'avoid_bearish' || value === 'require_bullish') {
+    return value;
+  }
+  return undefined;
+}
+
+function parseNewsLookback(args: string[]): number | undefined {
+  const arg = args.find((item) => item.startsWith('--news-lookback='));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=')[1]);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : undefined;
+}
+
+function parseFlagInt(args: string[], flag: string): number | undefined {
+  const arg = args.find((item) => item.startsWith(`${flag}=`));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=').slice(1).join('='));
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : undefined;
+}
+
 function parseDateArg(args: string[], flag: string): string | undefined {
   const arg = args.find((item) => item.startsWith(`${flag}=`));
   const value = arg?.split('=').slice(1).join('=').trim();
@@ -80,6 +118,26 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         holdDays: parseHoldDays(args[2]),
         includeWaitPullback: args.includes('--include-wait-pullback'),
         maxFailCount: parseMaxFailCount(args),
+        exitMaxFailCount: parseExitMaxFailCount(args),
+        maxConcurrentPositions: parseMaxConcurrent(args),
+        newsFilter: parseNewsFilter(args),
+        newsLookbackDays: parseNewsLookback(args),
+      }),
+    );
+  }
+
+  if (command === 'etf-momentum') {
+    const startDate = parseDateArg(args, '--from');
+    const endDate = parseDateArg(args, '--to');
+    return JSON.stringify(
+      await runEtfMomentumBacktest({
+        days: parsePositiveInt(args[1], 365),
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
+        topN: parseFlagInt(args, '--top'),
+        momentumDays: parseFlagInt(args, '--momentum'),
+        rebalanceDays: parseFlagInt(args, '--rebalance'),
+        trendMaDays: parseFlagInt(args, '--trend-ma'),
       }),
     );
   }
@@ -104,6 +162,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: diamond <symbols> [days] [holdDaysCsv] | diamond-momentum <symbols> [days] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] | screening <id> [days]',
+    'Usage: diamond <symbols> [days] [holdDaysCsv] | diamond-momentum <symbols> [days] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
   );
 }

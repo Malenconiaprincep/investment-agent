@@ -3,7 +3,8 @@ export type BacktestAssetType = 'stock' | 'etf';
 export type BacktestStrategy =
   | 'red-diamond'
   | 'red-diamond-momentum'
-  | 'etf-tail-rules';
+  | 'etf-tail-rules'
+  | 'etf-momentum-rotation';
 
 export type BacktestSignal = {
   symbol: string;
@@ -92,6 +93,25 @@ export type BacktestCurrentDecision = {
   failedRules: string[];
   reason: string;
   dataSource: 'realtime' | 'daily';
+  newsLabel?: '利好' | '利空' | '中性' | '无相关';
+  newsNet?: number;
+  newsHeadlines?: string[];
+};
+
+export type BacktestRunConfig = {
+  entryMaxFailCount?: number;
+  exitMaxFailCount?: number;
+  maxConcurrentPositions?: number;
+  noSymbolOverlap?: boolean;
+  newsFilter?: 'off' | 'avoid_bearish' | 'require_bullish';
+  newsLookbackDays?: number;
+  rawSignalCount?: number;
+  newsBlockedCount?: number;
+  portfolioSkippedCount?: number;
+  momentumDays?: number;
+  rebalanceDays?: number;
+  topN?: number;
+  trendMaDays?: number;
 };
 
 export type BacktestRunResult = {
@@ -114,5 +134,6 @@ export type BacktestRunResult = {
   benchmark?: BacktestBenchmark;
   symbolSummaries?: BacktestSymbolSummary[];
   currentDecisions?: BacktestCurrentDecision[];
+  config?: BacktestRunConfig;
   notes: string[];
 };
