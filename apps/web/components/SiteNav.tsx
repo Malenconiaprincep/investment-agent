@@ -12,17 +12,6 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
-    href: '/research',
-    label: '研究',
-    isActive: (pathname) =>
-      pathname === '/research' ||
-      pathname.startsWith('/research/') ||
-      pathname === '/history' ||
-      pathname.startsWith('/history/') ||
-      pathname === '/reviews' ||
-      pathname.startsWith('/reviews/'),
-  },
-  {
     href: '/monitor',
     label: '雷达',
     isActive: (pathname) =>
@@ -37,7 +26,36 @@ const NAV: NavItem[] = [
     isActive: (pathname) =>
       pathname === '/paper' || pathname.startsWith('/paper/'),
   },
+  {
+    href: '/research',
+    label: '单股分析',
+    isActive: (pathname) =>
+      pathname === '/research' ||
+      pathname.startsWith('/research/') ||
+      pathname === '/history' ||
+      pathname.startsWith('/history/') ||
+      pathname === '/reviews' ||
+      pathname.startsWith('/reviews/'),
+  },
 ];
+
+function WatchlistIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
 
 export function SiteNav() {
   const pathname = usePathname();
@@ -71,25 +89,32 @@ export function SiteNav() {
               </Link>
             );
           })}
+        </nav>
+
+        <div className="site-header-actions">
           <button
             type="button"
-            className={`site-nav-link site-nav-link--panel${open ? ' site-nav-link--active' : ''}`}
+            className={`site-nav-icon-button${open ? ' site-nav-icon-button--active' : ''}`}
             onClick={toggle}
+            aria-label={
+              itemCount > 0 ? `跟踪池，${itemCount} 只` : '跟踪池'
+            }
+            title="跟踪池"
             aria-expanded={open}
             aria-controls="watchlist-panel"
           >
-            跟踪池
+            <WatchlistIcon />
             {itemCount > 0 ? (
-              <span className="site-nav-badge">{itemCount}</span>
+              <span className="site-nav-icon-badge">{itemCount}</span>
             ) : null}
           </button>
-        </nav>
 
-        <form action="/api/auth/logout" method="post">
-          <button className="site-nav-button" type="submit">
-            退出
-          </button>
-        </form>
+          <form action="/api/auth/logout" method="post">
+            <button className="site-nav-button" type="submit">
+              退出
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );

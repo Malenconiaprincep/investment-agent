@@ -309,13 +309,13 @@ export default function ResearchPage() {
   return (
     <main className="page page--workspace">
       <PageHeader
-        title="研究"
+        title="单股分析"
         description="生成单股研报并回看历史档案；选股记录与每周复盘也可从此进入。"
       />
 
       <div className="page-workspace">
         <aside className="page-pane page-pane--sidebar page-pane--scroll">
-          <nav className="page-toolbar page-toolbar--compact" aria-label="研究相关">
+          <nav className="page-toolbar page-toolbar--compact" aria-label="单股分析相关">
             <button
               type="button"
               className="button button-secondary"
