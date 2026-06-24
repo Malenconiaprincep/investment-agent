@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 180;
 
 function getArgsFromSearchParams(searchParams: URLSearchParams): string[] {
-  const strategy = searchParams.get('strategy') ?? 'etf';
+  const strategy = searchParams.get('strategy') ?? 'etf-momentum';
 
   if (strategy === 'diamond' || strategy === 'diamond-momentum') {
     const symbols = searchParams.get('symbols');

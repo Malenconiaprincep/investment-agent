@@ -135,11 +135,6 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
     help: '红钻 + 动量 checklist 买入，按止损/MA20/信号消失规则出场。',
   },
   {
-    value: 'etf',
-    label: 'ETF 尾盘规则',
-    help: '8 条尾盘规则 + 新闻过滤 + 组合约束；默认最多 5 只同时持有。',
-  },
-  {
     value: 'etf-momentum',
     label: 'ETF 动量轮动',
     help: '每 10 个交易日选 20 日动量最强且站上 MA20 的前 2 只 ETF。',
@@ -371,7 +366,7 @@ export default function BacktestPage() {
         <div className="backtest-control-block">
           <div className="backtest-control-head">
             <strong>选择策略</strong>
-            <span className="muted">先用 ETF 尾盘规则看效果，其他策略保留作对比。</span>
+              <span className="muted">默认使用 ETF 动量轮动；旧尾盘规则已从日常入口下线。</span>
           </div>
           <div className="backtest-strategy-grid">
             {STRATEGIES.map((item) => (
