@@ -1,8 +1,11 @@
 import { getDailyQuote } from '../market/services.js';
+import { inferAssetType } from '../market/asset-type.js';
 
 export type CandidateReturn = {
   symbol: string;
   name: string;
+  assetType: 'stock' | 'etf';
+  diamondStrength: 'red' | 'blue' | null;
   baselineDate: string | null;
   baselineClose: number | null;
   latestDate: string | null;
@@ -10,6 +13,18 @@ export type CandidateReturn = {
   returnPct: number | null;
   holdDays: number;
   error?: string;
+};
+
+export type CandidateReturnGroup = {
+  key: string;
+  label: string;
+  count: number;
+  validCount: number;
+  avgReturnPct: number | null;
+  medianReturnPct: number | null;
+  winRatePct: number | null;
+  bestReturnPct: number | null;
+  worstReturnPct: number | null;
 };
 
 export type ScreeningBacktestResult = {
@@ -21,6 +36,7 @@ export type ScreeningBacktestResult = {
   computedAt: string;
   candidates: CandidateReturn[];
   avgReturnPct: number | null;
+  groups: CandidateReturnGroup[];
 };
 
 function parseTradeDate(tradeDate: string): Date {
@@ -81,6 +97,78 @@ function findHoldEndQuote(
   return sorted[endIndex] ?? null;
 }
 
+function round(value: number, digits = 2): number {
+  return Number(value.toFixed(digits));
+}
+
+function summarizeCandidateReturns(
+  key: string,
+  label: string,
+  candidates: CandidateReturn[],
+): CandidateReturnGroup {
+  const returns = candidates
+    .map((item) => item.returnPct)
+    .filter((value): value is number => value != null);
+  const sorted = [...returns].sort((a, b) => a - b);
+  const wins = returns.filter((value) => value > 0);
+  const median =
+    sorted.length === 0
+      ? null
+      : sorted.length % 2 === 1
+        ? sorted[Math.floor(sorted.length / 2)]
+        : round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2);
+
+  return {
+    key,
+    label,
+    count: candidates.length,
+    validCount: returns.length,
+    avgReturnPct:
+      returns.length > 0
+        ? round(returns.reduce((sum, value) => sum + value, 0) / returns.length)
+        : null,
+    medianReturnPct: median,
+    winRatePct: returns.length > 0 ? round((wins.length / returns.length) * 100) : null,
+    bestReturnPct: returns.length > 0 ? round(Math.max(...returns)) : null,
+    worstReturnPct: returns.length > 0 ? round(Math.min(...returns)) : null,
+  };
+}
+
+function buildGroups(candidates: CandidateReturn[]): CandidateReturnGroup[] {
+  const groups: Array<{
+    key: string;
+    label: string;
+    predicate: (item: CandidateReturn) => boolean;
+  }> = [
+    { key: 'all', label: '全部候选', predicate: () => true },
+    { key: 'stock', label: '股票候选', predicate: (item) => item.assetType === 'stock' },
+    { key: 'etf', label: 'ETF 候选', predicate: (item) => item.assetType === 'etf' },
+    {
+      key: 'red-diamond',
+      label: '红钻候选',
+      predicate: (item) => item.diamondStrength === 'red',
+    },
+    {
+      key: 'blue-diamond',
+      label: '蓝钻候选',
+      predicate: (item) => item.diamondStrength === 'blue',
+    },
+    {
+      key: 'no-diamond',
+      label: '无钻石候选',
+      predicate: (item) => item.diamondStrength == null,
+    },
+  ];
+
+  return groups.map((group) =>
+    summarizeCandidateReturns(
+      group.key,
+      group.label,
+      candidates.filter(group.predicate),
+    ),
+  );
+}
+
 /** 按选股日距今跨度估算需拉取的 K 线根数（上限 250） */
 export function computeKlineDaysNeeded(
   screenedAt: string,
@@ -99,7 +187,12 @@ export function computeKlineDaysNeeded(
 export async function computeScreeningBacktest(input: {
   screeningId: string;
   screenedAt: string;
-  candidates: Array<{ symbol: string; name: string }>;
+  candidates: Array<{
+    symbol: string;
+    name: string;
+    assetType?: 'stock' | 'etf';
+    diamond?: { strength: 'red' | 'blue' } | null;
+  }>;
   /** 0 或未传 = 入选至今；正整数 = 持有 N 个交易日 */
   holdDays?: number;
 }): Promise<ScreeningBacktestResult> {
@@ -111,6 +204,8 @@ export async function computeScreeningBacktest(input: {
   for (const candidate of input.candidates) {
     try {
       const data = await getDailyQuote(candidate.symbol, klineDays);
+      const assetType = candidate.assetType ?? inferAssetType(candidate.symbol);
+      const diamondStrength = candidate.diamond?.strength ?? null;
       const baseline = findBaselineQuote(data.quotes, input.screenedAt);
       const baselineClose = baseline?.close ?? null;
 
@@ -137,6 +232,8 @@ export async function computeScreeningBacktest(input: {
       results.push({
         symbol: candidate.symbol,
         name: candidate.name,
+        assetType,
+        diamondStrength,
         baselineDate: baseline?.tradeDate ?? null,
         baselineClose,
         latestDate,
@@ -148,6 +245,8 @@ export async function computeScreeningBacktest(input: {
       results.push({
         symbol: candidate.symbol,
         name: candidate.name,
+        assetType: candidate.assetType ?? inferAssetType(candidate.symbol),
+        diamondStrength: candidate.diamond?.strength ?? null,
         baselineDate: null,
         baselineClose: null,
         latestDate: null,
@@ -181,5 +280,6 @@ export async function computeScreeningBacktest(input: {
     computedAt: new Date().toISOString(),
     candidates: results,
     avgReturnPct,
+    groups: buildGroups(results),
   };
 }

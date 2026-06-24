@@ -1,0 +1,108 @@
+export type BacktestAssetType = 'stock' | 'etf';
+
+export type BacktestStrategy =
+  | 'red-diamond'
+  | 'red-diamond-momentum'
+  | 'etf-tail-rules';
+
+export type BacktestSignal = {
+  symbol: string;
+  name: string;
+  assetType: BacktestAssetType;
+  strategy: BacktestStrategy;
+  tradeDate: string;
+  entryPrice: number;
+  score?: number | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type BacktestExitReason =
+  | 'fixed_hold'
+  | 'stop_loss'
+  | 'ma20_break'
+  | 'trailing_stop'
+  | 'signal_lost'
+  | 'signal_weakened'
+  | 'end_of_data';
+
+export type BacktestTrade = {
+  symbol: string;
+  name: string;
+  assetType: BacktestAssetType;
+  strategy: BacktestStrategy;
+  entryDate: string;
+  entryPrice: number;
+  exitDate: string | null;
+  exitPrice: number | null;
+  holdDays: number;
+  returnPct: number | null;
+  exitReason: BacktestExitReason;
+  signal: BacktestSignal;
+};
+
+export type BacktestMetrics = {
+  tradeCount: number;
+  validTradeCount: number;
+  winRatePct: number | null;
+  avgReturnPct: number | null;
+  medianReturnPct: number | null;
+  bestReturnPct: number | null;
+  worstReturnPct: number | null;
+  avgHoldDays: number | null;
+  profitLossRatio: number | null;
+};
+
+export type BacktestGroup = BacktestMetrics & {
+  key: string;
+  label: string;
+};
+
+export type BacktestEquityPoint = {
+  tradeDate: string;
+  equity: number;
+  returnPct: number;
+  closedTrades: number;
+};
+
+export type BacktestSymbolSummary = BacktestMetrics & {
+  symbol: string;
+  name: string;
+  assetType: BacktestAssetType;
+};
+
+export type BacktestCurrentDecision = {
+  symbol: string;
+  name: string;
+  assetType: BacktestAssetType;
+  action: 'buy' | 'sell' | 'watch' | 'wait_pullback';
+  actionLabel: string;
+  price: number;
+  changePct: number;
+  failCount: number;
+  passedRules: number;
+  failedRules: string[];
+  reason: string;
+  dataSource: 'realtime' | 'daily';
+};
+
+export type BacktestRunResult = {
+  strategy: BacktestStrategy;
+  generatedAt: string;
+  requestedDays: number;
+  startDate?: string;
+  endDate?: string;
+  holdDays: number[];
+  symbols: Array<{
+    symbol: string;
+    name: string;
+    assetType: BacktestAssetType;
+    error?: string;
+  }>;
+  trades: BacktestTrade[];
+  metrics: BacktestMetrics;
+  groups: BacktestGroup[];
+  equityCurve?: BacktestEquityPoint[];
+  symbolSummaries?: BacktestSymbolSummary[];
+  currentDecisions?: BacktestCurrentDecision[];
+  notes: string[];
+};

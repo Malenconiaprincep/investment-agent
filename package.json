@@ -29,6 +29,7 @@
     "monitor:poll": "pnpm --filter @investment-agent/agent-core monitor:poll",
     "monitor:watch": "pnpm --filter @investment-agent/agent-core monitor:watch",
     "etf:tail-pick": "pnpm --filter @investment-agent/agent-core etf:tail-pick",
+    "backtest": "pnpm --filter @investment-agent/agent-core backtest",
     "watchlist:snapshot": "pnpm --filter @investment-agent/agent-core watchlist:snapshot",
     "watchlist:weekly": "pnpm --filter @investment-agent/agent-core watchlist:weekly",
     "paper:schedule": "pnpm --filter @investment-agent/agent-core paper:schedule",

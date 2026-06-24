@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Tool } from '@mastra/core/tools';
 import { noopObserve } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
-import { DATA_DIR } from '../config/paths.js';
+import { PACKAGE_ROOT } from '../config/paths.js';
 
 /** 投研 Agent 核心工具 */
 export const IWENCAI_CORE_TOOLS = [
@@ -39,7 +39,7 @@ function resolveIwencaiServerPath(): string {
     return configured;
   }
 
-  const packageRoot = path.join(DATA_DIR, '../..');
+  const packageRoot = PACKAGE_ROOT;
   return path.join(packageRoot, 'vendor/iwencai-mcp/server.py');
 }
 

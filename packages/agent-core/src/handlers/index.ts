@@ -6,6 +6,7 @@ import { dispatchFeedback } from './feedback.js';
 import { dispatchBatchResearch } from './batch-research.js';
 import { dispatchMonitor } from './monitor.js';
 import { dispatchEtf } from './etf.js';
+import { dispatchBacktest } from './backtest.js';
 
 export type CliModule =
   | 'watchlist'
@@ -15,7 +16,8 @@ export type CliModule =
   | 'feedback'
   | 'batch-research'
   | 'monitor'
-  | 'etf';
+  | 'etf'
+  | 'backtest';
 
 const DISPATCHERS: Record<CliModule, (args: string[]) => Promise<string>> = {
   watchlist: dispatchWatchlist,
@@ -26,6 +28,7 @@ const DISPATCHERS: Record<CliModule, (args: string[]) => Promise<string>> = {
   'batch-research': dispatchBatchResearch,
   monitor: dispatchMonitor,
   etf: dispatchEtf,
+  backtest: dispatchBacktest,
 };
 
 export async function dispatchCliModule(

@@ -132,11 +132,21 @@ async function startServices() {
   const nodeRunner = process.execPath;
   const runAsNode = { ELECTRON_RUN_AS_NODE: '1' };
 
+  const iwencaiServerPath = path.join(
+    agentCoreRoot,
+    'vendor',
+    'iwencai-mcp',
+    'server.py',
+  );
+
   const sharedEnv = {
     ...process.env,
     INVESTMENT_AGENT_DATA_DIR: dataDir,
     INVESTMENT_AGENT_ENV_PATH: activeEnvPath,
     INVESTMENT_AGENT_RESOURCES_PATH: resourcesPath,
+    ...(existsSync(iwencaiServerPath)
+      ? { IWENCAI_MCP_SERVER_PATH: iwencaiServerPath }
+      : {}),
   };
 
   const agentEnv = {

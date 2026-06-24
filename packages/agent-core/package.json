@@ -26,6 +26,7 @@
     "committee:stream": "tsx src/cli/committee-stream.ts",
     "reports:list": "tsx src/cli/reports-json.ts list",
     "screenings:list": "tsx src/cli/screenings-json.ts list",
+    "backtest": "tsx src/cli/backtest-json.ts",
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
     "monitor:poll": "tsx src/cli/scheduled-monitor.ts",
     "monitor:watch": "tsx src/cli/monitor-watch.ts",

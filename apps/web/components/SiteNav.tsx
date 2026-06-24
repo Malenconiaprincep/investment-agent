@@ -32,6 +32,12 @@ const NAV: NavItem[] = [
     isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
   },
   {
+    href: '/backtest',
+    label: '回测',
+    isActive: (pathname) =>
+      pathname === '/backtest' || pathname.startsWith('/backtest/'),
+  },
+  {
     href: '/research',
     label: '单股分析',
     isActive: (pathname) =>

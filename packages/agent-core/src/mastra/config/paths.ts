@@ -33,6 +33,7 @@ function resolvePackageRoot(): string {
 
 const packageRoot = resolvePackageRoot();
 const dataDirFromEnv = process.env.INVESTMENT_AGENT_DATA_DIR?.trim();
+export const PACKAGE_ROOT = packageRoot;
 export const DATA_DIR = dataDirFromEnv
   ? path.resolve(dataDirFromEnv)
   : path.join(packageRoot, 'src/data');

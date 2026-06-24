@@ -73,12 +73,14 @@ pnpm agent:serve
 pnpm web:dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，使用本地原型账号登录：
+打开 [http://localhost:3000](http://localhost:3000)，使用以下账号登录：
 
-```text
-账号：admin
-密码：admin
-```
+| 账号 | 密码 | Token |
+|------|------|-------|
+| `adminwb` | `Wb@Invest2026!xK9` | 已预置（从 `packages/agent-core/.env` 同步） |
+| `test` | `test123456` | 需登录后在「Token 设置」自行配置 |
+
+登录后可在 **Token 设置**（`/settings`）查看或修改 API Key。每个账号的 Token 独立保存在本地数据目录。
 
 Web 侧通过 `apps/web/.env.local` 里的 `AGENT_CORE_URL` 连接本地 `agent-core`，默认地址为 `http://127.0.0.1:4000`。
 
@@ -125,9 +127,25 @@ pnpm eval
 pnpm eval market-research-report   # Phase 2 验收
 ```
 
-## 本地桌面应用方向
+## 本地桌面应用
 
-后续可以把当前本地服务模式包进 Electron：Electron 负责桌面壳，内部启动或连接本地 Next Web 与 `agent-core` HTTP 服务。当前的 `admin/admin` 登录只是本地原型门面，认证逻辑集中在 `apps/web/lib/local-auth.ts`，未来可以替换为首次启动设置、本地配置文件或系统钥匙串。
+桌面版（Electron）打包命令：
+
+```bash
+pnpm desktop:pack:mac:unsigned   # macOS 无签名包
+pnpm desktop:pack:win            # Windows
+```
+
+安装包输出在 `apps/desktop/release/`。启动后需先登录，账号与 Web 版相同：
+
+| 账号 | 密码 | 说明 |
+|------|------|------|
+| `adminwb` | `Wb@Invest2026!xK9` | 管理员，Token 已在打包时预置 |
+| `test` | `test123456` | 测试账号，需自行配置全部 Token |
+
+- 桌面版 Token 按账号保存在 `~/Library/Application Support/投研助手/data/users/{账号}/.env`（Windows 为 `%APPDATA%/投研助手/data/users/{账号}/.env`）
+- 打包时会从 `packages/agent-core/.env` 生成 `adminwb` 的默认 Token（`apps/desktop/templates/admin-defaults.env`，已 gitignore）
+- 认证逻辑见 `apps/web/lib/local-auth.ts`、`apps/web/lib/users.ts`
 
 ## 项目结构
 

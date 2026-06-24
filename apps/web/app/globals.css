@@ -976,6 +976,328 @@ a:hover {
   flex: 0 0 auto;
 }
 
+.action-panel-row--backtest .form-field {
+  flex: 1 1 12rem;
+}
+
+.action-panel-row--backtest .form-field:first-child {
+  flex: 2 1 18rem;
+}
+
+.backtest-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.backtest-control-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.backtest-control-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.backtest-control-head strong {
+  color: var(--text);
+}
+
+.backtest-strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+}
+
+.backtest-strategy-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 5.25rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    box-shadow var(--transition);
+}
+
+.backtest-strategy-card span {
+  font-weight: 700;
+}
+
+.backtest-strategy-card small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.backtest-strategy-card:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.backtest-strategy-card--active {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.backtest-days-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.backtest-preset-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.backtest-preset {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.backtest-preset:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.backtest-preset--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-muted);
+}
+
+.backtest-days-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.backtest-days-input .input {
+  width: 6.5rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+}
+
+.backtest-date-range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.backtest-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.backtest-date-field .input {
+  width: 10.5rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  color-scheme: dark;
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.checkbox-row input {
+  accent-color: var(--accent);
+}
+
+.text-up {
+  color: var(--success);
+}
+
+.text-down {
+  color: var(--danger);
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.section-head .section-title {
+  margin-bottom: 0.25rem;
+}
+
+.decision-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.decision-summary-grid > div {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.decision-summary-grid strong {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1.25rem;
+}
+
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.decision-badge--buy {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.decision-badge--sell {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.decision-badge--watch,
+.decision-badge--wait_pullback {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-muted);
+}
+
+.backtest-report {
+  margin-top: 1.5rem;
+}
+
+.backtest-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.backtest-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.backtest-menu-item span {
+  color: inherit;
+  font-weight: 650;
+}
+
+.backtest-menu-item small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.backtest-menu-item:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.backtest-menu-item--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: var(--accent-muted);
+}
+
+.backtest-report-main .section {
+  margin-top: 0;
+}
+
+.overview-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.overview-metric-card {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.overview-metric-card strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1.25rem;
+}
+
+.metric-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.875rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 @media (min-width: 560px) {
   .action-panel-row--primary {
     display: grid;
@@ -1699,6 +2021,38 @@ a:hover {
 
 .equity-chart {
   width: 100%;
+}
+
+.equity-chart svg {
+  width: 100%;
+  height: 240px;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.equity-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.equity-zero {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.equity-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
 }
 
 .equity-chart-empty {
