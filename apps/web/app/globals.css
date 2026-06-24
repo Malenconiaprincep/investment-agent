@@ -1390,6 +1390,132 @@ a:hover {
   border-color: rgba(56, 189, 248, 0.25);
 }
 
+.etf-operation-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--border);
+}
+
+.etf-operation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.etf-operation-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.etf-operation-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.etf-operation-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.etf-operation-tag--buy {
+  color: #5cb87a;
+  background: rgba(92, 184, 122, 0.16);
+  border: 1px solid rgba(92, 184, 122, 0.35);
+}
+
+.etf-operation-tag--active {
+  color: #6b9fd4;
+  background: rgba(107, 159, 212, 0.12);
+  border: 1px solid rgba(107, 159, 212, 0.28);
+}
+
+.etf-operation-tag--muted {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+.etf-operation-levels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.375rem;
+}
+
+.etf-operation-level {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+}
+
+.etf-operation-level-label {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.etf-operation-level strong {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.etf-operation-level--buy strong {
+  color: #5cb87a;
+}
+
+.etf-operation-level--stop strong {
+  color: #e07070;
+}
+
+.etf-operation-level--profit strong {
+  color: #7eb8da;
+}
+
+.etf-operation-level--highlight {
+  border-color: rgba(92, 184, 122, 0.45);
+  background: rgba(92, 184, 122, 0.08);
+}
+
+.etf-operation-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.etf-operation-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.etf-operation-cell-zone {
+  font-size: 0.8125rem;
+  color: #5cb87a;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .etf-operation-levels {
+    grid-template-columns: 1fr;
+  }
+}
+
 .diamond-badge {
   padding: 0.15rem 0.5rem;
   border-radius: 999px;

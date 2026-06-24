@@ -87,6 +87,16 @@ function statusLabel(status: EtfCandidate['status']) {
   return '淘汰';
 }
 
+function isInBuyZone(price: number, plan: EtfOperationPlan) {
+  return price >= plan.buyZoneLow && price <= plan.buyZoneHigh;
+}
+
+function canBuyNow(item: EtfCandidate) {
+  const plan = item.operationPlan;
+  if (!plan || item.status !== 'passed' || plan.action !== 'buy_zone') return false;
+  return isInBuyZone(item.price, plan);
+}
+
 function runStatusLabel(status: EtfRun['status']) {
   if (status === 'success') return '有推荐';
   if (status === '0_PASS') return '0_PASS';
@@ -262,13 +272,11 @@ export default function EtfPage() {
                       <td>{item.volumeRatio.toFixed(2)}</td>
                       <td>{item.rsi.toFixed(1)}</td>
                       <td>
-                        {item.operationPlan
-                          ? `${fmtPrice(item.operationPlan.buyZoneLow)}-${fmtPrice(item.operationPlan.buyZoneHigh)}`
-                          : '—'}
-                        <br />
-                        <span className="muted">
-                          {item.operationPlan?.actionLabel ?? '待生成'}
-                        </span>
+                        {item.operationPlan ? (
+                          <EtfOperationCell item={item} compact />
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td>{fmtPct(item.distToStop)}</td>
                       <td>{fmtPrice(item.operationPlan?.takeProfitPrice)}</td>
@@ -313,13 +321,7 @@ function EtfCard({ item }: { item: EtfCandidate }) {
         RSI {item.rsi.toFixed(1)}，MA5/20 {item.ma5.toFixed(3)}/
         {item.ma20.toFixed(3)}，距技术止损 {fmtPct(item.distToStop)}。
       </p>
-      {plan && (
-        <p className="candidate-card-thesis">
-          操作位：{plan.actionLabel}，买入区 {fmtPrice(plan.buyZoneLow)}-
-          {fmtPrice(plan.buyZoneHigh)}，止损 {fmtPrice(plan.stopPrice)}，止盈{' '}
-          {fmtPrice(plan.takeProfitPrice)}。{plan.positionHint}
-        </p>
-      )}
+      {plan && <EtfOperationPlanPanel item={item} plan={plan} />}
       {failedRules.length > 0 && (
         <p className="candidate-card-thesis">
           未通过：{failedRules.map((rule) => rule.message).join('；')}
@@ -327,4 +329,77 @@ function EtfCard({ item }: { item: EtfCandidate }) {
       )}
     </article>
   );
+}
+
+function EtfOperationPlanPanel({
+  item,
+  plan,
+}: {
+  item: EtfCandidate;
+  plan: EtfOperationPlan;
+}) {
+  const inZone = isInBuyZone(item.price, plan);
+  const canBuy = canBuyNow(item);
+
+  return (
+    <div className="etf-operation-plan">
+      <div className="etf-operation-head">
+        <span className="etf-operation-title">操作位</span>
+        <div className="etf-operation-tags">
+          <span
+            className={`etf-operation-tag etf-operation-tag--${plan.action === 'buy_zone' ? 'active' : 'muted'}`}
+          >
+            {plan.actionLabel}
+          </span>
+          {canBuy && <span className="etf-operation-tag etf-operation-tag--buy">可以买</span>}
+        </div>
+      </div>
+      <div className="etf-operation-levels">
+        <div className={`etf-operation-level etf-operation-level--buy${inZone ? ' etf-operation-level--highlight' : ''}`}>
+          <span className="etf-operation-level-label">买入区</span>
+          <strong>
+            {fmtPrice(plan.buyZoneLow)}–{fmtPrice(plan.buyZoneHigh)}
+          </strong>
+        </div>
+        <div className="etf-operation-level etf-operation-level--stop">
+          <span className="etf-operation-level-label">止损</span>
+          <strong>{fmtPrice(plan.stopPrice)}</strong>
+        </div>
+        <div className="etf-operation-level etf-operation-level--profit">
+          <span className="etf-operation-level-label">止盈</span>
+          <strong>{fmtPrice(plan.takeProfitPrice)}</strong>
+        </div>
+      </div>
+      <p className="etf-operation-hint">{plan.positionHint}</p>
+    </div>
+  );
+}
+
+function EtfOperationCell({
+  item,
+  compact = false,
+}: {
+  item: EtfCandidate;
+  compact?: boolean;
+}) {
+  const plan = item.operationPlan;
+  if (!plan) return <>—</>;
+
+  const canBuy = canBuyNow(item);
+
+  if (compact) {
+    return (
+      <div className="etf-operation-cell">
+        <div className="etf-operation-tags">
+          {canBuy && <span className="etf-operation-tag etf-operation-tag--buy">可以买</span>}
+          <span className="etf-operation-tag etf-operation-tag--muted">{plan.actionLabel}</span>
+        </div>
+        <strong className="etf-operation-cell-zone">
+          {fmtPrice(plan.buyZoneLow)}–{fmtPrice(plan.buyZoneHigh)}
+        </strong>
+      </div>
+    );
+  }
+
+  return <EtfOperationPlanPanel item={item} plan={plan} />;
 }
