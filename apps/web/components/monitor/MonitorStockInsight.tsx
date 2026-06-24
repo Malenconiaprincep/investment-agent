@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KlineChart,
   type DiamondMarker,
@@ -16,6 +16,14 @@ type ChartPayload = {
     strength: 'red' | 'blue';
     close: number;
   }>;
+  latestDiamond: {
+    strength: 'red' | 'blue';
+    reasons: string[];
+  } | null;
+  momentum: {
+    checklistScore: number;
+    checklist: Array<{ label: string; passed: boolean }>;
+  } | null;
   kline: {
     quotes: Array<{
       tradeDate: string;
@@ -33,12 +41,21 @@ type MonitorStockInsightProps = {
   theme?: string | null;
   pctChg?: number | null;
   ret20dPct?: number | null;
+  eventPoints?: string[];
+  compact?: boolean;
   height?: number;
 };
 
 function fmtPct(v: number | null | undefined) {
   if (v == null) return null;
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+function pctClass(v: number | null | undefined) {
+  if (v == null) return '';
+  if (v > 0) return 'monitor-stat--up';
+  if (v < 0) return 'monitor-stat--down';
+  return '';
 }
 
 function toBars(quotes: ChartPayload['kline']['quotes']): KlineBar[] {
@@ -59,19 +76,70 @@ function isUnresolvedName(name: string | null | undefined, symbol: string) {
   return trimmed === symbol || /^\d{6}$/.test(trimmed);
 }
 
+function shortLabel(label: string): string {
+  return label.split('（')[0]?.split('(')[0]?.trim() ?? label;
+}
+
+function buildChartEventPoints(data: ChartPayload): string[] {
+  const points: string[] = [];
+
+  if (data.latestDiamond?.strength === 'red') {
+    points.push('红钻');
+  } else if (data.latestDiamond?.strength === 'blue') {
+    points.push('蓝钻');
+  }
+
+  const topReason = data.latestDiamond?.reasons[0];
+  if (topReason) {
+    points.push(shortLabel(topReason));
+  }
+
+  if (data.momentum && data.momentum.checklistScore >= 4) {
+    points.push(`动量 ${data.momentum.checklistScore}/6`);
+  }
+
+  return [...new Set(points)].slice(0, 3);
+}
+
+function MonitorEventPoints({
+  points,
+  compact = false,
+}: {
+  points: string[];
+  compact?: boolean;
+}) {
+  if (points.length === 0) return null;
+
+  return (
+    <ul
+      className={`monitor-event-points${compact ? ' monitor-event-points--compact' : ''}`}
+      aria-label="识别事件点"
+    >
+      {points.map((point) => (
+        <li key={point} className="monitor-event-point">
+          {point}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function MonitorStockInsight({
   symbol,
   fallbackName,
   theme,
   pctChg,
   ret20dPct,
-  height = 180,
+  eventPoints = [],
+  compact = false,
+  height,
 }: MonitorStockInsightProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [data, setData] = useState<ChartPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const chartHeight = height ?? (compact ? 84 : 140);
 
   useEffect(() => {
     if (!rootRef.current) return;
@@ -83,7 +151,7 @@ export function MonitorStockInsight({
           observer.disconnect();
         }
       },
-      { rootMargin: '160px' },
+      { rootMargin: '120px' },
     );
     observer.observe(rootRef.current);
     return () => observer.disconnect();
@@ -130,6 +198,55 @@ export function MonitorStockInsight({
       strength: signal.strength,
     })) ?? [];
 
+  const mergedEventPoints = useMemo(() => {
+    const chartPoints = data ? buildChartEventPoints(data) : [];
+    return [...new Set([...eventPoints, ...chartPoints])].slice(0, compact ? 4 : 8);
+  }, [compact, data, eventPoints]);
+
+  const chartBlock = (
+    <>
+      {!visible && <div className="chart-empty chart-empty--monitor">K 线</div>}
+      {visible && loading && <div className="chart-empty chart-empty--monitor">…</div>}
+      {visible && error && <div className="chart-empty chart-empty--monitor">{error}</div>}
+      {visible && !loading && !error && data && (
+        <KlineChart bars={toBars(data.kline.quotes)} diamonds={diamonds} height={chartHeight} />
+      )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div
+        ref={rootRef}
+        className="monitor-stock-insight monitor-stock-insight--compact"
+      >
+        <div className="monitor-stock-insight-title-row">
+          <div className="monitor-stock-insight-identity">
+            <strong className="monitor-stock-insight-name">{displayName}</strong>
+            <span className="monitor-stock-insight-code">{symbol}</span>
+          </div>
+          <div className="monitor-stock-insight-inline-stats">
+            {pctChg != null ? (
+              <span className={`monitor-stat ${pctClass(pctChg)}`}>{fmtPct(pctChg)}</span>
+            ) : null}
+            {ret20dPct != null ? (
+              <span className={`monitor-stat monitor-stat--muted ${pctClass(ret20dPct)}`}>
+                20日 {fmtPct(ret20dPct)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="monitor-stock-insight-tags">
+          {industry ? <span className="monitor-stock-tag">{industry}</span> : null}
+          {theme ? <span className="monitor-stock-tag monitor-stock-tag--theme">{theme}</span> : null}
+        </div>
+
+        <MonitorEventPoints points={mergedEventPoints} compact />
+      </div>
+    );
+  }
+
   return (
     <div ref={rootRef} className="monitor-stock-insight">
       <div className="monitor-stock-insight-head">
@@ -139,7 +256,9 @@ export function MonitorStockInsight({
         </div>
         <div className="monitor-stock-insight-tags">
           {industry ? <span className="monitor-stock-tag">板块 {industry}</span> : null}
-          {theme ? <span className="monitor-stock-tag monitor-stock-tag--theme">主线 {theme}</span> : null}
+          {theme ? (
+            <span className="monitor-stock-tag monitor-stock-tag--theme">主线 {theme}</span>
+          ) : null}
         </div>
       </div>
 
@@ -150,12 +269,8 @@ export function MonitorStockInsight({
         </div>
       )}
 
-      {!visible && <div className="chart-empty chart-empty--compact">滚动加载 K 线…</div>}
-      {visible && loading && <div className="chart-empty chart-empty--compact">加载 K 线…</div>}
-      {visible && error && <div className="chart-empty chart-empty--compact">{error}</div>}
-      {visible && !loading && !error && data && (
-        <KlineChart bars={toBars(data.kline.quotes)} diamonds={diamonds} height={height} />
-      )}
+      <MonitorEventPoints points={mergedEventPoints} />
+      {chartBlock}
     </div>
   );
 }

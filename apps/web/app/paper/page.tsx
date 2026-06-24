@@ -51,6 +51,7 @@ function fmtMoney(v: number) {
 }
 
 function formatTradeSource(trade: Trade) {
+  if (trade.note?.startsWith('monitor-watchlist:')) return '消息雷达';
   if (trade.note?.startsWith('monitor:')) return '消息雷达';
   if (trade.note?.startsWith('monitor-exit:')) return '规则卖出';
   return trade.source === 'auto' ? '自动' : '手动';
@@ -58,7 +59,8 @@ function formatTradeSource(trade: Trade) {
 
 function formatTradeNote(note: string | null) {
   if (!note) return '—';
-  if (note.startsWith('monitor:')) return '消息推荐自动买入';
+  if (note.startsWith('monitor-watchlist:')) return '自选跟踪动量达标自动买入';
+  if (note.startsWith('monitor:')) return '消息雷达自动买入';
   if (note.startsWith('monitor-exit:')) {
     return `消息雷达卖出检查：${note.replace('monitor-exit:', '')}`;
   }

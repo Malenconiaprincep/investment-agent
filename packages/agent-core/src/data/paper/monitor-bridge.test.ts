@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitorAlert } from '../monitor/store.js';
 import {
+  buildMonitorEventPoints,
   classifyMonitorAlert,
   isMonitorBuyForAlert,
   isMonitorBuyForSymbolToday,
@@ -47,7 +48,7 @@ describe('monitor paper bridge rules', () => {
     ).toEqual({
       level: 'watch',
       status: 'recommended',
-      reason: '值得跟踪，但未达到自动买入条件',
+      reason: '消息雷达识别，将自动加入自选并等待买入信号',
     });
   });
 
@@ -76,6 +77,21 @@ describe('monitor paper bridge rules', () => {
       false,
     );
     expect(isMonitorBuyForAlert(null, 'alert-1')).toBe(false);
+  });
+
+  it('builds event points from alert catalysts', () => {
+    const points = buildMonitorEventPoints(
+      alert({
+        alertType: 'early_move',
+        severity: 'watch',
+        theme: '券商',
+        pctChg: 4.71,
+        newsTitle: '【券商】某券商板块走强',
+      }),
+    );
+    expect(points).toContain('温和启动');
+    expect(points).toContain('主线 券商');
+    expect(points.some((p) => p.includes('当日'))).toBe(true);
   });
 
   it('dedupes monitor buys by trade date and source', () => {

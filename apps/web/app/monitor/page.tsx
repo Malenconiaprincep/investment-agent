@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { MonitorStockInsight } from '@/components/monitor/MonitorStockInsight';
 
 type MonitorAlert = {
@@ -53,8 +52,9 @@ type MonitorPaperRecommendation = {
   theme: string | null;
   pctChg: number | null;
   ret20dPct: number | null;
+  eventPoints: string[];
   reason: string;
-  status: 'recommended' | 'bought' | 'skipped' | 'error';
+  status: 'recommended' | 'tracked' | 'bought' | 'skipped' | 'error';
   skipReason?: string;
   error?: string;
   shares?: number;
@@ -63,8 +63,8 @@ type MonitorPaperRecommendation = {
 };
 
 type MonitorPaperAction = {
-  kind: 'buy' | 'sell';
-  status: 'bought' | 'sold' | 'skipped' | 'error';
+  kind: 'buy' | 'sell' | 'track';
+  status: 'bought' | 'sold' | 'tracked' | 'skipped' | 'error';
   symbol: string;
   name: string;
   reason: string;
@@ -92,6 +92,76 @@ const ALERT_LABEL: Record<string, string> = {
 const REFRESH_INTERVAL_MS = 30 * 1000;
 
 const THEME_NEWS_PREVIEW = 5;
+
+const RECOMMENDATION_RANK: Record<MonitorPaperRecommendation['level'], number> = {
+  auto_buy: 0,
+  watch: 1,
+  info: 2,
+};
+
+const RECOMMENDATION_STATUS_RANK: Record<
+  MonitorPaperRecommendation['status'],
+  number
+> = {
+  bought: 0,
+  tracked: 1,
+  recommended: 2,
+  skipped: 3,
+  error: 4,
+};
+
+function dedupeRecommendationsBySymbol(
+  items: MonitorPaperRecommendation[],
+): MonitorPaperRecommendation[] {
+  const bySymbol = new Map<string, MonitorPaperRecommendation>();
+  for (const item of items) {
+    if (!item.symbol) continue;
+    const existing = bySymbol.get(item.symbol);
+    if (!existing) {
+      bySymbol.set(item.symbol, item);
+      continue;
+    }
+    const statusBetter =
+      RECOMMENDATION_STATUS_RANK[item.status] <
+      RECOMMENDATION_STATUS_RANK[existing.status];
+    const levelBetter =
+      RECOMMENDATION_STATUS_RANK[item.status] ===
+        RECOMMENDATION_STATUS_RANK[existing.status] &&
+      RECOMMENDATION_RANK[item.level] < RECOMMENDATION_RANK[existing.level];
+    if (statusBetter || levelBetter) {
+      bySymbol.set(item.symbol, item);
+    }
+  }
+  return [...bySymbol.values()];
+}
+
+function buildAlertEventPoints(alert: MonitorAlert): string[] {
+  const points: string[] = [];
+  const typeLabel = ALERT_LABEL[alert.alertType];
+  if (typeLabel) points.push(typeLabel);
+  if (alert.severity === 'urgent') points.push('高优先级');
+  if (alert.theme) points.push(`主线 ${alert.theme}`);
+  if (alert.pctChg != null) {
+    points.push(`当日 ${alert.pctChg > 0 ? '+' : ''}${alert.pctChg.toFixed(2)}%`);
+  }
+  if (alert.newsTitle) {
+    const title = alert.newsTitle.replace(/【[^】]+】/g, '').trim();
+    if (title) points.push(title.length > 32 ? `${title.slice(0, 32)}…` : title);
+  }
+  return [...new Set(points)];
+}
+
+function dedupeAlertsBySymbol(alerts: MonitorAlert[]): MonitorAlert[] {
+  const bySymbol = new Map<string, MonitorAlert>();
+  for (const alert of alerts) {
+    if (!alert.symbol) continue;
+    const existing = bySymbol.get(alert.symbol);
+    if (!existing || alert.createdAt > existing.createdAt) {
+      bySymbol.set(alert.symbol, alert);
+    }
+  }
+  return [...bySymbol.values()];
+}
 
 function consolidateThemeAlerts(alerts: MonitorAlert[]): MonitorAlert[] {
   const byTheme = new Map<string, MonitorAlert>();
@@ -187,48 +257,45 @@ export default function MonitorPage() {
   const urgentAlerts = alerts.filter(
     (a) => a.severity === 'urgent' && !a.acknowledged,
   );
-  const preMoveAlerts = alerts.filter((a) => a.alertType === 'pre_move');
+  const preMoveAlerts = dedupeAlertsBySymbol(
+    alerts.filter((a) => a.alertType === 'pre_move'),
+  );
   const themeAlerts = useMemo(
     () => consolidateThemeAlerts(alerts),
     [alerts],
   );
-  const actionableRecommendations = lastRecommendations.filter(
-    (item) => item.symbol && item.level !== 'info',
+  const actionableRecommendations = dedupeRecommendationsBySymbol(
+    lastRecommendations.filter((item) => item.symbol && item.level !== 'info'),
   );
   const alertTypeCounts = alerts.reduce<Record<string, number>>((acc, alert) => {
     acc[alert.alertType] = (acc[alert.alertType] ?? 0) + 1;
     return acc;
   }, {});
-  const autoBuyCandidates = actionableRecommendations.filter(
-    (item) => item.level === 'auto_buy',
-  );
   const boughtActions = lastPaperActions.filter((item) => item.status === 'bought');
   const soldActions = lastPaperActions.filter((item) => item.status === 'sold');
   const skippedActions = lastPaperActions.filter(
     (item) => item.status === 'skipped',
   );
   const errorActions = lastPaperActions.filter((item) => item.status === 'error');
+  const trackedCount = actionableRecommendations.filter(
+    (item) => item.status === 'tracked',
+  ).length;
   const noBuyReason =
     boughtActions.length > 0
       ? null
-      : autoBuyCandidates.length > 0
-        ? autoBuyCandidates
-            .map((item) => item.skipReason ?? item.error)
-            .filter(Boolean)
-            .join('；') || '已有候选，但尚未执行买入'
-        : alerts.length === 0
-          ? '暂无提醒'
-          : alerts.every((item) => !item.symbol)
-            ? '本次提醒没有识别到具体股票代码'
-            : preMoveAlerts.length === 0
-              ? '没有出现“潜伏机会”类型提醒'
-              : '没有满足 urgent + pre_move 的自动买入条件';
+      : trackedCount > 0
+        ? `已自动跟踪 ${trackedCount} 只，等待红钻+动量达标后买入模拟盘`
+        : actionableRecommendations.length > 0
+          ? '标的已识别，等待加入自选或触发买入条件'
+          : alerts.length === 0
+            ? '暂无提醒'
+            : '本次暂无个股信号';
 
   return (
     <main className="page page--list">
       <PageHeader
         title="消息雷达"
-        description="打开本页即可自动扫描：结合 7×24 快讯与盘中行情，生成消息推荐；高置信潜伏机会会自动写入模拟盘。"
+        description="后台自动扫描资讯与行情：识别标的会加入自选跟踪，潜伏机会或动量达标后自动写入模拟盘。"
       />
 
       <div className="list-stack">
@@ -342,9 +409,9 @@ export default function MonitorPage() {
 
         {actionableRecommendations.length > 0 && (
           <section className="monitor-section">
-            <h2 className="section-title">消息推荐</h2>
+            <h2 className="section-title">自动跟踪</h2>
             <p className="muted monitor-section-hint">
-              含股票名称、所属板块与近 120 日 K 线（滚动进入视口后加载）。
+              已识别标的自动加入自选；红钻+动量达标或潜伏信号触发后自动买入模拟盘。
             </p>
             <div className="monitor-stock-grid">
               {actionableRecommendations.map((item) => (
@@ -436,21 +503,24 @@ function ThemeNewsFeed({ alerts }: { alerts: MonitorAlert[] }) {
 }
 
 function recommendationLabel(level: MonitorPaperRecommendation['level']) {
-  if (level === 'auto_buy') return '自动买入候选';
-  if (level === 'watch') return '观察推荐';
+  if (level === 'auto_buy') return '潜伏买入';
+  if (level === 'watch') return '自动跟踪';
   return '消息记录';
 }
 
 function statusLabel(status: MonitorPaperRecommendation['status']) {
-  if (status === 'bought') return '已自动买入';
+  if (status === 'bought') return '已买入';
+  if (status === 'tracked') return '跟踪中';
   if (status === 'skipped') return '已跳过';
   if (status === 'error') return '执行失败';
-  return '待观察';
+  return '处理中';
 }
 
 function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
+  const statusNote = item.error ?? (item.status === 'tracked' ? item.reason : item.skipReason);
+
   return (
-    <article className={`monitor-stock-card monitor-recommendation monitor-recommendation--${item.level}`}>
+    <article className={`monitor-stock-card monitor-stock-card--compact monitor-recommendation monitor-recommendation--${item.level}`}>
       <div className="monitor-stock-card-head">
         <span className={`monitor-type monitor-recommendation-type--${item.level}`}>
           {recommendationLabel(item.level)}
@@ -465,14 +535,18 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
           theme={item.theme}
           pctChg={item.pctChg}
           ret20dPct={item.ret20dPct}
+          eventPoints={item.eventPoints ?? []}
+          compact
         />
       ) : (
         <strong>{item.name ?? '未识别标的'}</strong>
       )}
 
-      <p className="monitor-summary">
-        {item.skipReason ?? item.error ?? item.reason}
-      </p>
+      {statusNote ? (
+        <p className="monitor-summary monitor-summary--compact monitor-summary--status">
+          {statusNote}
+        </p>
+      ) : null}
 
       {(item.shares || item.price) && (
         <div className="history-card-meta">
@@ -481,10 +555,15 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
         </div>
       )}
 
-      <div className="monitor-card-actions">
+      <div className="monitor-card-actions monitor-card-actions--compact">
         {item.status === 'bought' && (
           <Link href="/paper" className="saved-link">
             查看模拟盘
+          </Link>
+        )}
+        {item.status === 'tracked' && (
+          <Link href="/watchlist" className="saved-link">
+            查看自选
           </Link>
         )}
         {item.symbol && (
@@ -492,30 +571,23 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
             生成研报
           </Link>
         )}
-        {item.symbol && (
-          <AddToWatchlistButton
-            symbol={item.symbol}
-            name={item.name && !/^\d{6}$/.test(item.name) ? item.name : item.symbol}
-            reason="消息雷达推荐"
-            sourceType="signal"
-            sourceId={item.alertId}
-          />
-        )}
       </div>
     </article>
   );
 }
 
 function paperActionLabel(item: MonitorPaperAction) {
+  if (item.kind === 'track') return '加入自选';
   if (item.status === 'bought') return '自动买入';
   if (item.status === 'sold') return '自动卖出';
+  if (item.status === 'tracked') return '跟踪中';
   if (item.status === 'skipped') return '跳过';
   return '失败';
 }
 
 function PaperActionCard({ item }: { item: MonitorPaperAction }) {
   return (
-    <article className={`monitor-stock-card monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
+    <article className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
       <div className="monitor-stock-card-head">
         <span className="monitor-type monitor-recommendation-type--auto_buy">
           {paperActionLabel(item)}
@@ -525,9 +597,14 @@ function PaperActionCard({ item }: { item: MonitorPaperAction }) {
         </span>
       </div>
 
-      <MonitorStockInsight symbol={item.symbol} fallbackName={item.name} />
+      <MonitorStockInsight
+        symbol={item.symbol}
+        fallbackName={item.name}
+        eventPoints={[item.kind === 'buy' ? '自动买入' : '自动卖出']}
+        compact
+      />
 
-      <p className="monitor-summary">{item.error ?? item.reason}</p>
+      <p className="monitor-summary monitor-summary--compact">{item.error ?? item.reason}</p>
       <div className="history-card-meta">
         {item.shares ? <span>股数 {item.shares}</span> : null}
         {item.price ? <span>价格 {item.price.toFixed(2)}</span> : null}
@@ -544,7 +621,7 @@ function AlertCard({ alert }: { alert: MonitorAlert }) {
 
   return (
     <article
-      className={`monitor-stock-card monitor-card monitor-card--${alert.severity}${alert.acknowledged ? ' monitor-card--read' : ''}`}
+      className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${alert.severity}${alert.acknowledged ? ' monitor-card--read' : ''}`}
     >
       <div className="monitor-stock-card-head">
         <span className={`monitor-type monitor-type--${alert.alertType}`}>
@@ -560,17 +637,15 @@ function AlertCard({ alert }: { alert: MonitorAlert }) {
           theme={alert.theme}
           pctChg={alert.pctChg}
           ret20dPct={alert.ret20dPct}
+          eventPoints={buildAlertEventPoints(alert)}
+          compact
         />
       ) : (
         <strong>{alert.title}</strong>
       )}
 
-      <p className="monitor-summary">{alert.summary}</p>
-
       {!alert.symbol && (
-        <div className="history-card-meta">
-          {alert.theme && <span>主线 {alert.theme}</span>}
-        </div>
+        <p className="monitor-summary monitor-summary--compact">{alert.summary}</p>
       )}
 
       {alert.newsTitle && (

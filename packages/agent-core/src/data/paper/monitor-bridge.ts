@@ -1,9 +1,11 @@
 import type { MonitorAlert } from '../monitor/store.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
 import { getDailyQuote } from '../market/services.js';
+import { addWatchlistItem, listWatchlistItems } from '../watchlist/store.js';
 import {
   analyzeMomentum,
   evaluateMomentumExit,
+  MOMENTUM_MIN_CHECKLIST,
 } from './momentum.js';
 import {
   calcAutoBuyShares,
@@ -24,8 +26,9 @@ export type MonitorPaperRecommendation = {
   theme: string | null;
   pctChg: number | null;
   ret20dPct: number | null;
+  eventPoints: string[];
   reason: string;
-  status: 'recommended' | 'bought' | 'skipped' | 'error';
+  status: 'recommended' | 'tracked' | 'bought' | 'skipped' | 'error';
   skipReason?: string;
   error?: string;
   shares?: number;
@@ -33,9 +36,51 @@ export type MonitorPaperRecommendation = {
   tradeId?: string;
 };
 
+const ALERT_EVENT_LABEL: Record<MonitorAlert['alertType'], string> = {
+  pre_move: '潜伏催化',
+  news_catalyst: '新闻催化',
+  early_move: '温和启动',
+  watchlist_surge: '自选波动',
+  theme_ignite: '主线资讯',
+};
+
+function fmtPctPoint(v: number): string {
+  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+export function buildMonitorEventPoints(alert: MonitorAlert): string[] {
+  const points: string[] = [];
+  const typeLabel = ALERT_EVENT_LABEL[alert.alertType];
+  if (typeLabel) points.push(typeLabel);
+
+  if (alert.severity === 'urgent' && alert.alertType !== 'theme_ignite') {
+    points.push('高优先级');
+  }
+
+  if (alert.theme) points.push(`主线 ${alert.theme}`);
+
+  if (alert.pctChg != null) {
+    points.push(`当日 ${fmtPctPoint(alert.pctChg)}`);
+  }
+
+  if (alert.ret20dPct != null) {
+    if (alert.ret20dPct >= 25) points.push(`20日强势 ${fmtPctPoint(alert.ret20dPct)}`);
+    else if (alert.ret20dPct <= -10) points.push(`20日走弱 ${fmtPctPoint(alert.ret20dPct)}`);
+  }
+
+  if (alert.newsTitle) {
+    const title = alert.newsTitle.replace(/【[^】]+】/g, '').trim();
+    if (title) {
+      points.push(title.length > 32 ? `${title.slice(0, 32)}…` : title);
+    }
+  }
+
+  return [...new Set(points)];
+}
+
 export type MonitorPaperAction = {
-  kind: 'buy' | 'sell';
-  status: 'bought' | 'sold' | 'skipped' | 'error';
+  kind: 'buy' | 'sell' | 'track';
+  status: 'bought' | 'sold' | 'tracked' | 'skipped' | 'error';
   symbol: string;
   name: string;
   reason: string;
@@ -71,7 +116,7 @@ export function classifyMonitorAlert(
     return {
       level: 'watch',
       status: 'recommended',
-      reason: '值得跟踪，但未达到自动买入条件',
+      reason: '消息雷达识别，将自动加入自选并等待买入信号',
     };
   }
 
@@ -92,6 +137,7 @@ function buildRecommendation(alert: MonitorAlert): MonitorPaperRecommendation {
     theme: alert.theme,
     pctChg: alert.pctChg,
     ret20dPct: alert.ret20dPct,
+    eventPoints: buildMonitorEventPoints(alert),
     ...classified,
   };
 }
@@ -117,8 +163,204 @@ export function isMonitorBuyForSymbolToday(input: {
     input.side === 'buy' &&
     input.source === 'auto' &&
     input.tradeDate === input.targetDate &&
-    (input.note?.startsWith('monitor:') ?? false)
+    ((input.note?.startsWith('monitor:') ?? false) ||
+      isMonitorWatchlistBuyNote(input.note))
   );
+}
+
+export function isMonitorWatchlistBuyNote(note: string | null): boolean {
+  return note?.startsWith('monitor-watchlist:') ?? false;
+}
+
+async function checkMomentumBuyReady(symbol: string, name: string) {
+  const kline = await getDailyQuote(symbol, 60);
+  const signal = await scanDiamondSignal(symbol, name, 60);
+  const momentum = analyzeMomentum(symbol, name, kline.quotes, signal);
+  const ready =
+    momentum?.action === 'buy' &&
+    momentum.checklistScore >= MOMENTUM_MIN_CHECKLIST &&
+    signal?.strength === 'red';
+  return {
+    ready: !!ready,
+    memo: momentum?.entryMemo ?? '',
+    price: kline.latestClose,
+  };
+}
+
+async function maybeAutoTrack(input: {
+  alert: MonitorAlert;
+  recommendation: MonitorPaperRecommendation;
+}): Promise<MonitorPaperAction | null> {
+  const { alert, recommendation } = input;
+  if (!alert.symbol || !alert.name || recommendation.level === 'info') return null;
+
+  try {
+    const quote = await getDailyQuote(alert.symbol, 2).catch(() => null);
+    await addWatchlistItem({
+      symbol: alert.symbol,
+      name: alert.name,
+      reason: alert.summary.slice(0, 120),
+      sourceType: 'signal',
+      sourceId: alert.id,
+      entryPrice: quote?.latestClose ?? undefined,
+    });
+
+    if (recommendation.status !== 'bought') {
+      recommendation.status = 'tracked';
+      recommendation.reason = '已加入自选，动量达标后自动买入模拟盘';
+    }
+
+    return {
+      kind: 'track',
+      status: 'tracked',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: '消息雷达自动加入自选',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (recommendation.status !== 'bought') {
+      recommendation.status = 'skipped';
+      recommendation.skipReason = message;
+    }
+    return {
+      kind: 'track',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: message,
+      error: message,
+    };
+  }
+}
+
+async function executeMonitorBuy(input: {
+  alert: MonitorAlert;
+  recommendation: MonitorPaperRecommendation;
+  tradeDate: string;
+  note: string;
+  entryMemo: string;
+  trades: Awaited<ReturnType<typeof listPaperTrades>>;
+  summary: Awaited<ReturnType<typeof getPaperAccountSummary>>;
+  price?: number | null;
+}): Promise<MonitorPaperAction | null> {
+  const { alert, recommendation, tradeDate, note, entryMemo, trades, summary } = input;
+  if (!alert.symbol || !alert.name) return null;
+
+  if (summary.positions.some((p) => p.symbol === alert.symbol)) {
+    recommendation.status = 'tracked';
+    recommendation.skipReason = '模拟盘已持有，继续跟踪';
+    return {
+      kind: 'buy',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: recommendation.skipReason,
+    };
+  }
+
+  if (trades.some((trade) => isMonitorBuyForAlert(trade.note, alert.id))) {
+    recommendation.status = 'tracked';
+    recommendation.skipReason = '该提醒已执行过买入';
+    return {
+      kind: 'buy',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: recommendation.skipReason,
+    };
+  }
+
+  const duplicateSymbolToday = trades.some(
+    (trade) =>
+      trade.symbol === alert.symbol &&
+      isMonitorBuyForSymbolToday({
+        note: trade.note,
+        side: trade.side,
+        source: trade.source,
+        tradeDate: trade.tradeDate,
+        targetDate: tradeDate,
+      }),
+  );
+  if (duplicateSymbolToday) {
+    recommendation.status = 'tracked';
+    recommendation.skipReason = '同一股票今日已有消息雷达自动买入';
+    return {
+      kind: 'buy',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: recommendation.skipReason,
+    };
+  }
+
+  let price = input.price ?? null;
+  if (price == null) {
+    const quote = await getDailyQuote(alert.symbol, 2);
+    price = quote.latestClose;
+  }
+  if (price == null) {
+    recommendation.status = 'tracked';
+    recommendation.skipReason = '无法获取最新价格';
+    return {
+      kind: 'buy',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: recommendation.skipReason,
+    };
+  }
+
+  const shares = calcAutoBuyShares(summary.account.cash, price);
+  if (shares < 100) {
+    recommendation.status = 'tracked';
+    recommendation.skipReason = '可用现金不足以按 100 股整数买入';
+    return {
+      kind: 'buy',
+      status: 'skipped',
+      symbol: alert.symbol,
+      name: alert.name,
+      alertId: alert.id,
+      reason: recommendation.skipReason,
+    };
+  }
+
+  const result = await executePaperTrade({
+    symbol: alert.symbol,
+    name: alert.name,
+    side: 'buy',
+    shares,
+    price,
+    tradeDate,
+    source: 'auto',
+    note,
+    entryMemo,
+    skipSessionCheck: true,
+  });
+
+  recommendation.status = 'bought';
+  recommendation.reason = '动量达标，已自动买入模拟盘';
+  recommendation.shares = result.trade.shares;
+  recommendation.price = result.trade.price;
+  recommendation.tradeId = result.trade.id;
+
+  return {
+    kind: 'buy',
+    status: 'bought',
+    symbol: alert.symbol,
+    name: alert.name,
+    alertId: alert.id,
+    shares: result.trade.shares,
+    price: result.trade.price,
+    tradeId: result.trade.id,
+    reason: entryMemo || alert.summary,
+  };
 }
 
 async function maybeAutoBuy(input: {
@@ -127,18 +369,23 @@ async function maybeAutoBuy(input: {
   tradeDate: string;
 }): Promise<MonitorPaperAction | null> {
   const { alert, recommendation, tradeDate } = input;
-  if (recommendation.level !== 'auto_buy') return null;
-  if (!alert.symbol || !alert.name) {
-    recommendation.status = 'skipped';
-    recommendation.skipReason = '缺少股票代码或名称';
-    return {
-      kind: 'buy',
-      status: 'skipped',
-      symbol: alert.symbol ?? 'unknown',
-      name: alert.name ?? 'unknown',
-      alertId: alert.id,
-      reason: recommendation.skipReason,
-    };
+  if (!alert.symbol || !alert.name || recommendation.level === 'info') return null;
+
+  const isPreMoveFast = recommendation.level === 'auto_buy';
+  let momentumReady = false;
+  let momentumMemo = alert.summary;
+  let momentumPrice: number | null = null;
+
+  if (!isPreMoveFast) {
+    try {
+      const momentum = await checkMomentumBuyReady(alert.symbol, alert.name);
+      momentumReady = momentum.ready;
+      momentumMemo = momentum.memo || alert.summary;
+      momentumPrice = momentum.price;
+    } catch {
+      return null;
+    }
+    if (!momentumReady) return null;
   }
 
   try {
@@ -147,113 +394,18 @@ async function maybeAutoBuy(input: {
       listPaperTrades(500),
     ]);
 
-    if (summary.positions.some((p) => p.symbol === alert.symbol)) {
-      recommendation.status = 'skipped';
-      recommendation.skipReason = '模拟盘已持有该股票';
-      return {
-        kind: 'buy',
-        status: 'skipped',
-        symbol: alert.symbol,
-        name: alert.name,
-        alertId: alert.id,
-        reason: recommendation.skipReason,
-      };
-    }
-
-    if (trades.some((trade) => isMonitorBuyForAlert(trade.note, alert.id))) {
-      recommendation.status = 'skipped';
-      recommendation.skipReason = '该告警已执行过自动买入';
-      return {
-        kind: 'buy',
-        status: 'skipped',
-        symbol: alert.symbol,
-        name: alert.name,
-        alertId: alert.id,
-        reason: recommendation.skipReason,
-      };
-    }
-
-    const duplicateSymbolToday = trades.some(
-      (trade) =>
-        trade.symbol === alert.symbol &&
-        isMonitorBuyForSymbolToday({
-          note: trade.note,
-          side: trade.side,
-          source: trade.source,
-          tradeDate: trade.tradeDate,
-          targetDate: tradeDate,
-        }),
-    );
-    if (duplicateSymbolToday) {
-      recommendation.status = 'skipped';
-      recommendation.skipReason = '同一股票今日已有消息雷达自动买入';
-      return {
-        kind: 'buy',
-        status: 'skipped',
-        symbol: alert.symbol,
-        name: alert.name,
-        alertId: alert.id,
-        reason: recommendation.skipReason,
-      };
-    }
-
-    const quote = await getDailyQuote(alert.symbol, 2);
-    const price = quote.latestClose;
-    if (price == null) {
-      recommendation.status = 'skipped';
-      recommendation.skipReason = '无法获取最新价格';
-      return {
-        kind: 'buy',
-        status: 'skipped',
-        symbol: alert.symbol,
-        name: alert.name,
-        alertId: alert.id,
-        reason: recommendation.skipReason,
-      };
-    }
-
-    const shares = calcAutoBuyShares(summary.account.cash, price);
-    if (shares < 100) {
-      recommendation.status = 'skipped';
-      recommendation.skipReason = '可用现金不足以按 100 股整数买入';
-      return {
-        kind: 'buy',
-        status: 'skipped',
-        symbol: alert.symbol,
-        name: alert.name,
-        alertId: alert.id,
-        reason: recommendation.skipReason,
-      };
-    }
-
-    const result = await executePaperTrade({
-      symbol: alert.symbol,
-      name: alert.name,
-      side: 'buy',
-      shares,
-      price,
+    return await executeMonitorBuy({
+      alert,
+      recommendation,
       tradeDate,
-      source: 'auto',
-      note: `monitor:${alert.id}:${alert.alertType}`,
-      entryMemo: alert.summary,
-      skipSessionCheck: true,
+      note: isPreMoveFast
+        ? `monitor:${alert.id}:${alert.alertType}`
+        : `monitor:${alert.id}:momentum`,
+      entryMemo: momentumMemo,
+      trades,
+      summary,
+      price: momentumPrice,
     });
-
-    recommendation.status = 'bought';
-    recommendation.shares = result.trade.shares;
-    recommendation.price = result.trade.price;
-    recommendation.tradeId = result.trade.id;
-    return {
-      kind: 'buy',
-      status: 'bought',
-      symbol: alert.symbol,
-      name: alert.name,
-      alertId: alert.id,
-      shares: result.trade.shares,
-      price: result.trade.price,
-      tradeId: result.trade.id,
-      reason: alert.summary,
-    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     recommendation.status = 'error';
@@ -268,6 +420,83 @@ async function maybeAutoBuy(input: {
       error: message,
     };
   }
+}
+
+async function autoBuyMonitorWatchlist(tradeDate: string): Promise<MonitorPaperAction[]> {
+  const actions: MonitorPaperAction[] = [];
+  const watchlist = await listWatchlistItems();
+  let summary = await getPaperAccountSummary();
+  let trades = await listPaperTrades(500);
+
+  const held = new Set(summary.positions.map((p) => p.symbol));
+  const monitorItems = watchlist.filter((item) => item.sourceType === 'signal');
+
+  for (const item of monitorItems) {
+    if (held.has(item.symbol)) continue;
+    if (
+      trades.some(
+        (trade) =>
+          trade.symbol === item.symbol &&
+          isMonitorBuyForSymbolToday({
+            note: trade.note,
+            side: trade.side,
+            source: trade.source,
+            tradeDate: trade.tradeDate,
+            targetDate: tradeDate,
+          }),
+      )
+    ) {
+      continue;
+    }
+
+    try {
+      const momentum = await checkMomentumBuyReady(item.symbol, item.name);
+      if (!momentum.ready) continue;
+
+      const pseudoAlert: MonitorAlert = {
+        id: item.sourceId ?? item.id,
+        alertType: 'news_catalyst',
+        severity: 'watch',
+        symbol: item.symbol,
+        name: item.name,
+        title: item.name,
+        summary: item.reason ?? '自选跟踪',
+        newsTitle: null,
+        newsUrl: null,
+        pctChg: null,
+        ret20dPct: null,
+        theme: null,
+        tradeDate,
+        createdAt: new Date().toISOString(),
+        acknowledged: false,
+      };
+      const pseudoRecommendation = buildRecommendation(pseudoAlert);
+      pseudoRecommendation.status = 'tracked';
+
+      const action = await executeMonitorBuy({
+        alert: pseudoAlert,
+        recommendation: pseudoRecommendation,
+        tradeDate,
+        note: `monitor-watchlist:${item.symbol}`,
+        entryMemo: momentum.memo,
+        trades,
+        summary,
+        price: momentum.price,
+      });
+      if (action) {
+        actions.push(action);
+        if (action.status === 'bought') {
+          held.add(item.symbol);
+          summary = await getPaperAccountSummary();
+          trades = await listPaperTrades(500);
+        }
+      }
+    } catch {
+      // skip per symbol
+    }
+  }
+
+  return actions;
 }
 
 async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaperAction[]> {
@@ -362,14 +591,21 @@ export async function runMonitorPaperBridge(input: {
   const paperActions: MonitorPaperAction[] = [];
 
   for (let i = 0; i < input.alerts.length; i++) {
-    const action = await maybeAutoBuy({
+    const trackAction = await maybeAutoTrack({
+      alert: input.alerts[i],
+      recommendation: recommendations[i],
+    });
+    if (trackAction) paperActions.push(trackAction);
+
+    const buyAction = await maybeAutoBuy({
       alert: input.alerts[i],
       recommendation: recommendations[i],
       tradeDate: input.tradeDate,
     });
-    if (action) paperActions.push(action);
+    if (buyAction) paperActions.push(buyAction);
   }
 
+  paperActions.push(...(await autoBuyMonitorWatchlist(input.tradeDate)));
   paperActions.push(...(await autoSellExitsFromMonitor(input.tradeDate)));
 
   return { recommendations, paperActions };
@@ -384,6 +620,7 @@ export async function listRecentMonitorPaperActions(
       (trade) =>
         trade.source === 'auto' &&
         (trade.note?.startsWith('monitor:') ||
+          trade.note?.startsWith('monitor-watchlist:') ||
           trade.note?.startsWith('monitor-exit:')),
     )
     .map((trade) => {
@@ -395,7 +632,9 @@ export async function listRecentMonitorPaperActions(
         name: trade.name,
         reason: isExit
           ? trade.note!.replace('monitor-exit:', '')
-          : '消息推荐自动买入',
+          : trade.note?.startsWith('monitor-watchlist:')
+            ? '自选跟踪动量达标自动买入'
+            : '消息雷达自动买入',
         alertId: !isExit ? trade.note?.split(':')[1] : undefined,
         shares: trade.shares,
         price: trade.price,

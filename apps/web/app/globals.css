@@ -2211,19 +2211,36 @@ a:hover {
 
 .monitor-stock-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.625rem;
+}
+
+@media (min-width: 1100px) {
+  .monitor-stock-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1500px) {
+  .monitor-stock-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .monitor-stock-card {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  padding: 1rem 1.125rem;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   border-left: 3px solid var(--border-strong);
+}
+
+.monitor-stock-card--compact {
+  gap: 0.45rem;
+  padding: 0.625rem 0.75rem;
 }
 
 .monitor-stock-card-head {
@@ -2231,29 +2248,93 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .monitor-stock-insight {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
+}
+
+.monitor-stock-insight--compact {
+  gap: 0.375rem;
+}
+
+.monitor-stock-insight-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.monitor-stock-insight-identity {
+  min-width: 0;
+}
+
+.monitor-stock-insight--compact .monitor-stock-insight-name {
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+
+.monitor-stock-insight-inline-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+
+.monitor-stat {
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-stat--muted {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.monitor-stat--up {
+  color: #e07070;
+}
+
+.monitor-stat--down {
+  color: #5cb87a;
+}
+
+.chart-empty--monitor {
+  min-height: 84px;
+  height: 84px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .monitor-stock-insight-head {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .monitor-stock-insight-name {
-  font-size: 1.0625rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .monitor-stock-insight-code {
-  margin-left: 0.5rem;
+  margin-left: 0.375rem;
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
@@ -2261,14 +2342,14 @@ a:hover {
 .monitor-stock-insight-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .monitor-stock-tag {
   display: inline-block;
-  padding: 0.1rem 0.45rem;
+  padding: 0.05rem 0.4rem;
   border-radius: var(--radius);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   background: var(--bg-elevated);
   color: var(--muted);
 }
@@ -2281,9 +2362,59 @@ a:hover {
 .monitor-stock-insight-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.625rem 1rem;
-  font-size: 0.8125rem;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.75rem;
   font-weight: 600;
+}
+
+.monitor-event-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monitor-event-points--compact {
+  margin-top: 0.125rem;
+}
+
+.monitor-event-point {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  background: rgba(201, 146, 74, 0.1);
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-summary--compact {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.monitor-summary--status {
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+.monitor-card-actions--compact {
+  margin-top: 0.05rem;
+  padding-top: 0.375rem;
+  gap: 0.625rem;
+  border-top: 1px solid var(--border);
+}
+
+.monitor-card-actions--compact .saved-link {
+  font-size: 0.8125rem;
 }
 
 .monitor-card {
