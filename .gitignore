@@ -25,6 +25,10 @@ dist/
 out/
 build/
 
+# Electron desktop packaging
+apps/desktop/.pack/
+apps/desktop/release/
+
 # Logs
 *.log
 npm-debug.log*

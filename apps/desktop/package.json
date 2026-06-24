@@ -1,0 +1,64 @@
+{
+  "name": "@investment-agent/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "投研助手桌面版（Electron）",
+  "main": "src/main.mjs",
+  "scripts": {
+    "bundle": "node scripts/prepare.mjs",
+    "dev": "node scripts/prepare.mjs && electron .",
+    "pack": "node scripts/prepare.mjs && electron-builder",
+    "pack:mac": "node scripts/prepare.mjs && electron-builder --mac",
+    "pack:win": "node scripts/prepare.mjs && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^35.1.5",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2"
+  },
+  "build": {
+    "appId": "com.investment-agent.desktop",
+    "productName": "投研助手",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".pack/web",
+        "to": "web"
+      },
+      {
+        "from": ".pack/agent-core",
+        "to": "agent-core"
+      },
+      {
+        "from": "templates",
+        "to": "templates"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

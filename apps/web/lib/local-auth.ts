@@ -25,7 +25,9 @@ export function createLocalSessionCookie() {
     options: {
       httpOnly: true,
       sameSite: 'lax' as const,
-      secure: process.env.NODE_ENV === 'production',
+      secure:
+        process.env.NODE_ENV === 'production' &&
+        process.env.INVESTMENT_AGENT_DESKTOP !== '1',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     },
@@ -39,7 +41,9 @@ export function createExpiredLocalSessionCookie() {
     options: {
       httpOnly: true,
       sameSite: 'lax' as const,
-      secure: process.env.NODE_ENV === 'production',
+      secure:
+        process.env.NODE_ENV === 'production' &&
+        process.env.INVESTMENT_AGENT_DESKTOP !== '1',
       path: '/',
       maxAge: 0,
     },

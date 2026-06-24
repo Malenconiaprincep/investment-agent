@@ -32,7 +32,10 @@ function resolvePackageRoot(): string {
 }
 
 const packageRoot = resolvePackageRoot();
-export const DATA_DIR = path.join(packageRoot, 'src/data');
+const dataDirFromEnv = process.env.INVESTMENT_AGENT_DATA_DIR?.trim();
+export const DATA_DIR = dataDirFromEnv
+  ? path.resolve(dataDirFromEnv)
+  : path.join(packageRoot, 'src/data');
 
 if (!existsSync(DATA_DIR)) {
   mkdirSync(DATA_DIR, { recursive: true });
