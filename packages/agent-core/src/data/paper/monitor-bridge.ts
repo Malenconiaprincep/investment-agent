@@ -1,4 +1,8 @@
 import type { MonitorAlert } from '../monitor/store.js';
+import {
+  evaluateAutoTrack,
+  getAutoTrackMode,
+} from '../monitor/auto-track-policy.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
 import { isLikelyLimitUp } from '../market/price-limit.js';
@@ -288,9 +292,25 @@ async function skipIfLimitUp(
 async function maybeAutoTrack(input: {
   alert: MonitorAlert;
   recommendation: MonitorPaperRecommendation;
+  alreadyInWatchlist: boolean;
+  mode: Awaited<ReturnType<typeof getAutoTrackMode>>;
 }): Promise<MonitorPaperAction | null> {
-  const { alert, recommendation } = input;
+  const { alert, recommendation, alreadyInWatchlist, mode } = input;
   if (!alert.symbol || !alert.name || recommendation.level === 'info') return null;
+
+  const decision = evaluateAutoTrack({
+    alert,
+    mode,
+    alreadyInWatchlist,
+  });
+  if (!decision.shouldTrack) {
+    if (recommendation.status !== 'bought') {
+      recommendation.status = 'skipped';
+      recommendation.skipReason = decision.reason;
+      recommendation.reason = decision.reason;
+    }
+    return null;
+  }
 
   try {
     const quote = await getDailyQuote(alert.symbol, 2).catch(() => null);
@@ -691,22 +711,34 @@ export async function runMonitorPaperBridge(input: {
 }): Promise<MonitorPaperBridgeResult> {
   const recommendations = buildMonitorRecommendations(input.alerts);
   const paperActions: MonitorPaperAction[] = [];
+  const [watchlist, autoTrackMode] = await Promise.all([
+    listWatchlistItems(),
+    getAutoTrackMode(),
+  ]);
+  const watchlistSymbols = new Set(watchlist.map((item) => item.symbol));
 
   for (let i = 0; i < input.alerts.length; i++) {
-    const skippedByLimitUp = await skipIfLimitUp(
-      input.alerts[i],
-      recommendations[i],
-    );
+    const alert = input.alerts[i];
+    const skippedByLimitUp = await skipIfLimitUp(alert, recommendations[i]);
     if (skippedByLimitUp) continue;
 
     const trackAction = await maybeAutoTrack({
-      alert: input.alerts[i],
+      alert,
       recommendation: recommendations[i],
+      alreadyInWatchlist: alert.symbol
+        ? watchlistSymbols.has(alert.symbol)
+        : false,
+      mode: autoTrackMode,
     });
-    if (trackAction) paperActions.push(trackAction);
+    if (trackAction) {
+      paperActions.push(trackAction);
+      if (trackAction.status === 'tracked' && alert.symbol) {
+        watchlistSymbols.add(alert.symbol);
+      }
+    }
 
     const buyAction = await maybeAutoBuy({
-      alert: input.alerts[i],
+      alert,
       recommendation: recommendations[i],
       tradeDate: input.tradeDate,
     });

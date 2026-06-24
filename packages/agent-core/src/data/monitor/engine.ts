@@ -758,11 +758,14 @@ export async function getMonitorStatus() {
   const { getLatestMonitorPollRun } = await import('./store.js');
   const { runMonitorPaperBridge, listRecentMonitorPaperActions, mergeMonitorPaperActionsForStatus } =
     await import('../paper/monitor-bridge.js');
+  const { getAutoTrackSettings } = await import('./auto-track-policy.js');
+  const { listWatchlistItems } = await import('../watchlist/store.js');
 
-  const [lastRun, todayAlerts, recentPaperActions] = await Promise.all([
+  const [lastRun, todayAlerts, recentPaperActions, watchlist] = await Promise.all([
     getLatestMonitorPollRun(),
     listMonitorAlerts({ tradeDate, limit: 50 }),
     listRecentMonitorPaperActions(20),
+    listWatchlistItems(),
   ]);
   const bridgeResult = await runMonitorPaperBridge({
     alerts: todayAlerts,
@@ -774,6 +777,7 @@ export async function getMonitorStatus() {
     recentPaperActions,
     20,
   );
+  const autoTrack = await getAutoTrackSettings(watchlist.length);
 
   return {
     now: now.toISOString(),
@@ -784,6 +788,7 @@ export async function getMonitorStatus() {
     todayAlerts,
     recommendations: bridgeResult.recommendations,
     paperActions,
+    autoTrack,
     unacknowledgedCount: todayAlerts.filter((a) => !a.acknowledged).length,
   };
 }

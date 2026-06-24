@@ -62,6 +62,8 @@ export type MonitorRuntimeState = {
   lastRunId?: string;
   summary?: string;
   error?: string;
+  mode?: string;
+  updatedAt?: string;
 };
 
 let client: Client | null = null;

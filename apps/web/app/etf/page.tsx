@@ -10,6 +10,20 @@ type EtfRuleCheck = {
   message: string;
 };
 
+type EtfOperationPlan = {
+  action: 'buy_zone' | 'wait_pullback' | 'watch_only' | 'avoid';
+  actionLabel: string;
+  buyPrice: number;
+  buyZoneLow: number;
+  buyZoneHigh: number;
+  stopPrice: number;
+  takeProfitPrice: number;
+  riskPct: number;
+  rewardPct: number;
+  positionHint: string;
+  note: string;
+};
+
 type EtfCandidate = {
   symbol: string;
   exchangeCode: string;
@@ -27,6 +41,7 @@ type EtfCandidate = {
   ruleChecks: EtfRuleCheck[];
   failCount: number;
   status: 'passed' | 'near_pass' | 'failed';
+  operationPlan?: EtfOperationPlan;
 };
 
 type EtfRun = {
@@ -59,6 +74,11 @@ function fmtTurnover(value: number) {
   if (value >= 1e8) return `${(value / 1e8).toFixed(2)} 亿`;
   if (value >= 1e4) return `${(value / 1e4).toFixed(0)} 万`;
   return value.toFixed(0);
+}
+
+function fmtPrice(value: number | undefined) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(value >= 10 ? 2 : 3);
 }
 
 function statusLabel(status: EtfCandidate['status']) {
@@ -219,7 +239,9 @@ export default function EtfPage() {
                     <th>涨跌</th>
                     <th>量比</th>
                     <th>RSI</th>
+                    <th>操作位</th>
                     <th>距止损</th>
+                    <th>止盈</th>
                     <th>成交额</th>
                     <th>失败项</th>
                   </tr>
@@ -239,7 +261,17 @@ export default function EtfPage() {
                       </td>
                       <td>{item.volumeRatio.toFixed(2)}</td>
                       <td>{item.rsi.toFixed(1)}</td>
+                      <td>
+                        {item.operationPlan
+                          ? `${fmtPrice(item.operationPlan.buyZoneLow)}-${fmtPrice(item.operationPlan.buyZoneHigh)}`
+                          : '—'}
+                        <br />
+                        <span className="muted">
+                          {item.operationPlan?.actionLabel ?? '待生成'}
+                        </span>
+                      </td>
                       <td>{fmtPct(item.distToStop)}</td>
+                      <td>{fmtPrice(item.operationPlan?.takeProfitPrice)}</td>
                       <td>{fmtTurnover(item.dailyTurnover)}</td>
                       <td>
                         {item.ruleChecks
@@ -261,6 +293,7 @@ export default function EtfPage() {
 
 function EtfCard({ item }: { item: EtfCandidate }) {
   const failedRules = item.ruleChecks.filter((rule) => !rule.passed);
+  const plan = item.operationPlan;
 
   return (
     <article className="candidate-card candidate-card--etf">
@@ -280,6 +313,13 @@ function EtfCard({ item }: { item: EtfCandidate }) {
         RSI {item.rsi.toFixed(1)}，MA5/20 {item.ma5.toFixed(3)}/
         {item.ma20.toFixed(3)}，距技术止损 {fmtPct(item.distToStop)}。
       </p>
+      {plan && (
+        <p className="candidate-card-thesis">
+          操作位：{plan.actionLabel}，买入区 {fmtPrice(plan.buyZoneLow)}-
+          {fmtPrice(plan.buyZoneHigh)}，止损 {fmtPrice(plan.stopPrice)}，止盈{' '}
+          {fmtPrice(plan.takeProfitPrice)}。{plan.positionHint}
+        </p>
+      )}
       {failedRules.length > 0 && (
         <p className="candidate-card-thesis">
           未通过：{failedRules.map((rule) => rule.message).join('；')}

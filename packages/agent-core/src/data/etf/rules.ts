@@ -9,6 +9,20 @@ export type EtfRuleCheck = {
   message: string;
 };
 
+export type EtfOperationPlan = {
+  action: 'buy_zone' | 'wait_pullback' | 'watch_only' | 'avoid';
+  actionLabel: string;
+  buyPrice: number;
+  buyZoneLow: number;
+  buyZoneHigh: number;
+  stopPrice: number;
+  takeProfitPrice: number;
+  riskPct: number;
+  rewardPct: number;
+  positionHint: string;
+  note: string;
+};
+
 export type EtfTailPickCandidate = {
   symbol: string;
   exchangeCode: string;
@@ -26,6 +40,7 @@ export type EtfTailPickCandidate = {
   ruleChecks: EtfRuleCheck[];
   failCount: number;
   status: EtfTailPickStatus;
+  operationPlan: EtfOperationPlan;
 };
 
 export type EtfMetricsInput = {
@@ -114,6 +129,80 @@ function makeCheck(
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function buildOperationPlan(input: {
+  price: number;
+  changePct: number;
+  ma5: number;
+  ma20: number;
+  stopPrice: number;
+  failCount: number;
+}): EtfOperationPlan {
+  const isPassed = input.failCount === 0;
+  const isNearPass = input.failCount <= 2;
+  const pullbackAnchor = Math.max(input.ma5, input.ma20);
+  const buyPrice = isPassed
+    ? input.price
+    : pullbackAnchor > 0
+      ? Math.min(input.price, pullbackAnchor)
+      : input.price;
+  const buyZoneLow = round(buyPrice * 0.995, 4);
+  const buyZoneHigh = round(buyPrice * 1.005, 4);
+  const riskPct =
+    input.stopPrice > 0 ? round(((buyPrice - input.stopPrice) / buyPrice) * 100) : 0;
+  const targetPct = clamp(Math.max(riskPct * 2, 6), 6, 15);
+  const takeProfitPrice = round(buyPrice * (1 + targetPct / 100), 4);
+
+  if (isPassed) {
+    return {
+      action: input.changePct > 1.5 ? 'wait_pullback' : 'buy_zone',
+      actionLabel: input.changePct > 1.5 ? '等回踩' : '可关注买入区',
+      buyPrice: round(buyPrice, 4),
+      buyZoneLow,
+      buyZoneHigh,
+      stopPrice: input.stopPrice,
+      takeProfitPrice,
+      riskPct: round(Math.max(riskPct, 0)),
+      rewardPct: round(targetPct),
+      positionHint: input.changePct > 1.5 ? '不追高，回落到买入区再看' : '轻仓试探，确认后再加',
+      note: '严格通过 8 条筛选；操作位仅生成待确认计划，不自动交易。',
+    };
+  }
+
+  if (isNearPass) {
+    return {
+      action: 'watch_only',
+      actionLabel: '观察，不当推荐',
+      buyPrice: round(buyPrice, 4),
+      buyZoneLow,
+      buyZoneHigh,
+      stopPrice: input.stopPrice,
+      takeProfitPrice,
+      riskPct: round(Math.max(riskPct, 0)),
+      rewardPct: round(targetPct),
+      positionHint: '仅近通过，缺口补齐后再考虑',
+      note: '近通过只作为观察池，不能替代严格推荐。',
+    };
+  }
+
+  return {
+    action: 'avoid',
+    actionLabel: '跳过',
+    buyPrice: round(buyPrice, 4),
+    buyZoneLow,
+    buyZoneHigh,
+    stopPrice: input.stopPrice,
+    takeProfitPrice,
+    riskPct: round(Math.max(riskPct, 0)),
+    rewardPct: round(targetPct),
+    positionHint: '规则缺口较多，等待重新入池',
+    note: '未通过严格筛选，不生成买入建议。',
+  };
+}
+
 export function buildEtfTailPickCandidate(
   input: EtfMetricsInput,
 ): EtfTailPickCandidate {
@@ -153,6 +242,14 @@ export function buildEtfTailPickCandidate(
     ),
   ];
   const failCount = ruleChecks.filter((rule) => !rule.passed).length;
+  const operationPlan = buildOperationPlan({
+    price: input.price,
+    changePct: input.changePct,
+    ma5,
+    ma20,
+    stopPrice,
+    failCount,
+  });
 
   return {
     symbol: input.symbol,
@@ -171,5 +268,6 @@ export function buildEtfTailPickCandidate(
     ruleChecks,
     failCount,
     status: failCount === 0 ? 'passed' : failCount <= 2 ? 'near_pass' : 'failed',
+    operationPlan,
   };
 }

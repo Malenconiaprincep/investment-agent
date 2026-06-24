@@ -6,6 +6,12 @@ import {
   getMonitorStatus,
   runMonitorPollManaged,
 } from '../data/monitor/engine.js';
+import {
+  getAutoTrackSettings,
+  setAutoTrackMode,
+  type AutoTrackMode,
+} from '../data/monitor/auto-track-policy.js';
+import { listWatchlistItems } from '../data/watchlist/store.js';
 
 export async function dispatchMonitor(args: string[]): Promise<string> {
   const command = args[0];
@@ -17,6 +23,21 @@ export async function dispatchMonitor(args: string[]): Promise<string> {
 
   if (command === 'status') {
     return JSON.stringify(await getMonitorStatus());
+  }
+
+  if (command === 'settings') {
+    const watchlist = await listWatchlistItems();
+    return JSON.stringify(await getAutoTrackSettings(watchlist.length));
+  }
+
+  if (command === 'set-mode' && args[1]) {
+    const mode = args[1] as AutoTrackMode;
+    if (mode !== 'balanced' && mode !== 'aggressive' && mode !== 'notify_only') {
+      throw new Error('模式须为 balanced | aggressive | notify_only');
+    }
+    await setAutoTrackMode(mode);
+    const watchlist = await listWatchlistItems();
+    return JSON.stringify(await getAutoTrackSettings(watchlist.length));
   }
 
   if (command === 'alerts') {
@@ -31,5 +52,7 @@ export async function dispatchMonitor(args: string[]): Promise<string> {
     return JSON.stringify({ ok: true });
   }
 
-  throw new Error('Usage: poll [--force]|status|alerts [tradeDate] [limit]|ack <id>');
+  throw new Error(
+    'Usage: poll [--force]|status|settings|set-mode <balanced|aggressive|notify_only>|alerts [tradeDate] [limit]|ack <id>',
+  );
 }

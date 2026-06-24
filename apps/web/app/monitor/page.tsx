@@ -43,6 +43,12 @@ type MonitorStatus = {
   todayAlerts: MonitorAlert[];
   recommendations: MonitorPaperRecommendation[];
   paperActions: MonitorPaperAction[];
+  autoTrack?: {
+    mode: string;
+    modeLabel: string;
+    watchlistCount: number;
+    watchlistLimit: number;
+  };
 };
 
 type MonitorPaperRecommendation = {
@@ -355,6 +361,12 @@ export default function MonitorPage() {
                 {status.unacknowledgedCount} 条未读提醒
               </span>
             )}
+            {status?.autoTrack && (
+              <Link href="/monitor/settings" className="monitor-meta">
+                自动加池：{status.autoTrack.modeLabel}（
+                {status.autoTrack.watchlistCount}/{status.autoTrack.watchlistLimit}）
+              </Link>
+            )}
           </div>
 
           <nav className="page-toolbar">
@@ -369,6 +381,9 @@ export default function MonitorPage() {
             <OpenWatchlistPanelButton className="button button-secondary">
               跟踪池
             </OpenWatchlistPanelButton>
+            <Link href="/monitor/settings" className="button button-secondary">
+              雷达设置
+            </Link>
             <Link href="/screen" className="button button-secondary">
               智能选股
             </Link>
