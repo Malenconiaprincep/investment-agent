@@ -113,6 +113,15 @@ export type BacktestRunConfig = {
   rebalanceDays?: number;
   topN?: number;
   trendMaDays?: number;
+  commissionRate?: number;
+  slippageRate?: number;
+  volTargetPct?: number;
+  minVolExposure?: number;
+  maxVolExposure?: number;
+  stopLossPct?: number;
+  stopCooldownDays?: number;
+  highVolRebalanceDays?: number;
+  highVolRebalanceTriggerPct?: number;
 };
 
 export type BacktestRunResult = {

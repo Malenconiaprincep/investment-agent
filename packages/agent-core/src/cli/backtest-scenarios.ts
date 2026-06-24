@@ -109,7 +109,7 @@ const scenarios: Scenario[] = [
 
 const variants: Variant[] = [
   {
-    name: '最终策略 Top3/20日动量/10日调仓/MA20+牛市MA10',
+    name: '最终策略 Top3/20日动量/10日调仓/风控增强v2',
     topN: 3,
     momentumDays: 20,
     rebalanceDays: 10,

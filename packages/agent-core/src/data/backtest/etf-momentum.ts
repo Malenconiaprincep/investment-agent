@@ -62,6 +62,31 @@ const DEFAULT_TREND_MA_DAYS = 20;
 const BENCHMARK_SYMBOL = '510300';
 const MARKET_REGIME_MA_DAYS = 20;
 const BULL_RELAXED_TREND_MA_DAYS = 10;
+const POSITION_STOP_LOSS_PCT = -12;
+const COMMISSION_RATE = 0.0003;
+const SLIPPAGE_RATE = 0.0005;
+const VOL_LOOKBACK_DAYS = 20;
+const TARGET_ANNUAL_VOL_PCT = 15;
+const MIN_VOL_EXPOSURE = 0.7;
+const MAX_VOL_EXPOSURE = 1.0;
+const STOP_COOLDOWN_DAYS = 10;
+const HIGH_VOL_REBALANCE_DAYS = 12;
+const HIGH_VOL_REBALANCE_TRIGGER_PCT = 30;
+
+type SimPosition = {
+  symbol: string;
+  name: string;
+  history: EtfHistory;
+  entryDate: string;
+  entryIndex: number;
+  entryPrice: number;
+  shares: number;
+  grossBasis: number;
+  isBenchmarkFill: boolean;
+  pick?: MomentumPick;
+  effectiveTrendMaDays: number;
+  plannedExitIndex: number;
+};
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
@@ -160,97 +185,465 @@ function resolveEffectiveTrendMaDays(input: {
   return input.trendMaDays;
 }
 
-function buildBenchmarkSlotTrade(input: {
+function stdDev(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const mean = avg(values)!;
+  const variance =
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance);
+}
+
+function computeAnnualizedVolPct(
+  history: EtfHistory | undefined,
+  endIndex: number,
+  lookback = VOL_LOOKBACK_DAYS,
+): number | null {
+  if (!history || endIndex < lookback) return null;
+
+  const returns: number[] = [];
+  for (let index = endIndex - lookback + 1; index <= endIndex; index += 1) {
+    const prev = history.bars[index - 1]?.close;
+    const current = history.bars[index]?.close;
+    if (!prev || !current || prev <= 0) continue;
+    returns.push((current - prev) / prev);
+  }
+
+  const dailyVol = stdDev(returns);
+  if (dailyVol == null) return null;
+  return dailyVol * Math.sqrt(252) * 100;
+}
+
+function resolveVolTargetExposure(
+  annualizedVolPct: number | null,
+  targetPct = TARGET_ANNUAL_VOL_PCT,
+  minExposure = MIN_VOL_EXPOSURE,
+  maxExposure = MAX_VOL_EXPOSURE,
+): number {
+  if (annualizedVolPct == null || annualizedVolPct <= targetPct) return maxExposure;
+  const scale = targetPct / annualizedVolPct;
+  return Math.max(minExposure, Math.min(maxExposure, scale));
+}
+
+function resolveRebalanceDays(input: {
+  annualizedVolPct: number | null;
+  benchmarkHistory: EtfHistory | undefined;
+  tradeDate: string;
+  baseDays: number;
+  highVolDays?: number;
+  triggerPct?: number;
+}): number {
+  const highVolDays = input.highVolDays ?? HIGH_VOL_REBALANCE_DAYS;
+  const triggerPct = input.triggerPct ?? HIGH_VOL_REBALANCE_TRIGGER_PCT;
+  const benchmark = input.benchmarkHistory?.byDate.get(input.tradeDate);
+  if (!benchmark || benchmark.index < MARKET_REGIME_MA_DAYS) {
+    return input.baseDays;
+  }
+
+  const regimeSlice = input.benchmarkHistory!.bars
+    .slice(benchmark.index - MARKET_REGIME_MA_DAYS + 1, benchmark.index + 1)
+    .map((bar) => bar.close);
+  const regimeMa = avg(regimeSlice);
+  const bearRegime = regimeMa != null && benchmark.close < regimeMa;
+  if (
+    bearRegime
+    && input.annualizedVolPct != null
+    && input.annualizedVolPct >= triggerPct
+  ) {
+    return highVolDays;
+  }
+
+  return input.baseDays;
+}
+
+function buildStopCooldownExclusions(
+  cooldownUntil: Map<string, number>,
+  dateIndex: number,
+): Set<string> {
+  const excluded = new Set<string>();
+  for (const [symbol, untilIndex] of cooldownUntil) {
+    if (dateIndex < untilIndex) excluded.add(symbol);
+  }
+  return excluded;
+}
+
+function buyShares(input: {
+  cash: number;
+  price: number;
+  commissionRate: number;
+  slippageRate: number;
+}): { shares: number; spent: number } | null {
+  if (input.cash <= 0 || input.price <= 0) return null;
+  const adjustedPrice = input.price * (1 + input.slippageRate);
+  const shares = input.cash / (adjustedPrice * (1 + input.commissionRate));
+  if (!Number.isFinite(shares) || shares <= 0) return null;
+  return { shares, spent: input.cash };
+}
+
+function sellProceeds(input: {
+  shares: number;
+  price: number;
+  commissionRate: number;
+  slippageRate: number;
+}): number {
+  if (input.shares <= 0 || input.price <= 0) return 0;
+  return (
+    input.shares
+    * input.price
+    * (1 - input.slippageRate)
+    * (1 - input.commissionRate)
+  );
+}
+
+function markPositionValue(position: SimPosition, tradeDate: string): number {
+  const bar = position.history.byDate.get(tradeDate);
+  if (!bar || position.entryPrice <= 0) return position.grossBasis;
+  return position.shares * bar.close;
+}
+
+function resolveTargetSlots(input: {
+  histories: EtfHistory[];
+  benchmarkHistory: EtfHistory | undefined;
+  tradeDate: string;
+  topN: number;
+  momentumDays: number;
+  trendMaDays: number;
+  excludedSymbols?: Set<string>;
+}): Array<{
   history: EtfHistory;
-  entryDate: string;
+  pick?: MomentumPick;
+  isBenchmarkFill: boolean;
+  effectiveTrendMaDays: number;
+}> {
+  const effectiveTrendMaDays = resolveEffectiveTrendMaDays({
+    benchmarkHistory: input.benchmarkHistory,
+    tradeDate: input.tradeDate,
+    trendMaDays: input.trendMaDays,
+  });
+  const excludedSymbols = input.excludedSymbols ?? new Set<string>();
+  const picks = input.histories
+    .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
+    .filter((history) => !excludedSymbols.has(history.symbol))
+    .map((history) =>
+      scoreMomentumPick({
+        history,
+        tradeDate: input.tradeDate,
+        momentumDays: input.momentumDays,
+        trendMaDays: effectiveTrendMaDays,
+      }),
+    )
+    .filter((pick): pick is MomentumPick => pick != null)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, input.topN);
+
+  const slots: Array<{
+    history: EtfHistory;
+    pick?: MomentumPick;
+    isBenchmarkFill: boolean;
+    effectiveTrendMaDays: number;
+  }> = [];
+
+  for (let slot = 0; slot < input.topN; slot += 1) {
+    const pick = picks[slot];
+    if (pick) {
+      slots.push({
+        history: pick.history,
+        pick,
+        isBenchmarkFill: false,
+        effectiveTrendMaDays,
+      });
+      continue;
+    }
+    if (input.benchmarkHistory) {
+      slots.push({
+        history: input.benchmarkHistory,
+        isBenchmarkFill: true,
+        effectiveTrendMaDays,
+      });
+    }
+  }
+
+  return slots;
+}
+
+function closeSimPosition(input: {
+  position: SimPosition;
   exitDate: string;
+  exitPrice: number;
+  exitReason: BacktestTrade['exitReason'];
   topN: number;
   momentumDays: number;
   rebalanceDays: number;
-  trendMaDays: number;
-  slotIndex: number;
-}): BacktestTrade | null {
-  const entry = input.history.byDate.get(input.entryDate);
-  const exit = input.history.byDate.get(input.exitDate);
-  if (!entry || !exit) return null;
+  commissionRate: number;
+  slippageRate: number;
+}): BacktestTrade {
+  const proceeds = sellProceeds({
+    shares: input.position.shares,
+    price: input.exitPrice,
+    commissionRate: input.commissionRate,
+    slippageRate: input.slippageRate,
+  });
+  const returnPct =
+    input.position.grossBasis > 0
+      ? round(((proceeds - input.position.grossBasis) / input.position.grossBasis) * 100)
+      : null;
+  const exitIndex = input.position.history.byDate.get(input.exitDate)?.index ?? 0;
+
+  const signal: BacktestSignal = input.position.pick
+    ? {
+        symbol: input.position.symbol,
+        name: input.position.name,
+        assetType: 'etf',
+        strategy: 'etf-momentum-rotation',
+        tradeDate: input.position.entryDate,
+        entryPrice: input.position.entryPrice,
+        score: input.position.pick.score,
+        metadata: {
+          momentumPct: input.position.pick.momentumPct,
+          trendMa: input.position.pick.trendMa,
+          topN: input.topN,
+          momentumDays: input.momentumDays,
+          rebalanceDays: input.rebalanceDays,
+          trendMaDays: input.position.effectiveTrendMaDays,
+          stopLossPct: POSITION_STOP_LOSS_PCT,
+          benchmarkFallback: false,
+        },
+      }
+    : {
+        symbol: input.position.symbol,
+        name: input.position.name,
+        assetType: 'etf',
+        strategy: 'etf-momentum-rotation',
+        tradeDate: input.position.entryDate,
+        entryPrice: input.position.entryPrice,
+        score: 0,
+        metadata: {
+          benchmarkFallback: true,
+          topN: input.topN,
+          momentumDays: input.momentumDays,
+          rebalanceDays: input.rebalanceDays,
+          trendMaDays: input.position.effectiveTrendMaDays,
+          stopLossPct: POSITION_STOP_LOSS_PCT,
+        },
+      };
 
   return {
-    symbol: input.history.symbol,
-    name: input.history.name,
+    symbol: input.position.symbol,
+    name: input.position.name,
     assetType: 'etf',
     strategy: 'etf-momentum-rotation',
-    entryDate: input.entryDate,
-    entryPrice: entry.close,
+    entryDate: input.position.entryDate,
+    entryPrice: input.position.entryPrice,
     exitDate: input.exitDate,
-    exitPrice: exit.close,
-    holdDays: Math.max(0, exit.index - entry.index),
-    returnPct: calcReturnPct(entry.close, exit.close),
-    exitReason: 'benchmark_fill',
-    signal: {
-      symbol: input.history.symbol,
-      name: input.history.name,
-      assetType: 'etf',
-      strategy: 'etf-momentum-rotation',
-      tradeDate: input.entryDate,
-      entryPrice: entry.close,
-      score: 0,
-      metadata: {
-        benchmarkFallback: true,
-        slotIndex: input.slotIndex,
-        topN: input.topN,
-        momentumDays: input.momentumDays,
-        rebalanceDays: input.rebalanceDays,
-        trendMaDays: input.trendMaDays,
-      },
-    },
+    exitPrice: input.exitPrice,
+    holdDays: Math.max(0, exitIndex - input.position.entryIndex),
+    returnPct,
+    exitReason:
+      input.exitReason === 'fixed_hold' && input.position.isBenchmarkFill
+        ? 'benchmark_fill'
+        : input.exitReason,
+    signal,
   };
 }
 
-function buildTrade(input: {
-  pick: MomentumPick;
-  entryDate: string;
-  exitDate: string;
+function simulateDailyPortfolio(input: {
+  allDates: string[];
+  histories: EtfHistory[];
+  benchmarkHistory: EtfHistory | undefined;
   topN: number;
   momentumDays: number;
   rebalanceDays: number;
   trendMaDays: number;
-}): BacktestTrade | null {
-  const entry = input.pick.history.byDate.get(input.entryDate);
-  const exit = input.pick.history.byDate.get(input.exitDate);
-  if (!entry || !exit) return null;
+  commissionRate: number;
+  slippageRate: number;
+  volTargetPct: number;
+  minVolExposure: number;
+  maxVolExposure: number;
+  stopCooldownDays: number;
+  highVolRebalanceDays: number;
+}): {
+  trades: BacktestTrade[];
+  equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
+} {
+  const trades: BacktestTrade[] = [];
+  const equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }> = [];
+  let cash = 1;
+  let positions: SimPosition[] = [];
+  let closedTrades = 0;
+  let daysSinceRebalance = Number.POSITIVE_INFINITY;
+  const cooldownUntil = new Map<string, number>();
 
-  const signal: BacktestSignal = {
-    symbol: input.pick.history.symbol,
-    name: input.pick.history.name,
-    assetType: 'etf',
-    strategy: 'etf-momentum-rotation',
-    tradeDate: input.entryDate,
-    entryPrice: entry.close,
-    score: input.pick.score,
-    metadata: {
-      momentumPct: input.pick.momentumPct,
-      trendMa: input.pick.trendMa,
-      topN: input.topN,
-      momentumDays: input.momentumDays,
-      rebalanceDays: input.rebalanceDays,
-      trendMaDays: input.trendMaDays,
-    },
+  const closeAllPositions = (tradeDate: string, exitReason: BacktestTrade['exitReason']) => {
+    for (const position of positions) {
+      const bar = position.history.byDate.get(tradeDate);
+      if (!bar) continue;
+      trades.push(
+        closeSimPosition({
+          position,
+          exitDate: tradeDate,
+          exitPrice: bar.close,
+          exitReason,
+          topN: input.topN,
+          momentumDays: input.momentumDays,
+          rebalanceDays: input.rebalanceDays,
+          commissionRate: input.commissionRate,
+          slippageRate: input.slippageRate,
+        }),
+      );
+      cash += sellProceeds({
+        shares: position.shares,
+        price: bar.close,
+        commissionRate: input.commissionRate,
+        slippageRate: input.slippageRate,
+      });
+      closedTrades += 1;
+    }
+    positions = [];
   };
 
-  return {
-    symbol: input.pick.history.symbol,
-    name: input.pick.history.name,
-    assetType: 'etf',
-    strategy: 'etf-momentum-rotation',
-    entryDate: input.entryDate,
-    entryPrice: entry.close,
-    exitDate: input.exitDate,
-    exitPrice: exit.close,
-    holdDays: Math.max(0, exit.index - entry.index),
-    returnPct: calcReturnPct(entry.close, exit.close),
-    exitReason: 'fixed_hold',
-    signal,
+  const markPortfolioEquity = (tradeDate: string): number => {
+    let invested = 0;
+    for (const position of positions) {
+      invested += markPositionValue(position, tradeDate);
+    }
+    return cash + invested;
   };
+
+  for (let dateIndex = 0; dateIndex < input.allDates.length; dateIndex += 1) {
+    const tradeDate = input.allDates[dateIndex];
+    daysSinceRebalance += 1;
+
+    const benchmarkBarForSchedule = input.benchmarkHistory?.byDate.get(tradeDate);
+    const scheduleVol = benchmarkBarForSchedule
+      ? computeAnnualizedVolPct(input.benchmarkHistory, benchmarkBarForSchedule.index)
+      : null;
+    const requiredRebalanceDays = resolveRebalanceDays({
+      annualizedVolPct: scheduleVol,
+      benchmarkHistory: input.benchmarkHistory,
+      tradeDate,
+      baseDays: input.rebalanceDays,
+      highVolDays: input.highVolRebalanceDays,
+    });
+    const isRebalanceDay = daysSinceRebalance >= requiredRebalanceDays;
+
+    const remainingPositions: SimPosition[] = [];
+    for (const position of positions) {
+      const bar = position.history.byDate.get(tradeDate);
+      if (!bar) {
+        remainingPositions.push(position);
+        continue;
+      }
+
+      const returnPct = calcReturnPct(position.entryPrice, bar.close);
+      const hitStop =
+        returnPct != null
+        && returnPct <= POSITION_STOP_LOSS_PCT
+        && bar.index > position.entryIndex;
+
+      if (hitStop) {
+        trades.push(
+          closeSimPosition({
+            position,
+            exitDate: tradeDate,
+            exitPrice: bar.close,
+            exitReason: 'stop_loss',
+            topN: input.topN,
+            momentumDays: input.momentumDays,
+            rebalanceDays: input.rebalanceDays,
+            commissionRate: input.commissionRate,
+            slippageRate: input.slippageRate,
+          }),
+        );
+        cash += sellProceeds({
+          shares: position.shares,
+          price: bar.close,
+          commissionRate: input.commissionRate,
+          slippageRate: input.slippageRate,
+        });
+        if (input.stopCooldownDays > 0) {
+          cooldownUntil.set(
+            position.symbol,
+            dateIndex + input.stopCooldownDays,
+          );
+        }
+        closedTrades += 1;
+        continue;
+      }
+
+      remainingPositions.push(position);
+    }
+    positions = remainingPositions;
+
+    if (isRebalanceDay) {
+      closeAllPositions(tradeDate, 'fixed_hold');
+      daysSinceRebalance = 0;
+
+      const benchmarkBar = benchmarkBarForSchedule;
+      const annualizedVol = scheduleVol;
+      const exposureScale = resolveVolTargetExposure(
+        annualizedVol,
+        input.volTargetPct,
+        input.minVolExposure,
+        input.maxVolExposure,
+      );
+
+      const totalEquity = cash;
+      const deployable = totalEquity * exposureScale;
+      cash = totalEquity - deployable;
+      const slotBudget = deployable / input.topN;
+      const excludedSymbols = buildStopCooldownExclusions(cooldownUntil, dateIndex);
+      const targetSlots = resolveTargetSlots({
+        histories: input.histories,
+        benchmarkHistory: input.benchmarkHistory,
+        tradeDate,
+        topN: input.topN,
+        momentumDays: input.momentumDays,
+        trendMaDays: input.trendMaDays,
+        excludedSymbols,
+      });
+      const plannedExitIndex = Math.min(
+        dateIndex + requiredRebalanceDays,
+        input.allDates.length - 1,
+      );
+
+      for (const slot of targetSlots) {
+        const entryBar = slot.history.byDate.get(tradeDate);
+        if (!entryBar || slotBudget <= 0) continue;
+
+        const bought = buyShares({
+          cash: slotBudget,
+          price: entryBar.close,
+          commissionRate: input.commissionRate,
+          slippageRate: input.slippageRate,
+        });
+        if (!bought) continue;
+
+        positions.push({
+          symbol: slot.history.symbol,
+          name: slot.history.name,
+          history: slot.history,
+          entryDate: tradeDate,
+          entryIndex: entryBar.index,
+          entryPrice: entryBar.close,
+          shares: bought.shares,
+          grossBasis: bought.spent,
+          isBenchmarkFill: slot.isBenchmarkFill,
+          pick: slot.pick,
+          effectiveTrendMaDays: slot.effectiveTrendMaDays,
+          plannedExitIndex,
+        });
+      }
+    }
+
+    const equity = markPortfolioEquity(tradeDate);
+    equityPoints.push({ tradeDate, equity, closedTrades });
+  }
+
+  const lastDate = input.allDates.at(-1);
+  if (lastDate && positions.length > 0) {
+    closeAllPositions(lastDate, 'end_of_data');
+  }
+
+  return { trades, equityPoints };
 }
 
 function buildMomentumEquityCurve(
@@ -422,75 +815,23 @@ export async function runEtfMomentumBacktest(
   const allDates = [...new Set(histories.flatMap((item) => item.bars.map((bar) => bar.tradeDate)))]
     .filter((date) => isTradeDateInRange(date, dateRange))
     .sort();
-  const trades: BacktestTrade[] = [];
-  const equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }> = [];
-  let equity = 1;
-  let closedTrades = 0;
 
-  for (let index = 0; index < allDates.length - 1; index += rebalanceDays) {
-    const entryDate = allDates[index];
-    const exitDate = allDates[Math.min(index + rebalanceDays, allDates.length - 1)];
-    const effectiveTrendMaDays = resolveEffectiveTrendMaDays({
-      benchmarkHistory,
-      tradeDate: entryDate,
-      trendMaDays,
-    });
-    const picks = histories
-      .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
-      .map((history) =>
-        scoreMomentumPick({
-          history,
-          tradeDate: entryDate,
-          momentumDays,
-          trendMaDays: effectiveTrendMaDays,
-        }),
-      )
-      .filter((pick): pick is MomentumPick => pick != null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topN);
-
-    const periodTrades: BacktestTrade[] = [];
-    for (let slot = 0; slot < topN; slot += 1) {
-      const pick = picks[slot];
-      if (pick) {
-        const trade = buildTrade({
-          pick,
-          entryDate,
-          exitDate,
-          topN,
-          momentumDays,
-          rebalanceDays,
-          trendMaDays: effectiveTrendMaDays,
-        });
-        if (trade) periodTrades.push(trade);
-        continue;
-      }
-
-      if (!benchmarkHistory) continue;
-      const benchTrade = buildBenchmarkSlotTrade({
-        history: benchmarkHistory,
-        entryDate,
-        exitDate,
-        topN,
-        momentumDays,
-        rebalanceDays,
-        trendMaDays: effectiveTrendMaDays,
-        slotIndex: slot,
-      });
-      if (benchTrade) periodTrades.push(benchTrade);
-    }
-
-    const periodReturn = avg(
-      periodTrades
-        .map((trade) => trade.returnPct)
-        .filter((value): value is number => value != null),
-    ) ?? 0;
-
-    trades.push(...periodTrades);
-    closedTrades += periodTrades.length;
-    equity *= 1 + periodReturn / 100;
-    equityPoints.push({ tradeDate: exitDate, equity, closedTrades });
-  }
+  const { trades, equityPoints } = simulateDailyPortfolio({
+    allDates,
+    histories,
+    benchmarkHistory,
+    topN,
+    momentumDays,
+    rebalanceDays,
+    trendMaDays,
+    commissionRate: COMMISSION_RATE,
+    slippageRate: SLIPPAGE_RATE,
+    volTargetPct: TARGET_ANNUAL_VOL_PCT,
+    minVolExposure: MIN_VOL_EXPOSURE,
+    maxVolExposure: MAX_VOL_EXPOSURE,
+    stopCooldownDays: STOP_COOLDOWN_DAYS,
+    highVolRebalanceDays: HIGH_VOL_REBALANCE_DAYS,
+  });
 
   const sortedTrades = trades.sort((a, b) => {
     if (a.entryDate !== b.entryDate) return a.entryDate.localeCompare(b.entryDate);
@@ -504,7 +845,7 @@ export async function runEtfMomentumBacktest(
     requestedDays: days,
     startDate: formatTradeDateKey(dateRange.startDate),
     endDate: formatTradeDateKey(dateRange.endDate),
-    holdDays: [rebalanceDays],
+    holdDays: [rebalanceDays, HIGH_VOL_REBALANCE_DAYS],
     symbols,
     trades: sortedTrades,
     metrics: summarizeTrades(sortedTrades),
@@ -548,13 +889,27 @@ export async function runEtfMomentumBacktest(
       noSymbolOverlap: true,
       newsFilter: 'off',
       rawSignalCount: sortedTrades.length,
+      commissionRate: COMMISSION_RATE,
+      slippageRate: SLIPPAGE_RATE,
+      volTargetPct: TARGET_ANNUAL_VOL_PCT,
+      minVolExposure: MIN_VOL_EXPOSURE,
+      maxVolExposure: MAX_VOL_EXPOSURE,
+      stopLossPct: POSITION_STOP_LOSS_PCT,
+      stopCooldownDays: STOP_COOLDOWN_DAYS,
+      highVolRebalanceDays: HIGH_VOL_REBALANCE_DAYS,
+      highVolRebalanceTriggerPct: HIGH_VOL_REBALANCE_TRIGGER_PCT,
     },
     notes: [
-      `ETF 动量轮动：每 ${rebalanceDays} 个交易日调仓，选择 ${momentumDays} 日涨幅最高且站上 MA${trendMaDays} 的前 ${topN} 只 ETF 等权持有。`,
+      `ETF 动量轮动：默认每 ${rebalanceDays} 个交易日调仓；当沪深300 ${VOL_LOOKBACK_DAYS} 日年化波动率不低于 ${HIGH_VOL_REBALANCE_TRIGGER_PCT}% 且大盘跌破 MA${MARKET_REGIME_MA_DAYS} 时，调仓周期延长至 ${HIGH_VOL_REBALANCE_DAYS} 日。`,
+      `选择 ${momentumDays} 日涨幅最高且站上 MA${trendMaDays} 的前 ${topN} 只 ETF 等权持有。`,
       `沪深300 站上 MA${MARKET_REGIME_MA_DAYS} 时，单只 ETF 趋势过滤放宽至 MA${BULL_RELAXED_TREND_MA_DAYS}，减少 V 型反弹踏空。`,
       `动量标的不足 ${topN} 只时，剩余仓位用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底，避免空仓错过大盘反弹。`,
+      `单个持仓从入场价下跌至 ${POSITION_STOP_LOSS_PCT}% 时按日线收盘止损；止损后 ${STOP_COOLDOWN_DAYS} 个交易日内不再买回同一 ETF，空位用基准兜底。`,
+      `组合权益按每个交易日持仓市值 + 现金滚动计算，不再仅用调仓点近似。`,
+      `交易成本：单边佣金 ${(COMMISSION_RATE * 100).toFixed(2)}%、滑点 ${(SLIPPAGE_RATE * 100).toFixed(2)}%；买卖均计入。`,
+      `波动率目标：以沪深300 ${VOL_LOOKBACK_DAYS} 日年化波动率为参考，目标 ${TARGET_ANNUAL_VOL_PCT}%；仅当波动率高于目标时降仓，范围 ${MIN_VOL_EXPOSURE * 100}% ~ ${MAX_VOL_EXPOSURE * 100}%。`,
       '该策略不使用新闻过滤，避免历史新闻覆盖不足和标题情绪噪声影响回测。',
-      '收益曲线按每期持仓槽位（动量 ETF + 基准兜底）的等权平均收益复利计算，基准为沪深300ETF同期买入持有收益。',
+      '收益曲线为日线组合净值，基准为沪深300ETF同期买入持有收益。',
       usedLocalCsv
         ? '历史回测优先使用本地 ETF 前复权 CSV（含真实成交额）；缺失时退回腾讯前复权日 K。'
         : '历史回测使用腾讯前复权日 K。',
