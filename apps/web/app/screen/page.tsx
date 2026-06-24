@@ -24,6 +24,7 @@ type Candidate = {
   name: string;
   thesis: string;
   dataSource: string;
+  assetType?: 'stock' | 'etf';
   factorScore?: {
     total: number;
     themeScore: number;
@@ -221,7 +222,7 @@ type CommitteeStreamEvent =
 const SCREEN_STEPS = [
   '扫描热点',
   '筛选板块',
-  '筛选候选股',
+  '筛选个股与ETF',
   '补充信息',
   '钻石信号检测',
   '因子打分',
@@ -394,7 +395,9 @@ function ScreenPageContent() {
   }
 
   async function handleCommittee() {
-    const pool = screenResult?.candidates ?? candidates;
+    const pool = (screenResult?.candidates ?? candidates).filter(
+      (c) => (c.assetType ?? 'stock') === 'stock',
+    );
     if (pool.length === 0) {
       setError('请先完成板块选股，或确保有候选股');
       return;
@@ -461,7 +464,9 @@ function ScreenPageContent() {
   }
 
   async function handleBatchResearch() {
-    const pool = screenResult?.candidates ?? candidates;
+    const pool = (screenResult?.candidates ?? candidates).filter(
+      (c) => (c.assetType ?? 'stock') === 'stock',
+    );
     const symbols = pool.slice(0, 5).map((c) => c.symbol);
     if (symbols.length === 0) {
       setError('暂无候选股可批量生成研报');
@@ -528,12 +533,81 @@ function ScreenPageContent() {
 
   const isScreenActive = loading && !screenResult;
   const isCommitteeActive = committeeLoading && !committeeResult;
+  const stockCandidates = candidates.filter((c) => (c.assetType ?? 'stock') === 'stock');
+  const etfCandidates = candidates.filter((c) => c.assetType === 'etf');
+
+  function renderCandidateCard(c: Candidate) {
+    const isEtf = c.assetType === 'etf';
+    const { price, change, summary } = formatCandidateThesis(c.thesis);
+    return (
+      <article
+        key={c.symbol}
+        className={`candidate-card${isEtf ? ' candidate-card--etf' : ''}`}
+      >
+        <div className="candidate-card-head">
+          <strong>{c.name}</strong>
+          {isEtf && <span className="asset-badge asset-badge--etf">板块 ETF</span>}
+          {c.factorScore && (
+            <span
+              className={`factor-outlook factor-outlook--${c.factorScore.outlook}`}
+            >
+              {c.factorScore.outlookLabel} · {c.factorScore.total}分
+            </span>
+          )}
+          {c.diamond?.strength === 'red' && (
+            <span className="diamond-badge diamond-badge--red">红钻</span>
+          )}
+          {c.diamond?.strength === 'blue' && (
+            <span className="diamond-badge diamond-badge--blue">蓝钻</span>
+          )}
+          <span className="candidate-card-code">{c.symbol}</span>
+        </div>
+        {(price || change || c.factorScore) && (
+          <div className="candidate-card-stats">
+            {c.factorScore && (
+              <span className="muted">
+                主线 {c.factorScore.themeScore}
+                {c.factorScore.matchedTheme
+                  ? ` · ${c.factorScore.matchedTheme}`
+                  : ''}
+                {c.factorScore.ret60dPct != null
+                  ? ` · 60日 ${c.factorScore.ret60dPct}%`
+                  : ''}
+              </span>
+            )}
+            {change && (
+              <span className={change.startsWith('-') ? 'return-down' : 'return-up'}>
+                {change}
+              </span>
+            )}
+            {price && <span className="muted">¥{price}</span>}
+          </div>
+        )}
+        <p className="candidate-card-thesis">{summary}</p>
+        <StockKlineChart symbol={c.symbol} height={200} />
+        <div className="candidate-card-actions">
+          {!isEtf && (
+            <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
+              生成研报
+            </Link>
+          )}
+          <AddToWatchlistButton
+            symbol={c.symbol}
+            name={c.name}
+            reason={c.thesis.slice(0, 120)}
+            sourceType="screening"
+            sourceId={screenResult?.sessionId}
+          />
+        </div>
+      </article>
+    );
+  }
 
   return (
     <main className="page page--screen">
       <PageHeader
         title="智能选股"
-        description={`主线趋势选股：从近 ${lookbackDays} 日热点中识别市场主线，筛选契合主线且具备 60/120 日趋势性收益的标的；收盘前还会自动生成明日板块预判与尾盘参考。`}
+        description={`主线趋势选股：从近 ${lookbackDays} 日热点中识别市场主线，筛选契合主线的个股与板块 ETF；收盘前还会自动生成明日板块预判与尾盘参考。`}
       />
 
       <div className="screen-stack">
@@ -741,9 +815,11 @@ function ScreenPageContent() {
                   )}
                   <StockKlineChart symbol={c.symbol} height={200} />
                   <div className="candidate-card-actions">
-                    <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
-                      生成研报
-                    </Link>
+                    {(c.assetType ?? 'stock') !== 'etf' && (
+                      <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
+                        生成研报
+                      </Link>
+                    )}
                     <AddToWatchlistButton
                       symbol={c.symbol}
                       name={c.name}
@@ -759,92 +835,51 @@ function ScreenPageContent() {
         )}
 
         {candidates.length > 0 ? (
-          <section className="candidates-section">
-            <div className="section-toolbar">
-              <h2 className="section-title">候选池 · {candidates.length} 只</h2>
-              {screenResult && !committeeResult && !committeeLoading && (
-                <div className="section-toolbar-actions">
-                  <button type="button" className="button" onClick={handleCommittee}>
-                    深度分析
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    disabled={batchLoading}
-                    onClick={handleBatchResearch}
-                  >
-                    {batchLoading
-                      ? '正在生成…'
-                      : `批量研报（${Math.min(candidates.length, 5)}）`}
-                  </button>
+          <>
+            {stockCandidates.length > 0 && (
+              <section className="candidates-section">
+                <div className="section-toolbar">
+                  <h2 className="section-title">个股候选 · {stockCandidates.length} 只</h2>
+                  {screenResult && !committeeResult && !committeeLoading && (
+                    <div className="section-toolbar-actions">
+                      <button type="button" className="button" onClick={handleCommittee}>
+                        深度分析
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        disabled={batchLoading}
+                        onClick={handleBatchResearch}
+                      >
+                        {batchLoading
+                          ? '正在生成…'
+                          : `批量研报（${Math.min(stockCandidates.length, 5)}）`}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <p className="muted section-toolbar-hint">
-              每张卡片含近 120 日 K 线与红/蓝钻历史标记（滚动进入视口后加载）。
-            </p>
+                <p className="muted section-toolbar-hint">
+                  每张卡片含近 120 日 K 线与红/蓝钻历史标记（滚动进入视口后加载）。
+                </p>
+                <div className="candidate-grid">
+                  {stockCandidates.map((c) => renderCandidateCard(c))}
+                </div>
+              </section>
+            )}
 
-            <div className="candidate-grid">
-              {candidates.map((c) => {
-                const { price, change, summary } = formatCandidateThesis(c.thesis);
-                return (
-                  <article key={c.symbol} className="candidate-card">
-                    <div className="candidate-card-head">
-                      <strong>{c.name}</strong>
-                      {c.factorScore && (
-                        <span
-                          className={`factor-outlook factor-outlook--${c.factorScore.outlook}`}
-                        >
-                          {c.factorScore.outlookLabel} · {c.factorScore.total}分
-                        </span>
-                      )}
-                      {c.diamond?.strength === 'red' && (
-                        <span className="diamond-badge diamond-badge--red">红钻</span>
-                      )}
-                      {c.diamond?.strength === 'blue' && (
-                        <span className="diamond-badge diamond-badge--blue">蓝钻</span>
-                      )}
-                      <span className="candidate-card-code">{c.symbol}</span>
-                    </div>
-                    {(price || change || c.factorScore) && (
-                      <div className="candidate-card-stats">
-                        {c.factorScore && (
-                          <span className="muted">
-                            主线 {c.factorScore.themeScore}
-                            {c.factorScore.matchedTheme
-                              ? ` · ${c.factorScore.matchedTheme}`
-                              : ''}
-                            {c.factorScore.ret60dPct != null
-                              ? ` · 60日 ${c.factorScore.ret60dPct}%`
-                              : ''}
-                          </span>
-                        )}
-                        {change && (
-                          <span className={change.startsWith('-') ? 'return-down' : 'return-up'}>
-                            {change}
-                          </span>
-                        )}
-                        {price && <span className="muted">¥{price}</span>}
-                      </div>
-                    )}
-                    <p className="candidate-card-thesis">{summary}</p>
-                    <StockKlineChart symbol={c.symbol} height={200} />
-                    <div className="candidate-card-actions">
-                      <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
-                        生成研报
-                      </Link>
-                      <AddToWatchlistButton
-                        symbol={c.symbol}
-                        name={c.name}
-                        reason={c.thesis.slice(0, 120)}
-                        sourceType="screening"
-                        sourceId={screenResult?.sessionId}
-                      />
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+            {etfCandidates.length > 0 && (
+              <section className="candidates-section">
+                <div className="section-toolbar">
+                  <h2 className="section-title">板块 ETF · {etfCandidates.length} 只</h2>
+                </div>
+                <p className="muted section-toolbar-hint">
+                  用 ETF 跟踪板块 Beta，适合不想押单票、又想跟上主线的场景。
+                </p>
+                <div className="candidate-grid">
+                  {etfCandidates.map((c) => renderCandidateCard(c))}
+                </div>
+              </section>
+            )}
 
             {batchResults.length > 0 && (
               <ul className="sector-list batch-results pane-card">
@@ -858,7 +893,7 @@ function ScreenPageContent() {
                     {item.reportId && (
                       <>
                         {' '}
-                        <Link href={`/history/${item.reportId}`} className="saved-link">
+                        <Link href={`/research?id=${item.reportId}`} className="saved-link">
                           查看研报
                         </Link>
                       </>
@@ -867,7 +902,7 @@ function ScreenPageContent() {
                 ))}
               </ul>
             )}
-          </section>
+          </>
         ) : screenResult && !loading ? (
           <section className="section pane-card">
             <h2 className="section-title">候选池为空</h2>
@@ -889,7 +924,7 @@ function ScreenPageContent() {
         ) : (
           !loading && (
             <div className="empty-state">
-              点击「开始智能选股」，候选股将以卡片形式展示在下方
+              点击「开始智能选股」，个股与板块 ETF 将以卡片形式展示在下方
             </div>
           )
         )}

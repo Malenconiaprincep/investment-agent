@@ -15,7 +15,12 @@ const NAV: NavItem[] = [
     href: '/research',
     label: '研究',
     isActive: (pathname) =>
-      pathname === '/research' || pathname.startsWith('/research/'),
+      pathname === '/research' ||
+      pathname.startsWith('/research/') ||
+      pathname === '/history' ||
+      pathname.startsWith('/history/') ||
+      pathname === '/reviews' ||
+      pathname.startsWith('/reviews/'),
   },
   {
     href: '/monitor',
@@ -28,20 +33,9 @@ const NAV: NavItem[] = [
   },
   {
     href: '/paper',
-    label: '验证',
+    label: '模拟盘',
     isActive: (pathname) =>
       pathname === '/paper' || pathname.startsWith('/paper/'),
-  },
-  {
-    href: '/history',
-    label: '档案',
-    isActive: (pathname) =>
-      pathname === '/history' ||
-      pathname.startsWith('/history/') ||
-      pathname === '/screen/history' ||
-      pathname.startsWith('/screen/history/') ||
-      pathname === '/reviews' ||
-      pathname.startsWith('/reviews/'),
   },
 ];
 

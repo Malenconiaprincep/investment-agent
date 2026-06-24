@@ -1,5 +1,6 @@
 import { getCached, setCached } from '../cache.js';
 import { safeFetch } from '../../../lib/safe-fetch.js';
+import { tencentPrefix } from '../asset-type.js';
 
 const TTL_MS = 60 * 60 * 1000;
 
@@ -13,11 +14,7 @@ type KlineResponse = {
 };
 
 function toTencentCode(symbol: string): string {
-  const code = symbol.trim();
-  if (code.startsWith('6')) return `sh${code}`;
-  if (code.startsWith('0') || code.startsWith('3')) return `sz${code}`;
-  if (code.startsWith('8') || code.startsWith('4')) return `bj${code}`;
-  throw new Error(`无法识别交易所: ${symbol}`);
+  return `${tencentPrefix(symbol)}${symbol.trim()}`;
 }
 
 export async function fetchDailyKlines(symbol: string, days: number) {

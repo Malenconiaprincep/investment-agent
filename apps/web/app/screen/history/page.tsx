@@ -82,8 +82,8 @@ export default function ScreeningHistoryPage() {
         <Link href="/screen" className="button">
           新建选股
         </Link>
-        <Link href="/history" className="button button-secondary">
-          我的研报
+        <Link href="/research" className="button button-secondary">
+          研报档案
         </Link>
         <button
           type="button"

@@ -614,6 +614,57 @@ export async function runMonitorPaperBridge(input: {
   return { recommendations, paperActions };
 }
 
+/** 页面展示用：去掉「加入自选」类动作，只保留买卖成交与失败。 */
+export function filterMonitorPaperActionsForDisplay(
+  actions: MonitorPaperAction[],
+): MonitorPaperAction[] {
+  const tradeOnly = actions.filter(
+    (item) =>
+      item.kind !== 'track' &&
+      item.status !== 'skipped' &&
+      (item.status === 'bought' ||
+        item.status === 'sold' ||
+        item.status === 'error'),
+  );
+  const byKey = new Map<string, MonitorPaperAction>();
+  for (const item of tradeOnly) {
+    const key = `${item.kind}:${item.symbol}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, item);
+      continue;
+    }
+    const rank = (status: MonitorPaperAction['status']) =>
+      status === 'bought' || status === 'sold' ? 0 : 1;
+    if (rank(item.status) < rank(existing.status)) {
+      byKey.set(key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
+export function mergeMonitorPaperActionsForStatus(
+  bridgeActions: MonitorPaperAction[],
+  recentActions: MonitorPaperAction[],
+  max = 20,
+): MonitorPaperAction[] {
+  const bridgeActionKeys = new Set(
+    bridgeActions.map((item) =>
+      [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
+    ),
+  );
+  const merged = [
+    ...bridgeActions,
+    ...recentActions.filter(
+      (item) =>
+        !bridgeActionKeys.has(
+          [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
+        ),
+    ),
+  ];
+  return filterMonitorPaperActionsForDisplay(merged).slice(0, max);
+}
+
 export async function listRecentMonitorPaperActions(
   limit = 20,
 ): Promise<MonitorPaperAction[]> {

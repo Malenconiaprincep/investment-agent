@@ -9,11 +9,26 @@ import {
 import { fetchNewsBrowser } from './free/news-browser.js';
 import { fetchDailyKlines } from './free/tencent.js';
 import { buildMeta } from './meta.js';
+import { isEtfSymbol } from './asset-type.js';
 import { toSymbol, toTsCode } from './symbols.js';
 
 export async function getStockBasic(symbol: string) {
   const tsCode = toTsCode(symbol);
   const code = toSymbol(tsCode);
+
+  if (isEtfSymbol(code)) {
+    const snapshot = await fetchStockSnapshot(code);
+    return {
+      tsCode,
+      symbol: snapshot.data.symbol,
+      name: snapshot.data.name,
+      industry: snapshot.data.industry ?? 'ETF',
+      area: null,
+      listDate: null,
+      market: null,
+      ...buildMeta('eastmoney', snapshot.cached),
+    };
+  }
 
   const [snapshot, profile] = await Promise.all([
     fetchStockSnapshot(code),

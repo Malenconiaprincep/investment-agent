@@ -21,7 +21,7 @@ export type { ScreenStreamEvent } from './screen-stream-types.js';
 const STEP_LABELS: Record<string, string> = {
   'discover-hot-market': '扫描热点',
   'fetch-sectors': '筛选板块',
-  'fetch-candidates': '筛选候选股',
+  'fetch-candidates': '筛选个股与ETF',
   'enrich-basics': '补充信息',
   'scan-diamonds': '钻石信号检测',
   'score-factors': '因子打分',

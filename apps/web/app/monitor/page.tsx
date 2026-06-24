@@ -165,6 +165,34 @@ function dedupeAlertsBySymbol(alerts: MonitorAlert[]): MonitorAlert[] {
   return [...bySymbol.values()];
 }
 
+function filterPaperActionsForDisplay(
+  actions: MonitorPaperAction[],
+): MonitorPaperAction[] {
+  const tradeOnly = actions.filter(
+    (item) =>
+      item.kind !== 'track' &&
+      item.status !== 'skipped' &&
+      (item.status === 'bought' ||
+        item.status === 'sold' ||
+        item.status === 'error'),
+  );
+  const byKey = new Map<string, MonitorPaperAction>();
+  for (const item of tradeOnly) {
+    const key = `${item.kind}:${item.symbol}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, item);
+      continue;
+    }
+    const rank = (status: MonitorPaperAction['status']) =>
+      status === 'bought' || status === 'sold' ? 0 : 1;
+    if (rank(item.status) < rank(existing.status)) {
+      byKey.set(key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
 function consolidateThemeAlerts(alerts: MonitorAlert[]): MonitorAlert[] {
   const byTheme = new Map<string, MonitorAlert>();
   for (const alert of alerts) {
@@ -273,12 +301,13 @@ export default function MonitorPage() {
     acc[alert.alertType] = (acc[alert.alertType] ?? 0) + 1;
     return acc;
   }, {});
-  const boughtActions = lastPaperActions.filter((item) => item.status === 'bought');
-  const soldActions = lastPaperActions.filter((item) => item.status === 'sold');
-  const skippedActions = lastPaperActions.filter(
-    (item) => item.status === 'skipped',
+  const displayPaperActions = useMemo(
+    () => filterPaperActionsForDisplay(lastPaperActions),
+    [lastPaperActions],
   );
-  const errorActions = lastPaperActions.filter((item) => item.status === 'error');
+  const boughtActions = displayPaperActions.filter((item) => item.status === 'bought');
+  const soldActions = displayPaperActions.filter((item) => item.status === 'sold');
+  const errorActions = displayPaperActions.filter((item) => item.status === 'error');
   const trackedCount = actionableRecommendations.filter(
     (item) => item.status === 'tracked',
   ).length;
@@ -394,9 +423,6 @@ export default function MonitorPage() {
               </div>
               <p className="monitor-diagnostics-reason">
                 {noBuyReason ? `未买入原因：${noBuyReason}` : '已触发自动买入。'}
-                {skippedActions.length > 0
-                  ? `；跳过 ${skippedActions.length} 条`
-                  : ''}
                 {errorActions.length > 0 ? `；失败 ${errorActions.length} 条` : ''}
               </p>
             </section>
@@ -423,12 +449,15 @@ export default function MonitorPage() {
           </section>
         )}
 
-        {lastPaperActions.length > 0 && (
+        {displayPaperActions.length > 0 && (
           <section className="monitor-section">
-            <h2 className="section-title">自动交易记录</h2>
+            <h2 className="section-title">模拟盘成交</h2>
+            <p className="muted monitor-section-hint">
+              仅展示自动买入/卖出记录；跟踪状态见上方「自动跟踪」卡片。
+            </p>
             <div className="monitor-stock-grid">
-              {lastPaperActions.map((item, index) => (
-                <PaperActionCard key={`${item.kind}-${item.symbol}-${index}`} item={item} />
+              {displayPaperActions.map((item) => (
+                <PaperActionCard key={`${item.kind}-${item.symbol}`} item={item} />
               ))}
             </div>
           </section>
@@ -592,16 +621,20 @@ function paperActionLabel(item: MonitorPaperAction) {
   return '失败';
 }
 
+function paperActionKindLabel(item: MonitorPaperAction) {
+  if (item.kind === 'sell') return '卖出';
+  if (item.kind === 'buy') return '买入';
+  return '跟踪';
+}
+
 function PaperActionCard({ item }: { item: MonitorPaperAction }) {
   return (
-    <article className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${item.status === 'error' ? 'urgent' : 'watch'}`}>
+    <article className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${item.status === 'error' ? 'urgent' : item.kind === 'sell' ? 'pre_move' : 'watch'}`}>
       <div className="monitor-stock-card-head">
-        <span className="monitor-type monitor-recommendation-type--auto_buy">
+        <span className={`monitor-type monitor-recommendation-type--${item.kind === 'sell' ? 'info' : 'auto_buy'}`}>
           {paperActionLabel(item)}
         </span>
-        <span className="history-card-time">
-          {item.kind === 'buy' ? '买入检查' : '卖出检查'}
-        </span>
+        <span className="history-card-time">{paperActionKindLabel(item)}</span>
       </div>
 
       <MonitorStockInsight

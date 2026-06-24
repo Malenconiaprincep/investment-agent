@@ -17,6 +17,7 @@ export type ScreeningCandidateWithDiamond = {
   name: string;
   thesis: string;
   dataSource: string;
+  assetType?: 'stock' | 'etf';
   industry?: string | null;
   diamond?: ScreeningCandidateDiamond | null;
 };

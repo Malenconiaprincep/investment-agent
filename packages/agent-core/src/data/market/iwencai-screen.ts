@@ -3,6 +3,7 @@ import {
   isIwencaiMcpConfigured,
 } from '../../mastra/mcp/iwencai.js';
 import { IWENCAI_DISCLAIMER } from './types.js';
+import { inferAssetType, isEtfSymbol, isStockSymbol } from './asset-type.js';
 
 export type SectorItem = {
   name: string;
@@ -15,10 +16,12 @@ export type CandidateItem = {
   name: string;
   thesis: string;
   dataSource: 'iwencai' | 'eastmoney';
+  assetType?: 'stock' | 'etf';
 };
 
 const FALLBACK_SECTOR_QUERY = '今日概念板块涨幅排名前10';
 const FALLBACK_STOCK_QUERY = '今日A股主力净流入前20，排除ST';
+const FALLBACK_ETF_QUERY = 'A股ETF，成交额排名前15，60日涨幅靠前';
 
 function walkValues(node: unknown, out: unknown[]): void {
   if (node == null) return;
@@ -34,9 +37,17 @@ function walkValues(node: unknown, out: unknown[]): void {
   }
 }
 
-export function extractSymbol(text: string): string | null {
-  const match = text.match(/\b([036]\d{5})\b/);
-  return match?.[1] ?? null;
+export function extractSymbol(
+  text: string,
+  kind: 'stock' | 'etf' | 'any' = 'any',
+): string | null {
+  const matches = text.match(/\b\d{6}\b/g) ?? [];
+  for (const code of matches) {
+    if (kind === 'stock' && isStockSymbol(code)) return code;
+    if (kind === 'etf' && isEtfSymbol(code)) return code;
+    if (kind === 'any' && (isStockSymbol(code) || isEtfSymbol(code))) return code;
+  }
+  return null;
 }
 
 export function pickName(obj: Record<string, unknown>): string | null {
@@ -139,6 +150,7 @@ export function parseSectorsFromIwencai(data: unknown, limit = 5): SectorItem[] 
 export function parseCandidatesFromIwencai(
   data: unknown,
   limit = 10,
+  kind: 'stock' | 'etf' | 'any' = 'any',
 ): CandidateItem[] {
   const rows = rowsFromQuery2Data(data);
   const candidates: CandidateItem[] = [];
@@ -146,7 +158,7 @@ export function parseCandidatesFromIwencai(
 
   for (const row of rows) {
     const rowText = JSON.stringify(row);
-    const symbol = extractSymbol(rowText);
+    const symbol = extractSymbol(rowText, kind);
     if (!symbol || seen.has(symbol)) continue;
     seen.add(symbol);
 
@@ -156,13 +168,14 @@ export function parseCandidatesFromIwencai(
         .filter(([k, v]) => !k.includes('code') && v != null)
         .slice(0, 4)
         .map(([k, v]) => `${k}: ${v}`)
-        .join('；') || '问财选股条件命中';
+        .join('；') || (kind === 'etf' ? '问财 ETF 筛选命中' : '问财选股条件命中');
 
     candidates.push({
       symbol,
       name,
       thesis,
       dataSource: 'iwencai',
+      assetType: inferAssetType(symbol),
     });
 
     if (candidates.length >= limit) break;
@@ -173,7 +186,7 @@ export function parseCandidatesFromIwencai(
     walkValues(data, flat);
     for (const item of flat) {
       if (typeof item !== 'string') continue;
-      const symbol = extractSymbol(item);
+      const symbol = extractSymbol(item, kind);
       if (!symbol || seen.has(symbol)) continue;
       seen.add(symbol);
       candidates.push({
@@ -181,6 +194,7 @@ export function parseCandidatesFromIwencai(
         name: symbol,
         thesis: item.slice(0, 120),
         dataSource: 'iwencai',
+        assetType: inferAssetType(symbol),
       });
       if (candidates.length >= limit) break;
     }
@@ -245,8 +259,96 @@ export async function fetchIwencaiCandidates(
 
   return {
     raw,
-    candidates: parseCandidatesFromIwencai(raw, limit),
+    candidates: parseCandidatesFromIwencai(raw, limit, 'stock'),
     disclaimer: IWENCAI_DISCLAIMER,
+  };
+}
+
+export async function fetchIwencaiEtfCandidates(query: string, limit = 6) {
+  if (!isIwencaiMcpConfigured()) {
+    throw new Error('问财未配置：请在 .env 设置 IWENCAI_API_KEY');
+  }
+
+  const raw = await callIwencaiTool('hithink_market_query', {
+    query,
+    limit: String(limit),
+  });
+
+  return {
+    raw,
+    candidates: parseCandidatesFromIwencai(raw, limit, 'etf'),
+    disclaimer: IWENCAI_DISCLAIMER,
+  };
+}
+
+/** 多路问财 ETF query 合并去重 */
+export async function fetchIwencaiEtfCandidatesMerged(
+  queries: string[],
+  limit = 6,
+  options?: { allowFallback?: boolean },
+): Promise<{
+  raw: unknown;
+  candidates: CandidateItem[];
+  usedFallback: boolean;
+  queriesUsed: string[];
+}> {
+  const uniqueQueries = [...new Set(queries.filter((q) => q.trim()))];
+  if (uniqueQueries.length === 0) {
+    uniqueQueries.push(FALLBACK_ETF_QUERY);
+  }
+
+  const perQueryLimit = Math.max(Math.ceil(limit / uniqueQueries.length) + 2, 4);
+  const merged: CandidateItem[] = [];
+  const seen = new Set<string>();
+  let lastRaw: unknown = null;
+  const queriesUsed: string[] = [];
+
+  for (const query of uniqueQueries) {
+    try {
+      const result = await fetchIwencaiEtfCandidates(query, perQueryLimit);
+      lastRaw = result.raw;
+      queriesUsed.push(query);
+      for (const item of result.candidates) {
+        if (seen.has(item.symbol)) continue;
+        seen.add(item.symbol);
+        merged.push({ ...item, assetType: 'etf' as const });
+        if (merged.length >= limit) break;
+      }
+      if (merged.length >= limit) break;
+    } catch {
+      // 单路失败继续
+    }
+  }
+
+  if (merged.length > 0) {
+    return {
+      raw: lastRaw,
+      candidates: merged.slice(0, limit),
+      usedFallback: false,
+      queriesUsed,
+    };
+  }
+
+  if (options?.allowFallback !== false) {
+    const fallback = await fetchIwencaiEtfCandidates(FALLBACK_ETF_QUERY, limit);
+    if (fallback.candidates.length > 0) {
+      return {
+        raw: fallback.raw,
+        candidates: fallback.candidates.map((item) => ({
+          ...item,
+          assetType: 'etf' as const,
+        })),
+        usedFallback: true,
+        queriesUsed: [FALLBACK_ETF_QUERY],
+      };
+    }
+  }
+
+  return {
+    raw: lastRaw,
+    candidates: [],
+    usedFallback: false,
+    queriesUsed,
   };
 }
 
@@ -279,9 +381,9 @@ export async function fetchIwencaiCandidatesMerged(
       lastRaw = result.raw;
       queriesUsed.push(query);
       for (const item of result.candidates) {
-        if (seen.has(item.symbol)) continue;
+        if (item.assetType === 'etf' || seen.has(item.symbol)) continue;
         seen.add(item.symbol);
-        merged.push(item);
+        merged.push({ ...item, assetType: 'stock' as const });
         if (merged.length >= limit) break;
       }
       if (merged.length >= limit) break;

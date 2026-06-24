@@ -1,4 +1,5 @@
 import { safeFetch } from '../../../lib/safe-fetch.js';
+import { eastmoneyMarketCode, eastmoneySecId } from '../asset-type.js';
 
 export const FREE_ALLOWED_HOSTS = [
   'push2.eastmoney.com',
@@ -38,17 +39,9 @@ export async function freeFetchJson<T>(
 }
 
 export function toSecId(symbol: string): string {
-  const code = symbol.trim();
-  if (code.startsWith('6')) return `1.${code}`;
-  if (code.startsWith('0') || code.startsWith('3')) return `0.${code}`;
-  if (code.startsWith('8') || code.startsWith('4')) return `0.${code}`;
-  throw new Error(`无法识别交易所: ${symbol}`);
+  return eastmoneySecId(symbol);
 }
 
 export function toMarketCode(symbol: string): string {
-  const code = symbol.trim();
-  if (code.startsWith('6')) return `SH${code}`;
-  if (code.startsWith('0') || code.startsWith('3')) return `SZ${code}`;
-  if (code.startsWith('8') || code.startsWith('4')) return `BJ${code}`;
-  throw new Error(`无法识别交易所: ${symbol}`);
+  return eastmoneyMarketCode(symbol);
 }

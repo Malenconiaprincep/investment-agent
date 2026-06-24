@@ -2,6 +2,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import {
   fetchIwencaiCandidatesMerged,
+  fetchIwencaiEtfCandidatesMerged,
   fetchIwencaiIndustryContext,
   fetchIwencaiSectorsWithFallback,
   parseCandidatesFromIwencai,
@@ -10,6 +11,7 @@ import {
 } from '../../data/market/iwencai-screen.js';
 import {
   discoverAutoScreenContext,
+  buildEtfQueries,
 } from '../../data/market/hot-market-discovery.js';
 import { getStockBasic } from '../../data/market/services.js';
 import { emitScreenStreamEvent } from '../../api/screen-stream-context.js';
@@ -36,6 +38,8 @@ const workflowInputSchema = z.object({
   /** 可选；留空则根据热门新闻 + 板块自动选股 */
   query: z.string().optional(),
   maxCandidates: z.number().int().min(1).max(20).optional().default(10),
+  maxEtfCandidates: z.number().int().min(0).max(8).optional(),
+  includeEtf: z.boolean().optional(),
   excludeSt: z.boolean().optional().default(true),
   lookbackDays: z.number().int().min(1).max(30).optional().default(14),
   /** YYYY-MM-DD；历史回放模式 */
@@ -64,6 +68,9 @@ const parsedQuerySchema = z.object({
   sectorQuery: z.string(),
   stockQuery: z.string(),
   stockQueries: z.array(z.string()),
+  etfQueries: z.array(z.string()),
+  maxEtfCandidates: z.number(),
+  includeEtf: z.boolean(),
   hotNews: z.array(hotNewsSchema),
   hotThemes: z.array(z.string()),
   newsSymbols: z.array(newsSymbolSchema),
@@ -119,6 +126,7 @@ const candidateSchema = z.object({
   name: z.string(),
   thesis: z.string(),
   dataSource: z.string(),
+  assetType: z.enum(['stock', 'etf']).optional().default('stock'),
   industry: z.string().nullable().optional(),
   diamond: candidateDiamondSchema,
   factorScore: factorScoreSchema,
@@ -206,10 +214,13 @@ const discoverHotMarketStep = createStep({
     return {
       query: ctx.query,
       maxCandidates: inputData.maxCandidates ?? 10,
+      maxEtfCandidates: inputData.maxEtfCandidates ?? 3,
+      includeEtf: inputData.includeEtf ?? true,
       excludeSt: inputData.excludeSt ?? true,
       sectorQuery: ctx.sectorQuery,
       stockQuery: ctx.stockQuery,
       stockQueries: ctx.stockQueries,
+      etfQueries: ctx.etfQueries,
       hotNews: ctx.hotNews,
       hotThemes: ctx.hotThemes,
       newsSymbols: ctx.newsSymbols,
@@ -303,26 +314,30 @@ const fetchCandidatesStep = createStep({
     let candidateRaw: unknown = null;
 
     try {
+      const stockLimit = Math.max(
+        inputData.parsed.maxCandidates - inputData.parsed.maxEtfCandidates,
+        4,
+      );
       const queries =
         inputData.parsed.stockQueries.length > 0
           ? inputData.parsed.stockQueries
           : [inputData.parsed.stockQuery];
-      const fetchLimit = Math.min(
-        Math.max(inputData.parsed.maxCandidates * 2, 16),
-        24,
-      );
+      const fetchLimit = Math.min(Math.max(stockLimit * 2, 12), 24);
       const result = await fetchIwencaiCandidatesMerged(
         queries,
         sectorHint,
         fetchLimit,
         { allowFallback: !inputData.parsed.asOfDate },
       );
-      candidates = result.candidates;
+      candidates = result.candidates.map((item) => ({
+        ...item,
+        assetType: 'stock' as const,
+      }));
       candidateRaw = result.raw;
       if (result.queriesUsed.length > 0) {
         const preview = result.queriesUsed.slice(0, 3).join('；');
         fetchErrors.push(
-          `candidates: 问财 ${result.queriesUsed.length} 路 query — ${preview}${result.queriesUsed.length > 3 ? '…' : ''}`,
+          `candidates: 问财 ${result.queriesUsed.length} 路个股 query — ${preview}${result.queriesUsed.length > 3 ? '…' : ''}`,
         );
       }
       if (result.usedFallback) {
@@ -337,7 +352,44 @@ const fetchCandidatesStep = createStep({
           name: item.name,
           thesis: `新闻提及（${item.source.slice(0, 24)}）`,
           dataSource: 'iwencai',
+          assetType: 'stock',
         });
+      }
+
+      if (inputData.parsed.includeEtf && inputData.parsed.maxEtfCandidates > 0) {
+        const etfQueries = [
+          ...inputData.parsed.etfQueries,
+          ...buildEtfQueries({
+            themes: inputData.parsed.hotThemes,
+            sectorNames: inputData.sectors.map((s) => s.name),
+            isReplay: Boolean(inputData.parsed.asOfDate),
+            asOfDate: inputData.parsed.asOfDate,
+          }),
+        ];
+        const etfResult = await fetchIwencaiEtfCandidatesMerged(
+          [...new Set(etfQueries)],
+          inputData.parsed.maxEtfCandidates + 2,
+          { allowFallback: !inputData.parsed.asOfDate },
+        );
+        if (etfResult.queriesUsed.length > 0) {
+          fetchErrors.push(
+            `etf: 问财 ${etfResult.queriesUsed.length} 路 ETF query，命中 ${etfResult.candidates.length} 只`,
+          );
+        }
+        if (etfResult.usedFallback) {
+          fetchErrors.push('etf: 主题 ETF 无结果，已使用成交额 fallback');
+        }
+        const stockSymbols = new Set(candidates.map((c) => c.symbol));
+        for (const item of etfResult.candidates) {
+          if (stockSymbols.has(item.symbol)) continue;
+          candidates.push(item);
+          if (
+            candidates.filter((c) => c.assetType === 'etf').length >=
+            inputData.parsed.maxEtfCandidates + 2
+          ) {
+            break;
+          }
+        }
       }
     } catch (error) {
       fetchErrors.push(
@@ -349,6 +401,7 @@ const fetchCandidatesStep = createStep({
       const fromSectorRaw = parseCandidatesFromIwencai(
         inputData.sectorRaw,
         inputData.parsed.maxCandidates,
+        'stock',
       );
       if (fromSectorRaw.length > 0) {
         candidates = fromSectorRaw;
@@ -389,17 +442,23 @@ const enrichBasicsStep = createStep({
   execute: async ({ inputData }) => {
     const enriched = await Promise.all(
       inputData.candidates.map(async (item) => {
+        const assetType = item.assetType ?? 'stock';
         try {
           const basic = await getStockBasic(item.symbol);
           return {
             ...item,
+            assetType,
             name: basic.name || item.name,
-            industry: basic.industry,
+            industry: assetType === 'etf' ? basic.industry ?? 'ETF' : basic.industry,
             dataSource:
               item.dataSource === 'iwencai' ? 'iwencai+eastmoney' : item.dataSource,
           };
         } catch {
-          return { ...item, industry: null };
+          return {
+            ...item,
+            assetType,
+            industry: assetType === 'etf' ? 'ETF' : null,
+          };
         }
       }),
     );
@@ -491,13 +550,39 @@ const scoreFactorsStep = createStep({
       return { ...inputData };
     }
 
-    const { candidates, dropped } = await scoreAndRankCandidates({
-      candidates: inputData.candidates as ScreeningCandidateWithDiamond[],
-      limit: inputData.parsed.maxCandidates,
-      minTotal: 48,
-      hotThemes: inputData.parsed.hotThemes,
-      sectorNames: inputData.sectors.map((s) => s.name),
-    });
+    const stockPool = inputData.candidates.filter(
+      (item) => (item.assetType ?? 'stock') === 'stock',
+    );
+    const etfPool = inputData.candidates.filter((item) => item.assetType === 'etf');
+    const stockLimit = Math.max(
+      inputData.parsed.maxCandidates - inputData.parsed.maxEtfCandidates,
+      1,
+    );
+    const etfLimit = inputData.parsed.includeEtf
+      ? inputData.parsed.maxEtfCandidates
+      : 0;
+
+    const [stockRanked, etfRanked] = await Promise.all([
+      scoreAndRankCandidates({
+        candidates: stockPool as ScreeningCandidateWithDiamond[],
+        limit: stockLimit,
+        minTotal: 48,
+        hotThemes: inputData.parsed.hotThemes,
+        sectorNames: inputData.sectors.map((s) => s.name),
+      }),
+      etfLimit > 0
+        ? scoreAndRankCandidates({
+            candidates: etfPool as ScreeningCandidateWithDiamond[],
+            limit: etfLimit,
+            minTotal: 40,
+            hotThemes: inputData.parsed.hotThemes,
+            sectorNames: inputData.sectors.map((s) => s.name),
+          })
+        : Promise.resolve({ candidates: [], dropped: 0 }),
+    ]);
+
+    const candidates = [...stockRanked.candidates, ...etfRanked.candidates];
+    const dropped = stockRanked.dropped + etfRanked.dropped;
 
     const enriched = candidates.map((item) => ({
       ...item,
@@ -513,8 +598,14 @@ const scoreFactorsStep = createStep({
 
     if (enriched.length > 0) {
       const top = enriched[0].factorScore!;
+      const stockCount = enriched.filter(
+        (c) => ((c as { assetType?: string }).assetType ?? 'stock') === 'stock',
+      ).length;
+      const etfCount = enriched.filter(
+        (c) => (c as { assetType?: string }).assetType === 'etf',
+      ).length;
       fetchErrors.push(
-        `factor: ${enriched.length} 只主线趋势筛选（主线${top.themeScore}/趋势收益${top.trendReturnScore}，${dropped} 只淘汰）`,
+        `factor: ${stockCount} 只个股 + ${etfCount} 只 ETF（主线${top.themeScore}/趋势收益${top.trendReturnScore}，${dropped} 只淘汰）`,
       );
     } else {
       fetchErrors.push('factor: 因子打分无结果，保留原候选顺序');

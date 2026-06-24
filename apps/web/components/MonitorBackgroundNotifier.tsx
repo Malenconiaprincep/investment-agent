@@ -81,7 +81,8 @@ function seedAndCollectNewKeys(
   }
 
   for (const action of status.paperActions) {
-    if (action.kind !== 'track' && action.kind !== 'buy') continue;
+    if (action.kind !== 'buy' && action.kind !== 'sell') continue;
+    if (action.status !== 'bought' && action.status !== 'sold') continue;
     const key = monitorNotifyKey(
       action.kind,
       action.alertId ?? `${action.symbol}:${action.status}`,
@@ -94,7 +95,7 @@ function seedAndCollectNewKeys(
           title:
             action.kind === 'buy'
               ? `模拟盘买入 · ${action.name}`
-              : `新跟踪 · ${action.name}`,
+              : `模拟盘卖出 · ${action.name}`,
           body: action.reason.slice(0, 80),
         });
       }

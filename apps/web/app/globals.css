@@ -1161,6 +1161,56 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.history-card--button {
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.history-list--sidebar {
+  margin-top: 0.5rem;
+}
+
+.history-list--sidebar .history-card {
+  padding: 0.65rem 0.85rem;
+}
+
+.history-list--sidebar .history-card-main strong {
+  font-size: 0.88rem;
+}
+
+.page-toolbar--compact {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.page-toolbar--compact .button {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.filter-bar--compact {
+  margin-bottom: 0.5rem;
+}
+
+.research-archive {
+  margin-top: 0.5rem;
+}
+
+.research-archive-empty {
+  font-size: 0.88rem;
+  margin: 0.5rem 0;
+}
+
+.result-toolbar--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
 .history-card--selected {
   background: color-mix(in srgb, var(--accent-muted) 70%, var(--surface));
   cursor: pointer;
@@ -1257,6 +1307,23 @@ a:hover {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+.asset-badge {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.asset-badge--etf {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.candidate-card--etf {
+  border-color: rgba(56, 189, 248, 0.25);
 }
 
 .diamond-badge {

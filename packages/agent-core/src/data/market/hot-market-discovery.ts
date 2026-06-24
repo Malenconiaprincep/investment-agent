@@ -26,6 +26,8 @@ export type AutoScreenContext = {
   stockQuery: string;
   /** 多路问财个股 query，避免单 query 总是同一批结果 */
   stockQueries: string[];
+  /** 板块/主题 ETF 问财 query */
+  etfQueries: string[];
   hotNews: HotNewsItem[];
   hotThemes: string[];
   newsSymbols: NewsMentionedSymbol[];
@@ -154,6 +156,35 @@ function buildStockQueries(input: {
       .map((item) => item.symbol)
       .join('、');
     queries.push(`${codeHint}${input.excludeHint}，60日线趋势向上`);
+  }
+
+  return [...new Set(queries)];
+}
+
+export function buildEtfQueries(input: {
+  themes: string[];
+  sectorNames?: string[];
+  isReplay: boolean;
+  asOfDate?: string;
+}): string[] {
+  const queries: string[] = [];
+  const screenDateHint =
+    input.isReplay && input.asOfDate
+      ? formatAsOfDateLabel(input.asOfDate)
+      : '今日';
+
+  for (const theme of input.themes.slice(0, 3)) {
+    queries.push(`${theme}ETF，${screenDateHint}成交额排名前10，60日涨幅靠前`);
+    queries.push(`${theme}主题ETF，均线多头，趋势向上`);
+  }
+
+  for (const sector of (input.sectorNames ?? []).slice(0, 2)) {
+    queries.push(`${sector}ETF，成交额靠前，60日涨幅排名前10`);
+  }
+
+  if (queries.length === 0) {
+    queries.push('A股行业ETF，成交额排名前10，60日涨幅靠前');
+    queries.push('A股主题ETF，趋势向上，站上MA60');
   }
 
   return [...new Set(queries)];
@@ -464,11 +495,17 @@ export async function discoverAutoScreenContext(options?: {
     asOfDate,
     newsSymbols,
   });
+  const etfQueries = buildEtfQueries({
+    themes: hotThemes,
+    isReplay,
+    asOfDate,
+  });
 
   const baseContext = {
     sectorQuery,
     stockQuery,
     stockQueries,
+    etfQueries,
     hotNews: enrichedNews,
     hotThemes,
     newsSymbols,
@@ -499,6 +536,10 @@ export async function discoverAutoScreenContext(options?: {
           ? `${userQuery}相关A股，${replayDateHint}当日涨幅排名前20${excludeHint}`
           : `${userQuery} A股${excludeHint}`,
         ...stockQueries,
+      ],
+      etfQueries: [
+        `${userQuery}相关ETF，成交额排名前10，60日涨幅靠前`,
+        ...etfQueries,
       ],
       mode: 'manual' as const,
     };

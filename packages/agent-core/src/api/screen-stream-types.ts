@@ -25,6 +25,7 @@ export type ScreeningStreamCandidate = {
   name: string;
   thesis: string;
   dataSource: string;
+  assetType?: 'stock' | 'etf';
   diamond?: ScreeningCandidateDiamond | null;
   factorScore?: ScreeningCandidateFactor | null;
 };

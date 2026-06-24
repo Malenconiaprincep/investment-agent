@@ -668,7 +668,7 @@ export async function getMonitorStatus() {
   const now = getBeijingNow();
   const tradeDate = formatTradeDate(now);
   const { getLatestMonitorPollRun } = await import('./store.js');
-  const { runMonitorPaperBridge, listRecentMonitorPaperActions } =
+  const { runMonitorPaperBridge, listRecentMonitorPaperActions, mergeMonitorPaperActionsForStatus } =
     await import('../paper/monitor-bridge.js');
 
   const [lastRun, todayAlerts, recentPaperActions] = await Promise.all([
@@ -681,20 +681,11 @@ export async function getMonitorStatus() {
     tradeDate,
     includeSells: false,
   });
-  const bridgeActionKeys = new Set(
-    bridgeResult.paperActions.map((item) =>
-      [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
-    ),
+  const paperActions = mergeMonitorPaperActionsForStatus(
+    bridgeResult.paperActions,
+    recentPaperActions,
+    20,
   );
-  const paperActions = [
-    ...bridgeResult.paperActions,
-    ...recentPaperActions.filter(
-      (item) =>
-        !bridgeActionKeys.has(
-          [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
-        ),
-    ),
-  ].slice(0, 20);
 
   return {
     now: now.toISOString(),
