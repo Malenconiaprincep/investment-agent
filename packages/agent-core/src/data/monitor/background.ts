@@ -4,6 +4,7 @@ import {
   isWeekday,
   TRADING_HOURS_LABEL,
 } from '../paper/trading-calendar.js';
+import { purgeExpiredWatchlistItems } from '../watchlist/retention.js';
 import { runMonitorPollManaged } from './engine.js';
 import { purgeExpiredMonitorData } from './store.js';
 
@@ -41,6 +42,18 @@ async function tick(intervalMs: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[monitor-bg] 清理过期数据失败：${message}`);
+  }
+
+  try {
+    const watchlistPurge = await purgeExpiredWatchlistItems();
+    if (watchlistPurge.removed > 0) {
+      console.log(
+        `[monitor-bg] 跟踪池清理 ${watchlistPurge.removed} 只过期标的：${watchlistPurge.removedSymbols.join('、')}`,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[monitor-bg] 跟踪池清理失败：${message}`);
   }
 
   if (!isWeekday(now)) {

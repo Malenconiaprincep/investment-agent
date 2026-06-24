@@ -118,7 +118,7 @@ export function WatchlistPanel() {
         </div>
 
         <p className="watchlist-panel-hint">
-          消息雷达识别后会自动加入；红钻+动量达标后写入模拟盘。
+          消息雷达识别后会自动加入；红钻+动量达标后写入模拟盘。过期未入模拟盘的标的会自动移出。
         </p>
 
         {notifyPermission !== 'granted' && notifyPermission !== 'unsupported' && (

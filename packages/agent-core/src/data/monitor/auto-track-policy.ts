@@ -1,3 +1,4 @@
+import { describeWatchlistRetentionRules } from '../watchlist/retention.js';
 import type { MonitorAlert } from './store.js';
 import {
   getMonitorRuntimeState,
@@ -155,6 +156,7 @@ export function describeAutoTrackRules(mode: AutoTrackMode): AutoTrackRuleItem[]
       label: '跟踪池上限',
       detail: `最多 ${WATCHLIST_POOL_LIMIT} 只，满员时新标的会加池失败`,
     },
+    ...describeWatchlistRetentionRules(),
   ];
 
   if (mode === 'notify_only') {

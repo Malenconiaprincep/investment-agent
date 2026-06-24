@@ -1,5 +1,6 @@
 import { getDailyQuote } from '../market/services.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
+import { purgeExpiredWatchlistItems } from './retention.js';
 import {
   listWatchlistItems,
   saveDiamondSignal,
@@ -7,6 +8,7 @@ import {
 } from './store.js';
 
 export async function runDailyWatchlistSnapshot() {
+  const purge = await purgeExpiredWatchlistItems();
   const items = await listWatchlistItems();
   const results = [];
 
@@ -70,7 +72,12 @@ export async function runDailyWatchlistSnapshot() {
     }
   }
 
-  return { count: items.length, results, ranAt: new Date().toISOString() };
+  return {
+    count: items.length,
+    results,
+    purge,
+    ranAt: new Date().toISOString(),
+  };
 }
 
 export async function scanWatchlistDiamondSignals() {
