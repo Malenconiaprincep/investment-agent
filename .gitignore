@@ -28,6 +28,11 @@ build/
 # Electron desktop packaging
 apps/desktop/.pack/
 apps/desktop/release/
+apps/desktop/templates/admin-defaults.env
+
+# Web local user data
+apps/web/.data/
+.data/
 
 # Logs
 *.log

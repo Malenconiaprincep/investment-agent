@@ -167,3 +167,38 @@ export async function proxyAgentCoreStream(
     body: JSON.stringify(body),
   });
 }
+
+export type EnvConfigStatus = {
+  envPath: string | null;
+  keys: Record<
+    string,
+    { configured: boolean; masked?: string }
+  >;
+  restartRequired: boolean;
+};
+
+export async function fetchAgentCoreEnvStatus(): Promise<EnvConfigStatus> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(`${baseUrl}/config/status`, {
+    headers: buildHeaders('application/json'),
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  return response.json() as Promise<EnvConfigStatus>;
+}
+
+export async function patchAgentCoreEnvKeys(
+  updates: Record<string, string | null>,
+): Promise<EnvConfigStatus> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(`${baseUrl}/config/keys`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  return response.json() as Promise<EnvConfigStatus>;
+}

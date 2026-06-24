@@ -23,6 +23,7 @@
     "desktop:dev": "pnpm --filter @investment-agent/desktop dev",
     "desktop:pack": "pnpm --filter @investment-agent/desktop pack",
     "desktop:pack:mac": "pnpm --filter @investment-agent/desktop pack:mac",
+    "desktop:pack:mac:unsigned": "pnpm --filter @investment-agent/desktop pack:mac:unsigned",
     "desktop:pack:win": "pnpm --filter @investment-agent/desktop pack:win",
     "setup:iwencai": "pnpm --filter @investment-agent/agent-core setup:iwencai",
     "monitor:poll": "pnpm --filter @investment-agent/agent-core monitor:poll",

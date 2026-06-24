@@ -4,31 +4,45 @@ import {
   createLocalSessionCookie,
   isValidLocalSession,
   LOCAL_AUTH_COOKIE,
+  parseSessionUsername,
   validateLocalCredentials,
 } from './local-auth';
 
 describe('local auth', () => {
-  it('accepts the local admin credentials', () => {
+  it('accepts adminwb credentials', () => {
     expect(
-      validateLocalCredentials({ username: 'admin', password: 'admin' }),
-    ).toBe(true);
+      validateLocalCredentials({
+        username: 'adminwb',
+        password: 'Wb@Invest2026!xK9',
+      }),
+    ).toBe('adminwb');
+  });
+
+  it('accepts test credentials', () => {
+    expect(
+      validateLocalCredentials({
+        username: 'test',
+        password: 'test123456',
+      }),
+    ).toBe('test');
   });
 
   it('rejects invalid credentials', () => {
     expect(
-      validateLocalCredentials({ username: 'admin', password: 'wrong' }),
-    ).toBe(false);
+      validateLocalCredentials({ username: 'adminwb', password: 'wrong' }),
+    ).toBeNull();
     expect(
-      validateLocalCredentials({ username: 'user', password: 'admin' }),
-    ).toBe(false);
+      validateLocalCredentials({ username: 'admin', password: 'admin' }),
+    ).toBeNull();
   });
 
   it('creates and validates the local session cookie', () => {
-    const session = createLocalSessionCookie();
+    const session = createLocalSessionCookie('adminwb');
 
     expect(session.name).toBe(LOCAL_AUTH_COOKIE);
     expect(session.options.httpOnly).toBe(true);
     expect(session.options.sameSite).toBe('lax');
+    expect(parseSessionUsername(session.value)).toBe('adminwb');
     expect(isValidLocalSession(session.value)).toBe(true);
     expect(isValidLocalSession(undefined)).toBe(false);
   });

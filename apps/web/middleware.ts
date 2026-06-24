@@ -17,10 +17,6 @@ function isPublicPath(pathname: string): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (process.env.INVESTMENT_AGENT_DESKTOP === '1') {
-    return NextResponse.next();
-  }
-
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }

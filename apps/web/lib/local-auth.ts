@@ -1,27 +1,39 @@
+import type { AppUserId } from './users';
+import { APP_USERS, isAppUserId } from './users';
+
 export const LOCAL_AUTH_COOKIE = 'investment_agent_local_session';
 
-const LOCAL_ADMIN_USERNAME = 'admin';
-const LOCAL_ADMIN_PASSWORD = 'admin';
-const LOCAL_SESSION_VALUE = 'local-admin';
+const SESSION_PREFIX = 'user:';
 
 export function validateLocalCredentials(input: {
   username: string;
   password: string;
-}): boolean {
-  return (
-    input.username === LOCAL_ADMIN_USERNAME &&
-    input.password === LOCAL_ADMIN_PASSWORD
-  );
+}): AppUserId | null {
+  if (!isAppUserId(input.username)) return null;
+  const user = APP_USERS[input.username];
+  return input.password === user.password ? user.id : null;
+}
+
+export function createSessionValue(username: AppUserId): string {
+  return `${SESSION_PREFIX}${username}`;
+}
+
+export function parseSessionUsername(
+  value: string | undefined,
+): AppUserId | null {
+  if (!value?.startsWith(SESSION_PREFIX)) return null;
+  const username = value.slice(SESSION_PREFIX.length);
+  return isAppUserId(username) ? username : null;
 }
 
 export function isValidLocalSession(value: string | undefined): boolean {
-  return value === LOCAL_SESSION_VALUE;
+  return parseSessionUsername(value) !== null;
 }
 
-export function createLocalSessionCookie() {
+export function createLocalSessionCookie(username: AppUserId) {
   return {
     name: LOCAL_AUTH_COOKIE,
-    value: LOCAL_SESSION_VALUE,
+    value: createSessionValue(username),
     options: {
       httpOnly: true,
       sameSite: 'lax' as const,

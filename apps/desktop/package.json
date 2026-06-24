@@ -9,6 +9,7 @@
     "dev": "node scripts/prepare.mjs && electron .",
     "pack": "node scripts/prepare.mjs && electron-builder",
     "pack:mac": "node scripts/prepare.mjs && electron-builder --mac",
+    "pack:mac:unsigned": "node scripts/prepare.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac -c.mac.identity=null",
     "pack:win": "node scripts/prepare.mjs && electron-builder --win"
   },
   "devDependencies": {

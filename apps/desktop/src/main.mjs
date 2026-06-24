@@ -2,14 +2,13 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -27,34 +26,20 @@ function resolvePackDir(name) {
   return path.join(process.resourcesPath, name);
 }
 
-function resolveTemplateEnvPath() {
+function resolveResourcesPath() {
   if (isDev) {
-    return path.join(__dirname, '..', 'templates', 'env.example');
+    return path.join(__dirname, '..', 'templates', '..');
   }
-  return path.join(process.resourcesPath, 'templates', 'env.example');
+  return process.resourcesPath;
 }
 
-function ensureUserEnvFile() {
-  const userData = app.getPath('userData');
-  mkdirSync(userData, { recursive: true });
-  const envPath = path.join(userData, '.env');
-  const templatePath = resolveTemplateEnvPath();
-
-  if (!existsSync(envPath) && existsSync(templatePath)) {
-    copyFileSync(templatePath, envPath);
+function ensureActiveEnvFile(dataDir) {
+  mkdirSync(dataDir, { recursive: true });
+  const activeEnvPath = path.join(dataDir, 'active.env');
+  if (!existsSync(activeEnvPath)) {
+    writeFileSync(activeEnvPath, '# 登录后按账号同步 Token\n', 'utf-8');
   }
-
-  return envPath;
-}
-
-function loadMergedEnv(envPath) {
-  const parsed = existsSync(envPath)
-    ? dotenv.parse(readFileSync(envPath))
-    : {};
-  return {
-    ...process.env,
-    ...parsed,
-  };
+  return activeEnvPath;
 }
 
 function getFreePort(preferred) {
@@ -115,12 +100,11 @@ async function waitForHealth(url, timeoutMs = 120_000) {
 }
 
 async function startServices() {
-  const userEnvPath = ensureUserEnvFile();
   const userData = app.getPath('userData');
   const dataDir = path.join(userData, 'data');
-  mkdirSync(dataDir, { recursive: true });
+  const activeEnvPath = ensureActiveEnvFile(dataDir);
+  const resourcesPath = resolveResourcesPath();
 
-  const baseEnv = loadMergedEnv(userEnvPath);
   agentPort = await getFreePort(4010);
   webPort = await getFreePort(3010);
 
@@ -148,11 +132,17 @@ async function startServices() {
   const nodeRunner = process.execPath;
   const runAsNode = { ELECTRON_RUN_AS_NODE: '1' };
 
-  const agentEnv = {
-    ...baseEnv,
-    ...runAsNode,
-    DOTENV_CONFIG_PATH: userEnvPath,
+  const sharedEnv = {
+    ...process.env,
     INVESTMENT_AGENT_DATA_DIR: dataDir,
+    INVESTMENT_AGENT_ENV_PATH: activeEnvPath,
+    INVESTMENT_AGENT_RESOURCES_PATH: resourcesPath,
+  };
+
+  const agentEnv = {
+    ...sharedEnv,
+    ...runAsNode,
+    DOTENV_CONFIG_PATH: activeEnvPath,
     PORT: String(agentPort),
     AGENT_CORE_PORT: String(agentPort),
   };
@@ -167,14 +157,13 @@ async function startServices() {
   await waitForHealth(`http://127.0.0.1:${agentPort}/health`);
 
   const webEnv = {
-    ...baseEnv,
+    ...sharedEnv,
     ...runAsNode,
     NODE_ENV: 'production',
     HOSTNAME: '127.0.0.1',
     PORT: String(webPort),
     AGENT_CORE_URL: `http://127.0.0.1:${agentPort}`,
     INVESTMENT_AGENT_DESKTOP: '1',
-    INVESTMENT_AGENT_DATA_DIR: dataDir,
   };
 
   webChild = spawnService(
@@ -184,7 +173,7 @@ async function startServices() {
     { cwd: webRoot, env: webEnv },
   );
 
-  await waitForHealth(`http://127.0.0.1:${webPort}/monitor`);
+  await waitForHealth(`http://127.0.0.1:${webPort}/login`);
 }
 
 function stopServices() {
@@ -220,7 +209,7 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${webPort}/monitor`);
+  mainWindow.loadURL(`http://127.0.0.1:${webPort}/login`);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -238,10 +227,10 @@ async function boot() {
     createWindow();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const envPath = path.join(app.getPath('userData'), '.env');
+    const dataDir = path.join(app.getPath('userData'), 'data');
     dialog.showErrorBox(
       '投研助手启动失败',
-      `${message}\n\n请检查配置文件：\n${envPath}\n\n至少需要填写 DEEPSEEK_API_KEY。`,
+      `${message}\n\n数据目录：\n${dataDir}`,
     );
     app.quit();
   }

@@ -384,6 +384,9 @@ export default function MonitorPage() {
             <Link href="/monitor/settings" className="button button-secondary">
               雷达设置
             </Link>
+            <Link href="/settings" className="button button-secondary">
+              Token 设置
+            </Link>
             <Link href="/screen" className="button button-secondary">
               智能选股
             </Link>

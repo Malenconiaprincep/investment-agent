@@ -114,6 +114,9 @@ export function SiteNav() {
             ) : null}
           </button>
 
+          <Link href="/settings" className="site-nav-button site-nav-button--link">
+            Token
+          </Link>
           <form action="/api/auth/logout" method="post">
             <button className="site-nav-button" type="submit">
               退出

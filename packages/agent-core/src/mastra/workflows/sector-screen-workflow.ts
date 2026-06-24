@@ -200,7 +200,7 @@ const discoverHotMarketStep = createStep({
   outputSchema: parsedQuerySchema,
   execute: async ({ inputData }) => {
     if (!isIwencaiMcpConfigured()) {
-      throw new Error('问财未配置：请在 .env 设置 IWENCAI_API_KEY 后使用板块选股');
+      throw new Error('问财未配置：请在「API 配置」或 .env 中设置 IWENCAI_API_KEY 后使用板块选股');
     }
 
     const userQuery = inputData.query?.trim();
@@ -247,7 +247,7 @@ const fetchSectorsStep = createStep({
     const fetchErrors: string[] = [];
 
     if (!isIwencaiMcpConfigured()) {
-      throw new Error('问财未配置：请在 .env 设置 IWENCAI_API_KEY 后使用板块选股');
+      throw new Error('问财未配置：请在「API 配置」或 .env 中设置 IWENCAI_API_KEY 后使用板块选股');
     }
 
     let sectors: SectorItem[] = [];

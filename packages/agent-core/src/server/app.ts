@@ -9,6 +9,12 @@ import { runSectorScreenStream } from '../api/run-sector-screen-stream.js';
 import { runCommitteeStream } from '../api/run-committee-stream.js';
 import type { SectorScreenWorkflowInput } from '../mastra/workflows/sector-screen-workflow.js';
 import { dispatchCliModule, isCliModule } from '../handlers/index.js';
+import {
+  CONFIGURABLE_KEYS,
+  getEnvConfigStatus,
+  updateEnvConfig,
+  type ConfigurableKey,
+} from './env-config.js';
 
 const app = new Hono();
 
@@ -16,7 +22,7 @@ app.use(
   '*',
   cors({
     origin: (origin) => origin ?? '*',
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 );
@@ -42,6 +48,42 @@ function jsonError(message: string, status = 500) {
 }
 
 app.get('/health', (c) => c.json({ ok: true, service: 'agent-core' }));
+
+app.get('/config/status', (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+  return c.json(getEnvConfigStatus());
+});
+
+app.patch('/config/keys', async (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+
+  let body: Partial<Record<ConfigurableKey, string | null>>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonError('请求体须为 JSON', 400);
+  }
+
+  const updates: Partial<Record<ConfigurableKey, string | null>> = {};
+  for (const key of CONFIGURABLE_KEYS) {
+    if (key in body) {
+      const value = body[key];
+      updates[key] =
+        value === null || value === undefined ? null : String(value);
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return jsonError('未提供可更新的配置项', 400);
+  }
+
+  try {
+    return c.json(updateEnvConfig(updates));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return jsonError(message, 400);
+  }
+});
 
 app.post('/cli/:module', async (c) => {
   if (!requireAuth(c.req.header('Authorization'))) return unauthorized();

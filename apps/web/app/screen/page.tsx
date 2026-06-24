@@ -686,7 +686,17 @@ function ScreenPageContent() {
           )}
         </div>
 
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error">
+            {error}
+            {error.includes('问财未配置') && (
+              <>
+                {' '}
+                <Link href="/settings">前往 Token 设置</Link>
+              </>
+            )}
+          </div>
+        )}
 
         {(displayQuery || screenResult) && (
           <div className="screen-meta">

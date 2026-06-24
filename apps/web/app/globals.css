@@ -248,6 +248,13 @@ a:hover {
   outline-offset: 2px;
 }
 
+.site-nav-button--link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  margin-right: 0.35rem;
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -314,6 +321,16 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.login-hints {
+  margin-top: 1.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.login-hints p {
+  margin: 0.25rem 0;
 }
 
 .form-field {
@@ -2966,6 +2983,40 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.settings-env-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.settings-env-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.settings-env-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.settings-env-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.settings-env-hint {
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 
 .monitor-settings-hint {
