@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans, Noto_Serif_SC } from 'next/font/google';
+import { AppShell } from '@/components/AppShell';
 import { SiteNav } from '@/components/SiteNav';
+import { WatchlistPanelProvider } from '@/components/WatchlistPanelContext';
 import './globals.css';
 
 const sans = IBM_Plex_Sans({
@@ -30,8 +32,10 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className={`${sans.variable} ${serif.variable}`}>
       <body>
-        <SiteNav />
-        <div className="app-shell">{children}</div>
+        <WatchlistPanelProvider>
+          <SiteNav />
+          <AppShell>{children}</AppShell>
+        </WatchlistPanelProvider>
       </body>
     </html>
   );

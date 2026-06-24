@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
 
 type Signal = {
   id: string;
@@ -98,9 +99,9 @@ export default function SignalsPage() {
             >
               扫描最近选股
             </button>
-            <Link href="/watchlist" className="button button-secondary">
-              我的自选
-            </Link>
+            <OpenWatchlistPanelButton className="button button-secondary">
+              跟踪池
+            </OpenWatchlistPanelButton>
           </nav>
 
           {loading && <div className="list-loading">加载信号…</div>}

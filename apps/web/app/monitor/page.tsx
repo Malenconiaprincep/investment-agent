@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MonitorStockInsight } from '@/components/monitor/MonitorStockInsight';
+import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
+import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
 
 type MonitorAlert = {
   id: string;
@@ -335,9 +337,9 @@ export default function MonitorPage() {
             >
               {polling ? '扫描中…' : '立即扫描'}
             </button>
-            <Link href="/watchlist" className="button button-secondary">
-              我的自选
-            </Link>
+            <OpenWatchlistPanelButton className="button button-secondary">
+              跟踪池
+            </OpenWatchlistPanelButton>
             <Link href="/screen" className="button button-secondary">
               智能选股
             </Link>
@@ -517,6 +519,7 @@ function statusLabel(status: MonitorPaperRecommendation['status']) {
 }
 
 function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
+  const { setOpen } = useWatchlistPanel();
   const statusNote = item.error ?? (item.status === 'tracked' ? item.reason : item.skipReason);
 
   return (
@@ -562,12 +565,16 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
           </Link>
         )}
         {item.status === 'tracked' && (
-          <Link href="/watchlist" className="saved-link">
-            查看自选
-          </Link>
+          <button
+            type="button"
+            className="saved-link"
+            onClick={() => setOpen(true)}
+          >
+            查看跟踪池
+          </button>
         )}
         {item.symbol && (
-          <Link href={`/?symbol=${item.symbol}`} className="saved-link">
+          <Link href={`/research?symbol=${item.symbol}`} className="saved-link">
             生成研报
           </Link>
         )}

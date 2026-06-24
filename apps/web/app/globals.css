@@ -129,6 +129,29 @@ a:hover {
   background: var(--accent-muted);
 }
 
+.site-nav-link--panel {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.site-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  margin-left: 0.35rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .site-nav-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -816,6 +839,14 @@ a:hover {
   color: var(--muted);
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+
+.dashboard-tile--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
 }
 
 .dashboard-tile-tag {
@@ -2499,6 +2530,179 @@ a:hover {
   margin: 0.5rem 0 0;
   font-size: 0.8125rem;
   color: var(--muted);
+}
+
+.app-shell-main {
+  min-width: 0;
+}
+
+.watchlist-panel-tab {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  z-index: 45;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  padding: 0.75rem 0.45rem;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition);
+}
+
+.watchlist-panel-tab:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.watchlist-panel-tab--hidden {
+  display: none;
+}
+
+.watchlist-panel {
+  position: fixed;
+  top: var(--header-h);
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  width: min(360px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  backdrop-filter: blur(12px);
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  overflow: hidden;
+}
+
+.watchlist-panel--open {
+  transform: translateX(0);
+}
+
+.watchlist-panel-backdrop {
+  position: fixed;
+  inset: var(--header-h) 0 0 0;
+  z-index: 55;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.watchlist-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.watchlist-panel-count {
+  margin-left: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.watchlist-panel-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.watchlist-panel-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.watchlist-panel-notify {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.watchlist-panel-list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.watchlist-panel-item {
+  display: block;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.watchlist-panel-item:hover {
+  text-decoration: none;
+}
+
+.watchlist-panel-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.watchlist-panel-item-code {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-panel-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.watchlist-panel-source {
+  color: var(--link);
+  font-weight: 600;
+}
+
+.watchlist-panel-item-reason {
+  margin: 0.35rem 0 0;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.watchlist-panel-empty,
+.watchlist-panel-error {
+  font-size: 0.8125rem;
+}
+
+.watchlist-panel-foot {
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
 }
 
 @media (prefers-reduced-motion: reduce) {

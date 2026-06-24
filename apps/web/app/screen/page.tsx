@@ -741,7 +741,7 @@ function ScreenPageContent() {
                   )}
                   <StockKlineChart symbol={c.symbol} height={200} />
                   <div className="candidate-card-actions">
-                    <Link href={`/?symbol=${c.symbol}`} className="button button-secondary">
+                    <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
                       生成研报
                     </Link>
                     <AddToWatchlistButton
@@ -830,7 +830,7 @@ function ScreenPageContent() {
                     <p className="candidate-card-thesis">{summary}</p>
                     <StockKlineChart symbol={c.symbol} height={200} />
                     <div className="candidate-card-actions">
-                      <Link href={`/?symbol=${c.symbol}`} className="button button-secondary">
+                      <Link href={`/research?symbol=${c.symbol}`} className="button button-secondary">
                         生成研报
                       </Link>
                       <AddToWatchlistButton

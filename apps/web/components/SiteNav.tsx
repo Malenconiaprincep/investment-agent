@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
 
 type NavItem = {
   href: string;
@@ -11,33 +12,25 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
-    href: '/',
+    href: '/research',
     label: '研究',
-    isActive: (pathname) => pathname === '/',
+    isActive: (pathname) =>
+      pathname === '/research' || pathname.startsWith('/research/'),
   },
   {
-    href: '/screen',
-    label: '扫描',
+    href: '/monitor',
+    label: '雷达',
     isActive: (pathname) =>
-      pathname === '/screen' ||
       pathname === '/monitor' ||
-      pathname.startsWith('/monitor/'),
-  },
-  {
-    href: '/watchlist',
-    label: '跟踪',
-    isActive: (pathname) =>
-      pathname === '/watchlist' ||
-      pathname.startsWith('/watchlist/') ||
-      pathname === '/signals' ||
-      pathname.startsWith('/signals/'),
+      pathname.startsWith('/monitor/') ||
+      pathname === '/screen' ||
+      pathname.startsWith('/screen/'),
   },
   {
     href: '/paper',
     label: '验证',
     isActive: (pathname) =>
-      pathname === '/paper' ||
-      pathname.startsWith('/paper/'),
+      pathname === '/paper' || pathname.startsWith('/paper/'),
   },
   {
     href: '/history',
@@ -54,6 +47,7 @@ const NAV: NavItem[] = [
 
 export function SiteNav() {
   const pathname = usePathname();
+  const { toggle, open, itemCount } = useWatchlistPanel();
 
   if (pathname === '/login') {
     return null;
@@ -62,7 +56,7 @@ export function SiteNav() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link href="/" className="site-brand">
+        <Link href="/monitor" className="site-brand">
           <span className="site-brand-mark" aria-hidden>
             IA
           </span>
@@ -83,6 +77,18 @@ export function SiteNav() {
               </Link>
             );
           })}
+          <button
+            type="button"
+            className={`site-nav-link site-nav-link--panel${open ? ' site-nav-link--active' : ''}`}
+            onClick={toggle}
+            aria-expanded={open}
+            aria-controls="watchlist-panel"
+          >
+            跟踪池
+            {itemCount > 0 ? (
+              <span className="site-nav-badge">{itemCount}</span>
+            ) : null}
+          </button>
         </nav>
 
         <form action="/api/auth/logout" method="post">

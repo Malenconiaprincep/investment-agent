@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
 
 type Review = {
   id: string;
@@ -66,9 +67,9 @@ export default function ReviewsPage() {
         >
           {generating ? '生成中…' : '生成本周复盘'}
         </button>
-        <Link href="/watchlist" className="button button-secondary">
-          我的自选
-        </Link>
+        <OpenWatchlistPanelButton className="button button-secondary">
+          跟踪池
+        </OpenWatchlistPanelButton>
       </nav>
 
       {loading && <div className="list-loading">加载复盘…</div>}

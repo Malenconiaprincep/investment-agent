@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
 import { MomentumChecklist } from '@/components/MomentumChecklist';
+import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
 
 type DiamondSignal = {
   tradeDate: string;
@@ -129,7 +130,9 @@ export default function WatchlistDetailPage() {
   return (
     <main className="page page--workspace">
       <p className="breadcrumb">
-        <Link href="/watchlist">← 我的自选</Link>
+        <OpenWatchlistPanelButton className="button button-secondary">
+          ← 跟踪池
+        </OpenWatchlistPanelButton>
       </p>
 
       {loading && <div className="list-loading">加载中…</div>}
@@ -246,7 +249,7 @@ export default function WatchlistDetailPage() {
                 >
                   {paperLoading ? '下单中…' : '模拟买入 100 股'}
                 </button>
-                <Link href={`/?symbol=${data.item.symbol}`} className="button button-secondary">
+                <Link href={`/research?symbol=${data.item.symbol}`} className="button button-secondary">
                   重新生成研报
                 </Link>
                 <Link

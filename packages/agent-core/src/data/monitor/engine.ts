@@ -24,6 +24,7 @@ import {
   hasAlertDedupeKey,
   hasRecentAlert,
   markNewsSeen,
+  listMonitorAlerts,
   saveAlertDedupeKey,
   saveMonitorAlert,
   saveMonitorPollRun,
@@ -533,7 +534,11 @@ export async function runMonitorPoll(options?: {
   let paperActions: MonitorPaperAction[] = [];
   try {
     const { runMonitorPaperBridge } = await import('../paper/monitor-bridge.js');
-    const bridgeResult = await runMonitorPaperBridge({ alerts, tradeDate });
+    const bridgeAlerts = await listMonitorAlerts({ tradeDate, limit: 50 });
+    const bridgeResult = await runMonitorPaperBridge({
+      alerts: bridgeAlerts,
+      tradeDate,
+    });
     recommendations = bridgeResult.recommendations;
     paperActions = bridgeResult.paperActions;
   } catch (error) {
@@ -661,26 +666,44 @@ export async function runMonitorPollManaged(options?: {
 
 export async function getMonitorStatus() {
   const now = getBeijingNow();
-  const { getLatestMonitorPollRun, listMonitorAlerts } = await import('./store.js');
-  const {
-    buildMonitorRecommendations,
-    listRecentMonitorPaperActions,
-  } = await import('../paper/monitor-bridge.js');
+  const tradeDate = formatTradeDate(now);
+  const { getLatestMonitorPollRun } = await import('./store.js');
+  const { runMonitorPaperBridge, listRecentMonitorPaperActions } =
+    await import('../paper/monitor-bridge.js');
 
-  const [lastRun, todayAlerts, paperActions] = await Promise.all([
+  const [lastRun, todayAlerts, recentPaperActions] = await Promise.all([
     getLatestMonitorPollRun(),
-    listMonitorAlerts({ tradeDate: formatTradeDate(now), limit: 50 }),
+    listMonitorAlerts({ tradeDate, limit: 50 }),
     listRecentMonitorPaperActions(20),
   ]);
+  const bridgeResult = await runMonitorPaperBridge({
+    alerts: todayAlerts,
+    tradeDate,
+    includeSells: false,
+  });
+  const bridgeActionKeys = new Set(
+    bridgeResult.paperActions.map((item) =>
+      [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
+    ),
+  );
+  const paperActions = [
+    ...bridgeResult.paperActions,
+    ...recentPaperActions.filter(
+      (item) =>
+        !bridgeActionKeys.has(
+          [item.kind, item.status, item.symbol, item.alertId ?? ''].join(':'),
+        ),
+    ),
+  ].slice(0, 20);
 
   return {
     now: now.toISOString(),
-    tradeDate: formatTradeDate(now),
+    tradeDate,
     marketOpen: isTradingSession(now),
     tradingHours: TRADING_HOURS_LABEL,
     lastRun,
     todayAlerts,
-    recommendations: buildMonitorRecommendations(todayAlerts),
+    recommendations: bridgeResult.recommendations,
     paperActions,
     unacknowledgedCount: todayAlerts.filter((a) => !a.acknowledged).length,
   };

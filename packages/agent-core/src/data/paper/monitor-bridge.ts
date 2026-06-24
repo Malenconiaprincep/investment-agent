@@ -586,6 +586,7 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
 export async function runMonitorPaperBridge(input: {
   alerts: MonitorAlert[];
   tradeDate: string;
+  includeSells?: boolean;
 }): Promise<MonitorPaperBridgeResult> {
   const recommendations = buildMonitorRecommendations(input.alerts);
   const paperActions: MonitorPaperAction[] = [];
@@ -606,7 +607,9 @@ export async function runMonitorPaperBridge(input: {
   }
 
   paperActions.push(...(await autoBuyMonitorWatchlist(input.tradeDate)));
-  paperActions.push(...(await autoSellExitsFromMonitor(input.tradeDate)));
+  if (input.includeSells !== false) {
+    paperActions.push(...(await autoSellExitsFromMonitor(input.tradeDate)));
+  }
 
   return { recommendations, paperActions };
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { EquityChart, type EquityPoint } from '@/components/charts/EquityChart';
+import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 type PaperPayload = {
@@ -164,8 +165,10 @@ export default function PaperTradingPage() {
             {data.positions.length === 0 ? (
               <div className="empty-state">
                 暂无持仓。自动任务会在红钻信号出现时买入，也可在
-                <Link href="/watchlist">自选详情</Link>
-                页手动模拟买入。
+                <OpenWatchlistPanelButton className="saved-link">
+                  跟踪池
+                </OpenWatchlistPanelButton>
+                查看详情。
               </div>
             ) : (
               <div className="table-scroll-wrap">
@@ -249,9 +252,9 @@ export default function PaperTradingPage() {
       </div>
 
       <nav className="page-toolbar">
-        <Link href="/watchlist" className="button button-secondary">
-          我的自选
-        </Link>
+        <OpenWatchlistPanelButton className="button button-secondary">
+          跟踪池
+        </OpenWatchlistPanelButton>
         <Link href="/signals" className="button button-secondary">
           信号提醒
         </Link>

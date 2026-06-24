@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { runAgentCoreWatchlistJson } from '@/lib/agent-core';
+import {
+  runAgentCoreMonitorJson,
+  runAgentCoreWatchlistJson,
+} from '@/lib/agent-core';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +17,7 @@ const postSchema = z.object({
 
 export async function GET() {
   try {
+    await runAgentCoreMonitorJson(['status']).catch(() => null);
     const stdout = await runAgentCoreWatchlistJson(['list']);
     const items = JSON.parse(stdout);
     const summaryStdout = await runAgentCoreWatchlistJson(['today-summary']).catch(
