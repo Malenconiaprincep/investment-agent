@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { BacktestEquityChart } from '@/components/charts/BacktestEquityChart';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 type Strategy = 'diamond' | 'diamond-momentum' | 'etf';
@@ -110,7 +111,7 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
     value: 'etf',
     label: 'ETF 尾盘规则',
-    help: '回测 19 只 ETF 池的 8 条尾盘筛选规则。',
+    help: '回测 19 只 ETF 池的 8 条尾盘筛选规则，按止盈止损与规则失效出场。',
   },
 ];
 
@@ -172,14 +173,6 @@ function fmtTradeDate(value: string | null) {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 }
 
-function tradeDateToTime(value: string | null): number {
-  if (!value || value.length < 8) return Number.NaN;
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(4, 6)) - 1;
-  const day = Number(value.slice(6, 8));
-  return new Date(year, month, day).getTime();
-}
-
 function fmtTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -195,6 +188,21 @@ function returnClass(value: number | null) {
   if (value > 0) return 'text-up';
   if (value < 0) return 'text-down';
   return 'muted';
+}
+
+function fmtExitReason(value: string) {
+  const labels: Record<string, string> = {
+    fixed_hold: '固定持有',
+    stop_loss: '止损',
+    take_profit: '止盈',
+    ma20_break: '跌破 MA20',
+    trailing_stop: '移动止盈',
+    signal_lost: '信号失效',
+    signal_weakened: '信号减弱',
+    max_hold: '达到持有上限',
+    end_of_data: '数据不足',
+  };
+  return labels[value] ?? value;
 }
 
 function calcMaxDrawdownPct(points: BacktestEquityPoint[] | undefined): number | null {
@@ -241,7 +249,7 @@ export default function BacktestPage() {
   const [symbols, setSymbols] = useState('600519,000001');
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
-  const [holdDays] = useState('1');
+  const [holdDays] = useState('1,3,5,10,20');
   const [includeWaitPullback, setIncludeWaitPullback] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -275,7 +283,7 @@ export default function BacktestPage() {
       if (strategy !== 'etf') {
         params.set('symbols', symbols);
       }
-      if (holdDays.trim()) {
+      if (strategy !== 'etf' && holdDays.trim()) {
         params.set('holdDays', holdDays.trim());
       }
       if (strategy === 'etf' && includeWaitPullback) {
@@ -566,7 +574,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               <div>
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
-                  区间 {fmtTradeDate(startDate)} 至 {fmtTradeDate(endDate)}。规则：尾盘严格通过 8 条 ETF 规则则买入，按日线可验证的最早退出持有 {result.holdDays.join('/')} 个交易日后卖出；多笔同日平仓按等权平均收益复利。基准为 {result.benchmark?.name ?? '沪深300ETF'} 买入持有。
+                  区间 {fmtTradeDate(startDate)} 至 {fmtTradeDate(endDate)}。规则：尾盘严格通过 8 条 ETF 规则则买入，T+1 起按技术止损、计划止盈价或规则失效出场（最多持有 {result.holdDays[0] ?? 20} 个交易日兜底）；多笔同日平仓按等权平均收益复利。基准优先用上证指数，不可用时退回沪深300ETF。
                 </p>
               </div>
               <strong className={returnClass(finalReturn)}>累计 {fmtPct(finalReturn)}</strong>
@@ -585,9 +593,23 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               <SummaryMetric label="单笔最低收益" value={fmtPct(result.metrics.worstReturnPct)} tone={result.metrics.worstReturnPct} />
             </div>
 
-            <EquityCurveChart
-              points={result.equityCurve ?? []}
-              benchmark={result.benchmark}
+            <BacktestEquityChart
+              strategy={(result.equityCurve ?? []).map((point) => ({
+                tradeDate: point.tradeDate,
+                returnPct: point.returnPct,
+              }))}
+              benchmark={
+                result.benchmark
+                  ? {
+                      name: result.benchmark.name,
+                      curve: result.benchmark.curve.map((point) => ({
+                        tradeDate: point.tradeDate,
+                        returnPct: point.returnPct,
+                      })),
+                      finalReturnPct: result.benchmark.finalReturnPct,
+                    }
+                  : undefined
+              }
             />
 
             <div className="metric-help">
@@ -784,7 +806,7 @@ function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
               <th>买入价</th>
               <th>卖出日</th>
               <th>卖出价</th>
-              <th>持有交易日</th>
+              <th>持有天数</th>
               <th>收益</th>
               <th>退出原因</th>
             </tr>
@@ -804,7 +826,7 @@ function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
                 <td className={returnClass(trade.returnPct)}>
                   {fmtPct(trade.returnPct)}
                 </td>
-                <td>{trade.exitReason}</td>
+                <td>{fmtExitReason(trade.exitReason)}</td>
               </tr>
             ))}
           </tbody>
@@ -833,76 +855,6 @@ function SummaryMetric({
     <div className="overview-metric-card">
       <span className="muted">{label}</span>
       <strong className={returnClass(effectiveTone ?? null)}>{value}</strong>
-    </div>
-  );
-}
-
-function EquityCurveChart({
-  points,
-  benchmark,
-}: {
-  points: BacktestEquityPoint[];
-  benchmark?: BacktestBenchmark;
-}) {
-  if (points.length === 0) {
-    return <div className="chart-empty chart-empty--compact">暂无足够交易生成收益曲线</div>;
-  }
-
-  const width = 720;
-  const height = 240;
-  const pad = 24;
-  const benchmarkPoints = benchmark?.curve ?? [];
-  const allPoints = [...points, ...benchmarkPoints];
-  const returns = allPoints.map((point) => point.returnPct);
-  const times = allPoints
-    .map((point) => tradeDateToTime(point.tradeDate))
-    .filter(Number.isFinite);
-  const minTime = Math.min(...times);
-  const maxTime = Math.max(...times);
-  const min = Math.min(...returns, 0);
-  const max = Math.max(...returns, 0);
-  const span = max - min || 1;
-  const timeSpan = maxTime - minTime || 1;
-  const x = (tradeDate: string) =>
-    pad + ((tradeDateToTime(tradeDate) - minTime) / timeSpan) * (width - pad * 2);
-  const y = (value: number) => height - pad - ((value - min) / span) * (height - pad * 2);
-  const lineFor = (series: BacktestEquityPoint[]) =>
-    series
-      .filter((point) => Number.isFinite(tradeDateToTime(point.tradeDate)))
-      .map((point) => `${x(point.tradeDate)},${y(point.returnPct)}`)
-      .join(' ');
-  const strategyLine = lineFor(points);
-  const benchmarkLine = benchmarkPoints.length > 1 ? lineFor(benchmarkPoints) : '';
-  const zeroY = y(0);
-
-  return (
-    <div className="equity-chart" role="img" aria-label="ETF 策略收益曲线">
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="equity-zero" />
-        {benchmarkLine && (
-          <polyline points={benchmarkLine} className="equity-line equity-line--benchmark" />
-        )}
-        <polyline points={strategyLine} className="equity-line" />
-      </svg>
-      <div className="equity-chart-legend">
-        <span className="equity-legend-item">
-          <i className="equity-legend-swatch equity-legend-swatch--strategy" />
-          策略 {fmtPct(points.at(-1)?.returnPct ?? null)}
-        </span>
-        {benchmark && (
-          <span className="equity-legend-item">
-            <i className="equity-legend-swatch equity-legend-swatch--benchmark" />
-            {benchmark.name} {fmtPct(benchmark.finalReturnPct)}
-          </span>
-        )}
-      </div>
-      <div className="equity-chart-axis">
-        <span>{fmtTradeDate(points[0]?.tradeDate ?? null)}</span>
-        <span className={returnClass(points.at(-1)?.returnPct ?? null)}>
-          {fmtPct(points.at(-1)?.returnPct ?? null)}
-        </span>
-        <span>{fmtTradeDate(points.at(-1)?.tradeDate ?? null)}</span>
-      </div>
     </div>
   );
 }

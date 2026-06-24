@@ -1,14 +1,21 @@
 import { ETF_POOL_19 } from '../etf/pool.js';
-import { buildEtfTailPickCandidate } from '../etf/rules.js';
+import {
+  buildEtfTailPickCandidate,
+  type EtfTailPickCandidate,
+} from '../etf/rules.js';
+import type { OhlcvBar } from '../market/indicators.js';
 import { fetchIntradayQuotes } from '../market/free/intraday-quote.js';
+import { fetchDailyKlinesByTencentCode } from '../market/free/tencent.js';
 import { getDailyQuote } from '../market/services.js';
 import {
   hasLocalEtfDailyCsv,
   LOCAL_ETF_LOAD_ALL_DAYS,
 } from '../market/local-csv/etf-daily.js';
 import {
+  barsWithClose,
   buildTradeGroups,
-  createFixedHoldTrade,
+  calcReturnPct,
+  findBarIndex,
   summarizeTrades,
 } from './engine.js';
 import {
@@ -20,6 +27,7 @@ import {
 import type {
   BacktestCurrentDecision,
   BacktestEquityPoint,
+  BacktestExitReason,
   BacktestRunResult,
   BacktestSignal,
   BacktestSymbolSummary,
@@ -30,25 +38,208 @@ export type RunEtfBacktestInput = {
   days?: number;
   startDate?: string;
   endDate?: string;
+  /** @deprecated 仅作 maxHoldDays 兼容入口，ETF 回测按策略止盈止损出场 */
   holdDays?: number[];
+  maxHoldDays?: number;
+  minSettlementDays?: number;
   maxFailCount?: number;
   includeWaitPullback?: boolean;
 };
 
 const DEFAULT_DAYS = 250;
-const DEFAULT_HOLD_DAYS = [1];
-const BENCHMARK_SYMBOL = '510300';
-const BENCHMARK_NAME = '沪深300ETF';
+const DEFAULT_MAX_HOLD_DAYS = 20;
+const DEFAULT_MIN_SETTLEMENT_DAYS = 1;
+
+type BenchmarkCandidate = {
+  symbol: string;
+  name: string;
+  loadQuotes: (
+    quoteDays: number,
+  ) => Promise<Array<{ tradeDate: string; close: number | null }>>;
+};
+
+const BENCHMARK_CANDIDATES: BenchmarkCandidate[] = [
+  {
+    symbol: '000001.SH',
+    name: '上证指数',
+    loadQuotes: async (quoteDays) => {
+      const data = await fetchDailyKlinesByTencentCode(
+        'sh000001',
+        quoteDays,
+        '上证指数',
+      );
+      return data.quotes;
+    },
+  },
+  {
+    symbol: '510300',
+    name: '沪深300ETF',
+    loadQuotes: async (quoteDays) => {
+      const days = hasLocalEtfDailyCsv('510300')
+        ? LOCAL_ETF_LOAD_ALL_DAYS
+        : quoteDays;
+      const data = await getDailyQuote('510300', days);
+      return data.quotes;
+    },
+  },
+  {
+    symbol: '510050',
+    name: '上证50ETF',
+    loadQuotes: async (quoteDays) => {
+      const days = hasLocalEtfDailyCsv('510050')
+        ? LOCAL_ETF_LOAD_ALL_DAYS
+        : quoteDays;
+      const data = await getDailyQuote('510050', days);
+      return data.quotes;
+    },
+  },
+];
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
 }
 
-function normalizeHoldDays(holdDays: number[] | undefined): number[] {
-  const values = holdDays?.length ? holdDays : DEFAULT_HOLD_DAYS;
-  return [...new Set(values.map((value) => Math.max(0, Math.floor(value))))]
-    .filter((value) => Number.isFinite(value))
-    .sort((a, b) => a - b);
+function resolveMaxHoldDays(input: RunEtfBacktestInput): number {
+  if (input.maxHoldDays != null && Number.isFinite(input.maxHoldDays)) {
+    return Math.max(1, Math.floor(input.maxHoldDays));
+  }
+  const legacy = input.holdDays
+    ?.map((value) => Math.floor(value))
+    .filter((value) => Number.isFinite(value) && value >= 1);
+  if (legacy?.length) return Math.max(...legacy);
+  return DEFAULT_MAX_HOLD_DAYS;
+}
+
+function resolveMinSettlementDays(input: RunEtfBacktestInput): number {
+  if (input.minSettlementDays != null && Number.isFinite(input.minSettlementDays)) {
+    return Math.max(0, Math.floor(input.minSettlementDays));
+  }
+  return DEFAULT_MIN_SETTLEMENT_DAYS;
+}
+
+type EtfStrategyExitOptions = {
+  minSettlementDays: number;
+  maxHoldDays: number;
+  maxFailCount: number;
+  symbol: string;
+  exchangeCode: string;
+  name: string;
+  dailyTurnover: (bar: OhlcvBar) => number;
+};
+
+function createEtfStrategyTrade(
+  signal: BacktestSignal,
+  bars: OhlcvBar[],
+  entryCandidate: EtfTailPickCandidate,
+  options: EtfStrategyExitOptions,
+): BacktestTrade | null {
+  const filtered = barsWithClose(bars);
+  const entryIndex = findBarIndex(filtered, signal.tradeDate);
+  if (entryIndex < 0) return null;
+
+  const entryTakeProfit = entryCandidate.operationPlan.takeProfitPrice;
+  const minSettlement = Math.max(0, Math.floor(options.minSettlementDays));
+  const maxHold = Math.max(1, Math.floor(options.maxHoldDays));
+
+  const makeTrade = (
+    exitIndex: number,
+    exitPrice: number,
+    exitReason: BacktestExitReason,
+    exitMemo?: string,
+  ): BacktestTrade => ({
+    symbol: signal.symbol,
+    name: signal.name,
+    assetType: signal.assetType,
+    strategy: signal.strategy,
+    entryDate: signal.tradeDate,
+    entryPrice: signal.entryPrice,
+    exitDate: filtered[exitIndex].tradeDate,
+    exitPrice,
+    holdDays: entryIndex - exitIndex,
+    returnPct: calcReturnPct(signal.entryPrice, exitPrice),
+    exitReason,
+    signal: exitMemo
+      ? {
+          ...signal,
+          metadata: {
+            ...signal.metadata,
+            exitMemo,
+          },
+        }
+      : signal,
+  });
+
+  for (let index = entryIndex - minSettlement; index >= 0; index -= 1) {
+    const bar = filtered[index];
+    const prev = filtered[index + 1];
+    if (!bar?.close || !prev?.close) continue;
+
+    const holdDays = entryIndex - index;
+    const changePct = round(((bar.close - prev.close) / prev.close) * 100);
+    const currentCandidate = buildEtfTailPickCandidate({
+      symbol: options.symbol,
+      exchangeCode: options.exchangeCode,
+      name: options.name,
+      price: bar.close,
+      changePct,
+      dailyTurnover: options.dailyTurnover(bar),
+      intradayVolume: bar.vol ?? null,
+      bars: filtered.slice(index),
+    });
+    const stopPrice = currentCandidate.stopPrice;
+
+    if (stopPrice > 0 && bar.low != null && bar.low <= stopPrice) {
+      return makeTrade(index, stopPrice, 'stop_loss', `技术止损 ${stopPrice}`);
+    }
+
+    if (entryTakeProfit > 0 && bar.high != null && bar.high >= entryTakeProfit) {
+      return makeTrade(
+        index,
+        entryTakeProfit,
+        'take_profit',
+        `止盈 ${entryTakeProfit}`,
+      );
+    }
+
+    if (
+      currentCandidate.failCount > options.maxFailCount ||
+      currentCandidate.operationPlan.action === 'avoid'
+    ) {
+      return makeTrade(
+        index,
+        bar.close,
+        'signal_lost',
+        `规则失效 failCount=${currentCandidate.failCount}`,
+      );
+    }
+
+    if (holdDays >= maxHold) {
+      return makeTrade(
+        index,
+        bar.close,
+        'max_hold',
+        `达到最大持有 ${maxHold} 个交易日`,
+      );
+    }
+  }
+
+  const latest = filtered[0];
+  if (!latest?.close || entryIndex < minSettlement) return null;
+
+  return {
+    symbol: signal.symbol,
+    name: signal.name,
+    assetType: signal.assetType,
+    strategy: signal.strategy,
+    entryDate: signal.tradeDate,
+    entryPrice: signal.entryPrice,
+    exitDate: latest.tradeDate,
+    exitPrice: latest.close,
+    holdDays: entryIndex,
+    returnPct: null,
+    exitReason: 'end_of_data',
+    signal,
+  };
 }
 
 function estimateTurnover(close: number, volume: number | null): number {
@@ -125,17 +316,32 @@ async function buildBenchmark(
   dateRange: { startDate: string; endDate: string },
   days: number,
 ): Promise<BacktestRunResult['benchmark'] | undefined> {
-  const quoteDays = hasLocalEtfDailyCsv(BENCHMARK_SYMBOL)
-    ? LOCAL_ETF_LOAD_ALL_DAYS
-    : days;
-  const data = await getDailyQuote(BENCHMARK_SYMBOL, quoteDays);
-  const curve = buildBenchmarkCurve(data.quotes, dateRange);
-  return {
-    symbol: BENCHMARK_SYMBOL,
-    name: BENCHMARK_NAME,
-    curve,
-    finalReturnPct: curve.at(-1)?.returnPct ?? null,
-  };
+  const quoteDays = Math.max(days, computeKlineDaysForRange(dateRange, 10));
+
+  for (const candidate of BENCHMARK_CANDIDATES) {
+    try {
+      const quotes = await candidate.loadQuotes(quoteDays);
+      const curve = buildBenchmarkCurve(quotes, dateRange);
+      if (curve.length === 0) continue;
+      return {
+        symbol: candidate.symbol,
+        name: candidate.name,
+        curve,
+        finalReturnPct: curve.at(-1)?.returnPct ?? null,
+      };
+    } catch {
+      // try next benchmark source
+    }
+  }
+
+  return undefined;
+}
+
+function benchmarkNote(benchmark: NonNullable<BacktestRunResult['benchmark']>): string {
+  if (benchmark.symbol === '000001.SH') {
+    return `A股大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期涨跌幅。`;
+  }
+  return `A股大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益；上证指数不可用时已退回 ETF 代理。`;
 }
 
 function buildSymbolSummaries(trades: BacktestTrade[]): BacktestSymbolSummary[] {
@@ -245,12 +451,12 @@ export async function runEtfTailRulesBacktest(
     endDate: input.endDate,
     fallbackCalendarDays: input.days,
   });
-  const maxHold = normalizeHoldDays(input.holdDays).at(-1) ?? DEFAULT_HOLD_DAYS[0];
+  const maxHoldDays = resolveMaxHoldDays(input);
+  const minSettlementDays = resolveMinSettlementDays(input);
   const days =
     input.startDate || input.endDate
-      ? computeKlineDaysForRange(dateRange, 45 + maxHold)
+      ? computeKlineDaysForRange(dateRange, 45 + maxHoldDays)
       : Math.max(60, Math.floor(input.days ?? DEFAULT_DAYS));
-  const holdDays = normalizeHoldDays(input.holdDays);
   const maxFailCount = Math.max(0, Math.floor(input.maxFailCount ?? 0));
   const trades: BacktestTrade[] = [];
   const symbols: BacktestRunResult['symbols'] = [];
@@ -332,32 +538,39 @@ export async function runEtfTailRulesBacktest(
           continue;
         }
 
-        for (const holdDay of holdDays) {
-          const signal: BacktestSignal = {
-            symbol: item.symbol,
-            name: item.name,
-            assetType: 'etf',
-            strategy: 'etf-tail-rules',
-            tradeDate: bar.tradeDate,
-            entryPrice: bar.close,
-            score: 8 - candidate.failCount,
-            metadata: {
-              fixedHoldDays: holdDay,
-              status: candidate.status,
-              failCount: candidate.failCount,
-              operationAction: candidate.operationPlan.action,
-              ruleChecks: candidate.ruleChecks,
-              rsi: candidate.rsi,
-              ma5: candidate.ma5,
-              ma20: candidate.ma20,
-              ma30: candidate.ma30,
-              volumeRatio: candidate.volumeRatio,
-              estimatedTurnover: candidate.dailyTurnover,
-            },
-          };
-          const trade = createFixedHoldTrade(signal, bars, holdDay);
-          if (trade) trades.push(trade);
-        }
+        const signal: BacktestSignal = {
+          symbol: item.symbol,
+          name: item.name,
+          assetType: 'etf',
+          strategy: 'etf-tail-rules',
+          tradeDate: bar.tradeDate,
+          entryPrice: bar.close,
+          score: 8 - candidate.failCount,
+          metadata: {
+            status: candidate.status,
+            failCount: candidate.failCount,
+            operationAction: candidate.operationPlan.action,
+            ruleChecks: candidate.ruleChecks,
+            stopPrice: candidate.operationPlan.stopPrice,
+            takeProfitPrice: candidate.operationPlan.takeProfitPrice,
+            rsi: candidate.rsi,
+            ma5: candidate.ma5,
+            ma20: candidate.ma20,
+            ma30: candidate.ma30,
+            volumeRatio: candidate.volumeRatio,
+            estimatedTurnover: candidate.dailyTurnover,
+          },
+        };
+        const trade = createEtfStrategyTrade(signal, bars, candidate, {
+          minSettlementDays,
+          maxHoldDays,
+          maxFailCount,
+          symbol: item.symbol,
+          exchangeCode: item.exchangeCode,
+          name: item.name,
+          dailyTurnover,
+        });
+        if (trade) trades.push(trade);
       }
     } catch (error) {
       symbols.push({
@@ -382,18 +595,32 @@ export async function runEtfTailRulesBacktest(
     requestedDays: days,
     startDate: formatTradeDateKey(dateRange.startDate),
     endDate: formatTradeDateKey(dateRange.endDate),
-    holdDays,
+    holdDays: [maxHoldDays],
     symbols,
     trades: sortedTrades,
     metrics: summarizeTrades(sortedTrades),
     groups: buildTradeGroups(sortedTrades, [
       { key: 'all', label: '全部交易', predicate: () => true },
-      ...holdDays.map((daysValue) => ({
-        key: `hold-${daysValue}`,
-        label: `持有 ${daysValue} 个交易日`,
-        predicate: (trade: BacktestTrade) =>
-          trade.signal.metadata?.fixedHoldDays === daysValue,
-      })),
+      {
+        key: 'stop-loss',
+        label: '止损出场',
+        predicate: (trade) => trade.exitReason === 'stop_loss',
+      },
+      {
+        key: 'take-profit',
+        label: '止盈出场',
+        predicate: (trade) => trade.exitReason === 'take_profit',
+      },
+      {
+        key: 'signal-lost',
+        label: '信号失效',
+        predicate: (trade) => trade.exitReason === 'signal_lost',
+      },
+      {
+        key: 'max-hold',
+        label: '达到持有上限',
+        predicate: (trade) => trade.exitReason === 'max_hold',
+      },
       {
         key: 'buy-zone',
         label: '可关注买入区',
@@ -416,7 +643,8 @@ export async function runEtfTailRulesBacktest(
     }),
     notes: [
       `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计该区间内触发的买入信号。`,
-      `ETF 回测复用现有 8 条尾盘规则；默认按日线可验证的最早退出模拟：尾盘买入后持有 ${holdDays.join('/')} 个交易日，在卖出日收盘价退出。`,
+      `ETF 回测复用现有 8 条尾盘规则；尾盘买入后最早 T+${minSettlementDays} 起按策略出场：技术止损（20 日低 / MA30×0.97）、入场计划止盈价、规则失效，或最多持有 ${maxHoldDays} 个交易日兜底。`,
+      `A 股 ETF 多为 T+1 可卖；回测在买入后第 ${minSettlementDays} 个交易日起逐日评估上述退出条件，卖出价优先用触发的止损/止盈价，否则用当日收盘价。`,
       usedLocalCsv
         ? '历史回测优先使用本地 ETF 前复权 CSV（含真实成交额）；缺失时退回腾讯前复权日 K。'
         : '历史回测使用腾讯前复权日 K；历史成交额使用日 K 收盘价 * 成交量 * 100 估算。',
@@ -424,9 +652,8 @@ export async function runEtfTailRulesBacktest(
         ? '本地 CSV 不受“最近 N 根”限制，可覆盖更长回测区间；结束日期仍会自动限制在今天。'
         : '行情接口只能拉取“截至今天的最近 N 根日 K”，不能获取未来数据；结束日期会自动限制在今天。',
       benchmark
-        ? `大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益。`
-        : '大盘基准暂未生成，通常是 510300 行情缺失或读取失败。',
-      'T0/T1 是基金交易制度；当前只有日 K 收盘价，无法严谨模拟 T0 盘中同日卖出，因此 T0/T1 都按下一交易日收盘退出评估。',
+        ? benchmarkNote(benchmark)
+        : 'A股大盘基准暂未生成，已尝试上证指数、沪深300ETF、上证50ETF。',
       '当前尾盘决策优先使用东财实时行情，实时行情不可用时退回最新日 K。',
       input.includeWaitPullback
         ? '已纳入“等回踩”信号，并按触发日收盘价模拟入场。'

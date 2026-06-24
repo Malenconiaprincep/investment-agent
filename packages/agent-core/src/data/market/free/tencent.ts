@@ -24,6 +24,18 @@ export async function fetchDailyKlines(symbol: string, days: number) {
   if (cached) return { quotes: cached, cached: true as const };
 
   const txCode = toTencentCode(symbol);
+  return fetchDailyKlinesByTencentCode(txCode, days, symbol);
+}
+
+export async function fetchDailyKlinesByTencentCode(
+  txCode: string,
+  days: number,
+  displayCode = txCode,
+) {
+  const cacheKey = `tx:kline:${txCode}:${days}`;
+  const cached = getCached<ReturnType<typeof mapKlines>>(cacheKey);
+  if (cached) return { quotes: cached, cached: true as const };
+
   const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${txCode},day,,,${days},qfq`;
 
   const response = await safeFetch(url, undefined, {
@@ -33,7 +45,7 @@ export async function fetchDailyKlines(symbol: string, days: number) {
 
   const rows = json.data?.[txCode]?.qfqday ?? json.data?.[txCode]?.day ?? [];
   if (rows.length === 0) {
-    throw new Error(`暂无行情数据: ${symbol}`);
+    throw new Error(`暂无行情数据: ${displayCode}`);
   }
 
   const quotes = mapKlines(rows);

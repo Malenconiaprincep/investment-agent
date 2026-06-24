@@ -156,7 +156,62 @@ export async function runAgentCoreEtfJson(args: string[]): Promise<string> {
   return callAgentCoreCli('etf', args);
 }
 
+function shouldUseLocalBacktestExec(baseUrl: string): boolean {
+  if (!isLocalAgentCoreUrl(baseUrl)) return false;
+  const flag = process.env.AGENT_CORE_BACKTEST_LOCAL_EXEC?.trim();
+  if (flag === '0') return false;
+  if (flag === '1') return true;
+  return process.env.NODE_ENV === 'development';
+}
+
+async function runAgentCoreBacktestLocal(args: string[]): Promise<string> {
+  const { execFile } = await import('node:child_process');
+  const { existsSync } = await import('node:fs');
+  const { promisify } = await import('node:util');
+  const path = await import('node:path');
+  const execFileAsync = promisify(execFile);
+
+  let dir = process.cwd();
+  let agentCoreRoot = '';
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, 'packages/agent-core');
+    if (existsSync(path.join(candidate, 'package.json'))) {
+      agentCoreRoot = candidate;
+      break;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  if (!agentCoreRoot) {
+    throw new Error('未找到 packages/agent-core，请从项目根目录启动 Web');
+  }
+
+  const { stdout } = await execFileAsync(
+    'pnpm',
+    ['exec', 'tsx', 'src/cli/backtest-json.ts', ...args],
+    {
+      cwd: agentCoreRoot,
+      env: process.env,
+      maxBuffer: 20 * 1024 * 1024,
+    },
+  );
+  return stdout;
+}
+
 export async function runAgentCoreBacktestJson(args: string[]): Promise<string> {
+  const { baseUrl } = getAgentCoreConfig();
+
+  if (shouldUseLocalBacktestExec(baseUrl)) {
+    try {
+      return await runAgentCoreBacktestLocal(args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`本地回测执行失败: ${message}`);
+    }
+  }
+
   return callAgentCoreCli('backtest', args);
 }
 

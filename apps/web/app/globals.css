@@ -2075,11 +2075,54 @@ a:hover {
 }
 
 .equity-legend-swatch--strategy {
-  background: var(--accent);
+  background: #d4a017;
 }
 
 .equity-legend-swatch--benchmark {
-  background: #7c8aa5;
+  background: #7da2ff;
+}
+
+.backtest-equity-chart {
+  margin-top: 0.5rem;
+}
+
+.equity-chart-wrap {
+  position: relative;
+}
+
+.equity-chart-tooltip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  min-width: 8.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(18, 22, 30, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8125rem;
+}
+
+.equity-chart-tooltip-date {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.equity-chart-tooltip-row--strategy {
+  color: #d4a017;
+}
+
+.equity-chart-tooltip-row--benchmark {
+  color: #7da2ff;
+}
+
+.equity-chart-hint {
+  margin-top: 0.45rem;
+  font-size: 0.8125rem;
 }
 
 .equity-chart-axis {

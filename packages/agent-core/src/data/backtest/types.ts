@@ -19,10 +19,12 @@ export type BacktestSignal = {
 export type BacktestExitReason =
   | 'fixed_hold'
   | 'stop_loss'
+  | 'take_profit'
   | 'ma20_break'
   | 'trailing_stop'
   | 'signal_lost'
   | 'signal_weakened'
+  | 'max_hold'
   | 'end_of_data';
 
 export type BacktestTrade = {
