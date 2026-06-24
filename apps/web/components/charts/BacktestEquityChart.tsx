@@ -156,7 +156,10 @@ export function BacktestEquityChart({
       title: '策略',
       priceLineVisible: false,
       lastValueVisible: false,
-      crosshairMarkerVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      crosshairMarkerBorderColor: '#d4a017',
+      crosshairMarkerBackgroundColor: '#d4a017',
     });
 
     const benchmarkSeries = chart.addSeries(LineSeries, {
@@ -165,7 +168,10 @@ export function BacktestEquityChart({
       title: benchmark?.name ?? '大盘',
       priceLineVisible: false,
       lastValueVisible: false,
-      crosshairMarkerVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      crosshairMarkerBorderColor: '#7da2ff',
+      crosshairMarkerBackgroundColor: '#7da2ff',
     });
 
     const handleCrosshairMove = (param: MouseEventParams) => {
