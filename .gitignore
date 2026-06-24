@@ -34,6 +34,11 @@ apps/desktop/templates/admin-defaults.env
 apps/web/.data/
 .data/
 
+# Local market CSV datasets (user-provided, do not commit)
+packages/agent-core/data/market-csv/**
+!packages/agent-core/data/market-csv/**/
+!packages/agent-core/data/market-csv/**/.gitkeep
+
 # Logs
 *.log
 npm-debug.log*
