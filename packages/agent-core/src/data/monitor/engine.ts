@@ -9,6 +9,7 @@ import {
 } from '../market/hot-market-discovery.js';
 import { fetchIntradayQuotes, type IntradayQuote } from '../market/free/intraday-quote.js';
 import { extractSymbolsFromText } from '../market/news-enrichment.js';
+import { isLikelyLimitUp } from '../market/price-limit.js';
 import { getDailyQuote, getStockBasic } from '../market/services.js';
 import {
   formatTradeDate,
@@ -74,11 +75,6 @@ function isAShareRelevant(text: string): boolean {
   return /A股|沪深|创业板|科创板|涨停|板块|概念|[\d]{6}/.test(text) || !/股/.test(text);
 }
 
-function isLimitUp(pctChg: number, symbol: string): boolean {
-  const limit = symbol.startsWith('3') || symbol.startsWith('68') ? 19.5 : 9.5;
-  return pctChg >= limit;
-}
-
 function matchThemeInText(text: string, themes: string[]): string | null {
   const lower = text.toLowerCase();
   for (const theme of themes) {
@@ -106,6 +102,67 @@ function newsSource(item: HotNewsItem): string | null {
 function pushUniqueNews(target: HotNewsItem[], item: HotNewsItem) {
   if (target.some((existing) => newsKey(existing) === newsKey(item))) return;
   target.push(item);
+}
+
+function truncateText(text: string, max = 80): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function fmtPct(v: number): string {
+  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+function buildKlineFactor(ret20dPct: number | null): string {
+  if (ret20dPct == null) {
+    return 'K线因子：20日涨幅暂缺，继续等待红钻+动量确认';
+  }
+  if (ret20dPct >= 25) {
+    return `K线因子：20日涨幅 ${fmtPct(ret20dPct)}，短线偏热，避免追高`;
+  }
+  if (ret20dPct <= -10) {
+    return `K线因子：20日涨幅 ${fmtPct(ret20dPct)}，趋势仍弱，仅跟踪不抢跑`;
+  }
+  return `K线因子：20日涨幅 ${fmtPct(ret20dPct)}，尚未明显透支`;
+}
+
+function buildFactorSummary(input: {
+  kind: 'pre_move' | 'news_catalyst' | 'early_move' | 'watchlist_surge';
+  ctx: SymbolContext;
+  news?: HotNewsItem;
+  theme?: string | null;
+  pct?: number | null;
+}): string {
+  const parts: string[] = [];
+  if (input.news) parts.push(`新闻因子：${truncateText(input.news.title)}`);
+  if (input.theme) parts.push(`题材因子：命中 ${input.theme}`);
+
+  if (input.pct != null) {
+    if (input.kind === 'pre_move') {
+      parts.push(`盘口因子：当前涨幅 ${fmtPct(input.pct)}，新闻出现但股价尚未启动`);
+    } else if (input.kind === 'early_move') {
+      parts.push(`盘口因子：当前涨幅 ${fmtPct(input.pct)}，处于温和启动区间`);
+    } else if (input.kind === 'watchlist_surge') {
+      parts.push(`盘口因子：自选标的盘中波动 ${fmtPct(input.pct)}，需要复核持仓计划`);
+    } else {
+      parts.push(`盘口因子：当前涨幅 ${fmtPct(input.pct)}，未触及涨停过滤线`);
+    }
+  } else {
+    parts.push('盘口因子：暂无实时涨幅，等待盘口确认');
+  }
+
+  parts.push(buildKlineFactor(input.ctx.ret20dPct));
+
+  if (input.kind === 'pre_move') {
+    parts.push('操作结论：未涨停且未大幅追高，纳入潜伏买入候选');
+  } else if (input.kind === 'early_move') {
+    parts.push('操作结论：未涨停，先自动跟踪，等红钻+动量达标再买入模拟盘');
+  } else if (input.kind === 'watchlist_surge') {
+    parts.push('操作结论：自选池异动提醒，按原计划复核，不追涨停板');
+  } else {
+    parts.push('操作结论：记录催化并自动跟踪，过滤已涨停或接近涨停标的');
+  }
+
+  return parts.join('；');
 }
 
 function attachNewsByKnownNames(
@@ -395,12 +452,22 @@ export async function runMonitorPoll(options?: {
 
   for (const ctx of contexts) {
     const pct = ctx.quote?.pctChg ?? null;
+    const limitBlocked =
+      marketOpen &&
+      isLikelyLimitUp({
+        symbol: ctx.symbol,
+        name: ctx.name,
+        pctChg: pct,
+        price: ctx.quote?.price,
+        prevClose: ctx.quote?.prevClose,
+      });
+    if (limitBlocked) continue;
 
     for (const news of ctx.newsItems) {
       if (isNoiseNewsTitle(news.title)) continue;
       const theme = matchThemeInText(news.title, hotThemes);
 
-      if (marketOpen && pct != null && pct >= -0.5 && pct <= 2.5 && !isLimitUp(pct, ctx.symbol)) {
+      if (marketOpen && pct != null && pct >= -0.5 && pct <= 2.5) {
         const notChased = ctx.ret20dPct == null || ctx.ret20dPct < 25;
         if (notChased) {
           await createAlertIfNew({
@@ -409,7 +476,13 @@ export async function runMonitorPoll(options?: {
             symbol: ctx.symbol,
             name: ctx.name,
             title: `【潜伏】${ctx.name} 新闻催化，股价尚未启动`,
-            summary: `最新资讯提及 ${ctx.name}（${ctx.symbol}），当前涨幅 ${pct.toFixed(2)}%，20日涨幅 ${ctx.ret20dPct ?? '—'}%。适合关注是否提前布局，而非追涨已大涨标的。`,
+            summary: buildFactorSummary({
+              kind: 'pre_move',
+              ctx,
+              news,
+              theme,
+              pct,
+            }),
             newsTitle: news.title,
             newsUrl: news.url,
             pctChg: pct,
@@ -429,7 +502,13 @@ export async function runMonitorPoll(options?: {
         symbol: ctx.symbol,
         name: ctx.name,
         title: `【资讯】${ctx.name} 出现新催化`,
-        summary: `新闻：${news.title.slice(0, 80)}${pct != null ? `；当前涨幅 ${pct.toFixed(2)}%` : ''}`,
+        summary: buildFactorSummary({
+          kind: 'news_catalyst',
+          ctx,
+          news,
+          theme,
+          pct,
+        }),
         newsTitle: news.title,
         newsUrl: news.url,
         pctChg: pct,
@@ -451,7 +530,6 @@ export async function runMonitorPoll(options?: {
       theme &&
       pct >= 1.5 &&
       pct <= 7 &&
-      !isLimitUp(pct, ctx.symbol) &&
       notExtreme
     ) {
       await createAlertIfNew({
@@ -460,7 +538,12 @@ export async function runMonitorPoll(options?: {
         symbol: ctx.symbol,
         name: ctx.name,
         title: `【启动】${ctx.name} 主线 "${theme}" 下温和走强`,
-        summary: `涨幅 ${pct.toFixed(2)}%，20日 ${ctx.ret20dPct ?? '—'}%，处于「有催化、尚未极端」区间。`,
+        summary: buildFactorSummary({
+          kind: 'early_move',
+          ctx,
+          theme,
+          pct,
+        }),
         pctChg: pct,
         ret20dPct: ctx.ret20dPct,
         theme,
@@ -477,7 +560,12 @@ export async function runMonitorPoll(options?: {
         symbol: ctx.symbol,
         name: ctx.name,
         title: `【自选】${ctx.name} 盘中波动 ${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`,
-        summary: `自选池标的出现明显波动，请结合持仓计划与最新资讯判断。`,
+        summary: buildFactorSummary({
+          kind: 'watchlist_surge',
+          ctx,
+          theme,
+          pct,
+        }),
         pctChg: pct,
         ret20dPct: ctx.ret20dPct,
         tradeDate,

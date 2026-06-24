@@ -152,6 +152,10 @@ export async function runAgentCorePaperJson(args: string[]): Promise<string> {
   return callAgentCoreCli('paper', args);
 }
 
+export async function runAgentCoreEtfJson(args: string[]): Promise<string> {
+  return callAgentCoreCli('etf', args);
+}
+
 export async function proxyAgentCoreStream(
   path: '/stream/research' | '/stream/screen' | '/stream/committee',
   body: unknown,

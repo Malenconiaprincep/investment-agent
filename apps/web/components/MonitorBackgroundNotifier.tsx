@@ -23,6 +23,7 @@ type MonitorRecommendation = {
   symbol: string | null;
   name: string | null;
   status: string;
+  reason: string;
 };
 
 type MonitorPaperAction = {
@@ -74,7 +75,7 @@ function seedAndCollectNewKeys(
         notifications.push({
           key,
           title: `自动跟踪 · ${item.name ?? item.symbol}`,
-          body: statusText,
+          body: `${statusText}：${item.reason}`.slice(0, 120),
         });
       }
     }

@@ -30,43 +30,45 @@ function alert(overrides: Partial<MonitorAlert>): MonitorAlert {
 
 describe('monitor paper bridge rules', () => {
   it('classifies urgent pre-move alerts as auto-buy candidates', () => {
-    expect(classifyMonitorAlert(alert({}))).toEqual({
+    const result = classifyMonitorAlert(alert({}));
+    expect(result).toMatchObject({
       level: 'auto_buy',
       status: 'recommended',
-      reason: '新闻催化且涨幅尚小，进入消息雷达自动买入候选',
     });
+    expect(result.reason).toContain('新闻催化且涨幅尚小');
+    expect(result.reason).toContain('新闻因子');
+    expect(result.reason).toContain('K线因子');
   });
 
   it('classifies symbol alerts that are not pre-move as watch recommendations', () => {
-    expect(
-      classifyMonitorAlert(
-        alert({
-          alertType: 'early_move',
-          severity: 'watch',
-        }),
-      ),
-    ).toEqual({
+    const result = classifyMonitorAlert(
+      alert({
+        alertType: 'early_move',
+        severity: 'watch',
+      }),
+    );
+    expect(result).toMatchObject({
       level: 'watch',
       status: 'recommended',
-      reason: '消息雷达识别，将自动加入自选并等待买入信号',
     });
+    expect(result.reason).toContain('消息雷达识别');
+    expect(result.reason).toContain('盘口因子');
   });
 
   it('does not auto-buy theme-only alerts without a symbol', () => {
-    expect(
-      classifyMonitorAlert(
-        alert({
-          alertType: 'theme_ignite',
-          severity: 'info',
-          symbol: null,
-          name: null,
-        }),
-      ),
-    ).toEqual({
+    const result = classifyMonitorAlert(
+      alert({
+        alertType: 'theme_ignite',
+        severity: 'info',
+        symbol: null,
+        name: null,
+      }),
+    );
+    expect(result).toMatchObject({
       level: 'info',
       status: 'recommended',
-      reason: '消息记录，不触发自动交易',
     });
+    expect(result.reason).toContain('消息记录');
   });
 
   it('dedupes monitor buys by alert id', () => {

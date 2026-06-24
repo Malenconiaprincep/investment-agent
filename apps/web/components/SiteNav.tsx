@@ -27,6 +27,11 @@ const NAV: NavItem[] = [
       pathname === '/paper' || pathname.startsWith('/paper/'),
   },
   {
+    href: '/etf',
+    label: 'ETF',
+    isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
+  },
+  {
     href: '/research',
     label: '单股分析',
     isActive: (pathname) =>

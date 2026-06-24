@@ -29,6 +29,7 @@
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
     "monitor:poll": "tsx src/cli/scheduled-monitor.ts",
     "monitor:watch": "tsx src/cli/monitor-watch.ts",
+    "etf:tail-pick": "tsx src/cli/etf-json.ts tail-pick",
     "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
     "watchlist:weekly": "tsx src/cli/scheduled-weekly-review.ts",
     "paper:schedule": "tsx src/cli/scheduled-paper.ts",

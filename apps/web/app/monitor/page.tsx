@@ -549,7 +549,7 @@ function statusLabel(status: MonitorPaperRecommendation['status']) {
 
 function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
   const { setOpen } = useWatchlistPanel();
-  const statusNote = item.error ?? (item.status === 'tracked' ? item.reason : item.skipReason);
+  const statusNote = item.error ?? item.skipReason ?? item.reason;
 
   return (
     <article className={`monitor-stock-card monitor-stock-card--compact monitor-recommendation monitor-recommendation--${item.level}`}>

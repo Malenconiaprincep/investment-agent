@@ -1,5 +1,7 @@
 import type { MonitorAlert } from '../monitor/store.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
+import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
+import { isLikelyLimitUp } from '../market/price-limit.js';
 import { getDailyQuote } from '../market/services.js';
 import { addWatchlistItem, listWatchlistItems } from '../watchlist/store.js';
 import {
@@ -48,6 +50,38 @@ function fmtPctPoint(v: number): string {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
+function truncateText(text: string, max = 64): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function buildKlineReason(alert: MonitorAlert): string {
+  if (alert.ret20dPct == null) {
+    return 'K线因子：20日涨幅暂缺，等待红钻+动量确认';
+  }
+  if (alert.ret20dPct >= 25) {
+    return `K线因子：20日 ${fmtPctPoint(alert.ret20dPct)}，短线偏热，避免追高`;
+  }
+  if (alert.ret20dPct <= -10) {
+    return `K线因子：20日 ${fmtPctPoint(alert.ret20dPct)}，趋势仍弱，仅跟踪观察`;
+  }
+  return `K线因子：20日 ${fmtPctPoint(alert.ret20dPct)}，未明显透支`;
+}
+
+function buildRecommendationReason(alert: MonitorAlert, base: string): string {
+  const factors: string[] = [];
+  if (alert.newsTitle) {
+    factors.push(`新闻因子：${truncateText(alert.newsTitle)}`);
+  }
+  if (alert.theme) {
+    factors.push(`题材因子：命中 ${alert.theme}`);
+  }
+  if (alert.pctChg != null) {
+    factors.push(`盘口因子：当日 ${fmtPctPoint(alert.pctChg)}`);
+  }
+  factors.push(buildKlineReason(alert));
+  return `${base}。${factors.join('；')}`;
+}
+
 export function buildMonitorEventPoints(alert: MonitorAlert): string[] {
   const points: string[] = [];
   const typeLabel = ALERT_EVENT_LABEL[alert.alertType];
@@ -74,6 +108,9 @@ export function buildMonitorEventPoints(alert: MonitorAlert): string[] {
       points.push(title.length > 32 ? `${title.slice(0, 32)}…` : title);
     }
   }
+
+  if (alert.newsTitle) points.push('新闻因子');
+  if (alert.ret20dPct != null) points.push('K线因子');
 
   return [...new Set(points)];
 }
@@ -103,7 +140,10 @@ export function classifyMonitorAlert(
     return {
       level: 'auto_buy',
       status: 'recommended',
-      reason: '新闻催化且涨幅尚小，进入消息雷达自动买入候选',
+      reason: buildRecommendationReason(
+        alert,
+        '新闻催化且涨幅尚小，进入消息雷达自动买入候选',
+      ),
     };
   }
 
@@ -116,14 +156,17 @@ export function classifyMonitorAlert(
     return {
       level: 'watch',
       status: 'recommended',
-      reason: '消息雷达识别，将自动加入自选并等待买入信号',
+      reason: buildRecommendationReason(
+        alert,
+        '消息雷达识别，将自动加入自选并等待买入信号',
+      ),
     };
   }
 
   return {
     level: 'info',
     status: 'recommended',
-    reason: '消息记录，不触发自动交易',
+    reason: buildRecommendationReason(alert, '消息记录，不触发自动交易'),
   };
 }
 
@@ -187,6 +230,61 @@ async function checkMomentumBuyReady(symbol: string, name: string) {
   };
 }
 
+async function getLimitUpBlockReason(
+  symbol: string,
+  name: string,
+): Promise<string | null> {
+  try {
+    const quote = await fetchIntradayQuote(symbol);
+    if (
+      quote &&
+      isLikelyLimitUp({
+        symbol,
+        name: quote.name || name,
+        pctChg: quote.pctChg,
+        price: quote.price,
+        prevClose: quote.prevClose,
+      })
+    ) {
+      return `已接近涨停（当前 ${fmtPctPoint(quote.pctChg)}），买入可操作性差，跳过自动跟踪/买入`;
+    }
+  } catch {
+    // 实时行情不可用时用日线涨幅兜底。
+  }
+
+  try {
+    const daily = await getDailyQuote(symbol, 2);
+    if (
+      isLikelyLimitUp({
+        symbol,
+        name,
+        pctChg: daily.latestPctChg,
+      })
+    ) {
+      return `最新日线已接近涨停（${daily.latestPctChg != null ? fmtPctPoint(daily.latestPctChg) : '涨停'}），跳过自动跟踪/买入`;
+    }
+  } catch {
+    // 无法确认时不阻断，保留后续动量检查。
+  }
+
+  return null;
+}
+
+async function skipIfLimitUp(
+  alert: MonitorAlert,
+  recommendation: MonitorPaperRecommendation,
+): Promise<boolean> {
+  if (!alert.symbol || !alert.name || recommendation.level === 'info') return false;
+
+  const reason = await getLimitUpBlockReason(alert.symbol, alert.name);
+  if (!reason) return false;
+
+  recommendation.status = 'skipped';
+  recommendation.skipReason = reason;
+  recommendation.reason = `${recommendation.reason}。风控结论：${reason}`;
+  return true;
+}
+
 async function maybeAutoTrack(input: {
   alert: MonitorAlert;
   recommendation: MonitorPaperRecommendation;
@@ -207,7 +305,7 @@ async function maybeAutoTrack(input: {
 
     if (recommendation.status !== 'bought') {
       recommendation.status = 'tracked';
-      recommendation.reason = '已加入自选，动量达标后自动买入模拟盘';
+      recommendation.reason = `已加入自选，等待红钻+动量达标后自动买入模拟盘。触发依据：${recommendation.reason}`;
     }
 
     return {
@@ -216,7 +314,7 @@ async function maybeAutoTrack(input: {
       symbol: alert.symbol,
       name: alert.name,
       alertId: alert.id,
-      reason: '消息雷达自动加入自选',
+      reason: recommendation.reason,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -345,7 +443,7 @@ async function executeMonitorBuy(input: {
   });
 
   recommendation.status = 'bought';
-  recommendation.reason = '动量达标，已自动买入模拟盘';
+  recommendation.reason = `动量达标，已自动买入模拟盘。触发依据：${entryMemo || alert.summary}`;
   recommendation.shares = result.trade.shares;
   recommendation.price = result.trade.price;
   recommendation.tradeId = result.trade.id;
@@ -433,6 +531,9 @@ async function autoBuyMonitorWatchlist(tradeDate: string): Promise<MonitorPaperA
 
   for (const item of monitorItems) {
     if (held.has(item.symbol)) continue;
+    const limitUpReason = await getLimitUpBlockReason(item.symbol, item.name);
+    if (limitUpReason) continue;
+
     if (
       trades.some(
         (trade) =>
@@ -592,6 +693,12 @@ export async function runMonitorPaperBridge(input: {
   const paperActions: MonitorPaperAction[] = [];
 
   for (let i = 0; i < input.alerts.length; i++) {
+    const skippedByLimitUp = await skipIfLimitUp(
+      input.alerts[i],
+      recommendations[i],
+    );
+    if (skippedByLimitUp) continue;
+
     const trackAction = await maybeAutoTrack({
       alert: input.alerts[i],
       recommendation: recommendations[i],

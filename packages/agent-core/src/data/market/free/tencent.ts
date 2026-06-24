@@ -9,6 +9,7 @@ type KlineResponse = {
     string,
     {
       qfqday?: Array<[string, string, string, string, string, string]>;
+      day?: Array<[string, string, string, string, string, string]>;
     }
   >;
 };
@@ -30,7 +31,7 @@ export async function fetchDailyKlines(symbol: string, days: number) {
   });
   const json = (await response.json()) as KlineResponse;
 
-  const rows = json.data?.[txCode]?.qfqday ?? [];
+  const rows = json.data?.[txCode]?.qfqday ?? json.data?.[txCode]?.day ?? [];
   if (rows.length === 0) {
     throw new Error(`暂无行情数据: ${symbol}`);
   }
