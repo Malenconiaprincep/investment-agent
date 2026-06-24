@@ -19,6 +19,7 @@ export type BacktestSignal = {
 
 export type BacktestExitReason =
   | 'fixed_hold'
+  | 'benchmark_fill'
   | 'stop_loss'
   | 'take_profit'
   | 'ma20_break'

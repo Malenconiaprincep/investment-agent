@@ -672,7 +672,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 2} 只 ETF 等权持有。`
+                    ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 3} 只 ETF 等权持有；不足时用沪深300兜底，大盘站上 MA20 时放宽至 MA10。`
                     : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：8 条 ETF 尾盘规则 + 买入前 ${result.config?.newsLookbackDays ?? 3} 日新闻过滤；最多同时持有 ${result.config?.maxConcurrentPositions ?? 5} 只；失效出场允许 ${result.config?.exitMaxFailCount ?? 2} 条规则失败；收益曲线按组合槽位复利。`}
                 </p>
               </div>
@@ -692,7 +692,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
               {isMomentum ? (
                 <>
                   <SummaryMetric label="调仓周期" value={`${result.config?.rebalanceDays ?? 10} 日`} />
-                  <SummaryMetric label="持仓数量" value={`Top ${result.config?.topN ?? 2}`} />
+                  <SummaryMetric label="持仓数量" value={`Top ${result.config?.topN ?? 3}`} />
                 </>
               ) : (
                 <>

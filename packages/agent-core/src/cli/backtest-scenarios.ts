@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { getDailyQuote } from '../data/market/services.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
+import { todayDateKey, formatTradeDateKey } from '../data/backtest/date-range.js';
 import type { BacktestRunResult } from '../data/backtest/types.js';
 
 type Scenario = {
@@ -63,11 +64,59 @@ const scenarios: Scenario[] = [
     startDate: '2025-07-01',
     endDate: '2025-12-31',
   },
+  // 固定历史压力场景（人工标注）
+  {
+    name: '压力测试：2022熊市段',
+    startDate: '2022-01-04',
+    endDate: '2022-10-31',
+  },
+  {
+    name: '震荡测试：2023全年',
+    startDate: '2023-01-03',
+    endDate: '2023-12-29',
+  },
+  {
+    name: '急涨急跌：2024年9-10月',
+    startDate: '2024-09-24',
+    endDate: '2024-10-31',
+  },
+  {
+    name: '单边熊市：2018全年',
+    startDate: '2018-01-02',
+    endDate: '2018-12-28',
+  },
+  {
+    name: '快速反弹：2019Q1',
+    startDate: '2019-01-02',
+    endDate: '2019-04-30',
+  },
+  {
+    name: '疫情急跌：2020年1-3月',
+    startDate: '2020-01-20',
+    endDate: '2020-03-23',
+  },
+  {
+    name: '大反弹/趋势：2020-2021',
+    startDate: '2020-03-24',
+    endDate: '2021-02-18',
+  },
+  {
+    name: '样本外验证：2025至今',
+    startDate: '2025-01-02',
+    endDate: formatTradeDateKey(todayDateKey()),
+  },
 ];
 
 const variants: Variant[] = [
   {
-    name: '最终策略 Top2/20日动量/10日调仓/MA20',
+    name: '最终策略 Top3/20日动量/10日调仓/MA20+牛市MA10',
+    topN: 3,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+  },
+  {
+    name: '旧版 Top2/20日动量/10日调仓/MA20',
     topN: 2,
     momentumDays: 20,
     rebalanceDays: 10,

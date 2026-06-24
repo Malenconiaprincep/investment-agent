@@ -55,10 +55,13 @@ type MomentumPick = {
 };
 
 const DEFAULT_DAYS = 365;
-const DEFAULT_TOP_N = 2;
+const DEFAULT_TOP_N = 3;
 const DEFAULT_MOMENTUM_DAYS = 20;
 const DEFAULT_REBALANCE_DAYS = 10;
 const DEFAULT_TREND_MA_DAYS = 20;
+const BENCHMARK_SYMBOL = '510300';
+const MARKET_REGIME_MA_DAYS = 20;
+const BULL_RELAXED_TREND_MA_DAYS = 10;
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
@@ -133,6 +136,73 @@ function scoreMomentumPick(input: {
     score: momentumPct,
     momentumPct: round(momentumPct),
     trendMa: round(trendMa, 4),
+  };
+}
+
+function resolveEffectiveTrendMaDays(input: {
+  benchmarkHistory: EtfHistory | undefined;
+  tradeDate: string;
+  trendMaDays: number;
+}): number {
+  const benchmark = input.benchmarkHistory?.byDate.get(input.tradeDate);
+  if (!benchmark || benchmark.index < MARKET_REGIME_MA_DAYS) {
+    return input.trendMaDays;
+  }
+
+  const regimeSlice = input.benchmarkHistory!.bars
+    .slice(benchmark.index - MARKET_REGIME_MA_DAYS + 1, benchmark.index + 1)
+    .map((bar) => bar.close);
+  const regimeMa = avg(regimeSlice);
+  if (regimeMa != null && benchmark.close >= regimeMa) {
+    return Math.min(input.trendMaDays, BULL_RELAXED_TREND_MA_DAYS);
+  }
+
+  return input.trendMaDays;
+}
+
+function buildBenchmarkSlotTrade(input: {
+  history: EtfHistory;
+  entryDate: string;
+  exitDate: string;
+  topN: number;
+  momentumDays: number;
+  rebalanceDays: number;
+  trendMaDays: number;
+  slotIndex: number;
+}): BacktestTrade | null {
+  const entry = input.history.byDate.get(input.entryDate);
+  const exit = input.history.byDate.get(input.exitDate);
+  if (!entry || !exit) return null;
+
+  return {
+    symbol: input.history.symbol,
+    name: input.history.name,
+    assetType: 'etf',
+    strategy: 'etf-momentum-rotation',
+    entryDate: input.entryDate,
+    entryPrice: entry.close,
+    exitDate: input.exitDate,
+    exitPrice: exit.close,
+    holdDays: Math.max(0, exit.index - entry.index),
+    returnPct: calcReturnPct(entry.close, exit.close),
+    exitReason: 'benchmark_fill',
+    signal: {
+      symbol: input.history.symbol,
+      name: input.history.name,
+      assetType: 'etf',
+      strategy: 'etf-momentum-rotation',
+      tradeDate: input.entryDate,
+      entryPrice: entry.close,
+      score: 0,
+      metadata: {
+        benchmarkFallback: true,
+        slotIndex: input.slotIndex,
+        topN: input.topN,
+        momentumDays: input.momentumDays,
+        rebalanceDays: input.rebalanceDays,
+        trendMaDays: input.trendMaDays,
+      },
+    },
   };
 }
 
@@ -235,6 +305,7 @@ function buildSymbolSummaries(trades: BacktestTrade[]): BacktestSymbolSummary[] 
 
 function buildCurrentDecisions(input: {
   histories: EtfHistory[];
+  benchmarkHistory: EtfHistory | undefined;
   topN: number;
   momentumDays: number;
   trendMaDays: number;
@@ -244,13 +315,19 @@ function buildCurrentDecisions(input: {
     .at(-1);
   if (!latestDate) return [];
 
+  const effectiveTrendMaDays = resolveEffectiveTrendMaDays({
+    benchmarkHistory: input.benchmarkHistory,
+    tradeDate: latestDate,
+    trendMaDays: input.trendMaDays,
+  });
+
   const ranked = input.histories
     .map((history) =>
       scoreMomentumPick({
         history,
         tradeDate: latestDate,
         momentumDays: input.momentumDays,
-        trendMaDays: input.trendMaDays,
+        trendMaDays: effectiveTrendMaDays,
       }),
     )
     .filter((pick): pick is MomentumPick => pick != null)
@@ -272,10 +349,10 @@ function buildCurrentDecisions(input: {
         changePct: pick?.momentumPct ?? 0,
         failCount: pick ? 0 : 1,
         passedRules: pick ? 2 : 0,
-        failedRules: pick ? [] : [`未站上 MA${input.trendMaDays} 或动量不足`],
+        failedRules: pick ? [] : [`未站上 MA${effectiveTrendMaDays} 或动量不足`],
         reason: pick
-          ? `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${input.trendMaDays}，按排名${isSelected ? '进入前' + input.topN : '未进入前' + input.topN}。`
-          : `未满足 MA${input.trendMaDays} 趋势过滤或缺少足够历史数据。`,
+          ? `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${effectiveTrendMaDays}，按排名${isSelected ? '进入前' + input.topN : '未进入前' + input.topN}。`
+          : `未满足 MA${effectiveTrendMaDays} 趋势过滤或缺少足够历史数据。`,
         dataSource: 'daily' as const,
       };
     })
@@ -341,6 +418,7 @@ export async function runEtfMomentumBacktest(
     }
   }
 
+  const benchmarkHistory = histories.find((item) => item.symbol === BENCHMARK_SYMBOL);
   const allDates = [...new Set(histories.flatMap((item) => item.bars.map((bar) => bar.tradeDate)))]
     .filter((date) => isTradeDateInRange(date, dateRange))
     .sort();
@@ -352,37 +430,56 @@ export async function runEtfMomentumBacktest(
   for (let index = 0; index < allDates.length - 1; index += rebalanceDays) {
     const entryDate = allDates[index];
     const exitDate = allDates[Math.min(index + rebalanceDays, allDates.length - 1)];
+    const effectiveTrendMaDays = resolveEffectiveTrendMaDays({
+      benchmarkHistory,
+      tradeDate: entryDate,
+      trendMaDays,
+    });
     const picks = histories
+      .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
       .map((history) =>
         scoreMomentumPick({
           history,
           tradeDate: entryDate,
           momentumDays,
-          trendMaDays,
+          trendMaDays: effectiveTrendMaDays,
         }),
       )
       .filter((pick): pick is MomentumPick => pick != null)
       .sort((a, b) => b.score - a.score)
       .slice(0, topN);
 
-    if (picks.length === 0) {
-      equityPoints.push({ tradeDate: exitDate, equity, closedTrades });
-      continue;
-    }
-
-    const periodTrades = picks
-      .map((pick) =>
-        buildTrade({
+    const periodTrades: BacktestTrade[] = [];
+    for (let slot = 0; slot < topN; slot += 1) {
+      const pick = picks[slot];
+      if (pick) {
+        const trade = buildTrade({
           pick,
           entryDate,
           exitDate,
           topN,
           momentumDays,
           rebalanceDays,
-          trendMaDays,
-        }),
-      )
-      .filter((trade): trade is BacktestTrade => trade != null);
+          trendMaDays: effectiveTrendMaDays,
+        });
+        if (trade) periodTrades.push(trade);
+        continue;
+      }
+
+      if (!benchmarkHistory) continue;
+      const benchTrade = buildBenchmarkSlotTrade({
+        history: benchmarkHistory,
+        entryDate,
+        exitDate,
+        topN,
+        momentumDays,
+        rebalanceDays,
+        trendMaDays: effectiveTrendMaDays,
+        slotIndex: slot,
+      });
+      if (benchTrade) periodTrades.push(benchTrade);
+    }
+
     const periodReturn = avg(
       periodTrades
         .map((trade) => trade.returnPct)
@@ -399,10 +496,7 @@ export async function runEtfMomentumBacktest(
     if (a.entryDate !== b.entryDate) return a.entryDate.localeCompare(b.entryDate);
     return (b.signal.score ?? 0) - (a.signal.score ?? 0);
   });
-  const benchmarkCurve = buildBenchmarkCurve(
-    histories.find((item) => item.symbol === '510300'),
-    dateRange,
-  );
+  const benchmarkCurve = buildBenchmarkCurve(benchmarkHistory, dateRange);
 
   return {
     strategy: 'etf-momentum-rotation',
@@ -440,6 +534,7 @@ export async function runEtfMomentumBacktest(
     symbolSummaries: buildSymbolSummaries(sortedTrades),
     currentDecisions: buildCurrentDecisions({
       histories,
+      benchmarkHistory,
       topN,
       momentumDays,
       trendMaDays,
@@ -456,8 +551,10 @@ export async function runEtfMomentumBacktest(
     },
     notes: [
       `ETF 动量轮动：每 ${rebalanceDays} 个交易日调仓，选择 ${momentumDays} 日涨幅最高且站上 MA${trendMaDays} 的前 ${topN} 只 ETF 等权持有。`,
+      `沪深300 站上 MA${MARKET_REGIME_MA_DAYS} 时，单只 ETF 趋势过滤放宽至 MA${BULL_RELAXED_TREND_MA_DAYS}，减少 V 型反弹踏空。`,
+      `动量标的不足 ${topN} 只时，剩余仓位用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底，避免空仓错过大盘反弹。`,
       '该策略不使用新闻过滤，避免历史新闻覆盖不足和标题情绪噪声影响回测。',
-      '收益曲线按每期入选 ETF 的等权平均收益复利计算，基准为沪深300ETF同期买入持有收益。',
+      '收益曲线按每期持仓槽位（动量 ETF + 基准兜底）的等权平均收益复利计算，基准为沪深300ETF同期买入持有收益。',
       usedLocalCsv
         ? '历史回测优先使用本地 ETF 前复权 CSV（含真实成交额）；缺失时退回腾讯前复权日 K。'
         : '历史回测使用腾讯前复权日 K。',
