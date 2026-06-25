@@ -498,6 +498,10 @@ a:hover {
   }
 }
 
+.insight-block:has(.markdown-table-wrap) {
+  grid-column: 1 / -1;
+}
+
 .insight-block-title {
   margin: 0 0 0.75rem;
   font-size: 0.9375rem;
@@ -2530,12 +2534,107 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .report-markdown {
   padding: 1.25rem 1.5rem;
   max-width: 72ch;
+}
+
+.insight-block .report-markdown,
+.memo-panel .report-markdown {
+  max-width: none;
+}
+
+.markdown-table-wrap {
+  margin: 0.75rem 0 0;
+}
+
+.report-markdown .wmde-markdown table.markdown-table,
+.report-markdown .wmde-markdown .markdown-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.report-markdown .wmde-markdown table.markdown-table th,
+.report-markdown .wmde-markdown table.markdown-table td,
+.report-markdown .wmde-markdown .markdown-table th,
+.report-markdown .wmde-markdown .markdown-table td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.7rem;
+  vertical-align: top;
+  text-align: left;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  min-width: 3.25rem;
+}
+
+.report-markdown .wmde-markdown table.markdown-table th,
+.report-markdown .wmde-markdown .markdown-table th {
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.report-markdown .wmde-markdown table.markdown-table td:first-child,
+.report-markdown .wmde-markdown .markdown-table td:first-child {
+  min-width: 8.5rem;
+  font-weight: 500;
+}
+
+.report-markdown .wmde-markdown table.markdown-table th:nth-child(2),
+.report-markdown .wmde-markdown table.markdown-table td:nth-child(2),
+.report-markdown .wmde-markdown .markdown-table th:nth-child(2),
+.report-markdown .wmde-markdown .markdown-table td:nth-child(2) {
+  min-width: 4.25rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.report-markdown .wmde-markdown table.markdown-table th:nth-child(4),
+.report-markdown .wmde-markdown table.markdown-table td:nth-child(4),
+.report-markdown .wmde-markdown table.markdown-table th:nth-child(5),
+.report-markdown .wmde-markdown table.markdown-table td:nth-child(5),
+.report-markdown .wmde-markdown table.markdown-table th:nth-child(6),
+.report-markdown .wmde-markdown table.markdown-table td:nth-child(6),
+.report-markdown .wmde-markdown .markdown-table th:nth-child(4),
+.report-markdown .wmde-markdown .markdown-table td:nth-child(4),
+.report-markdown .wmde-markdown .markdown-table th:nth-child(5),
+.report-markdown .wmde-markdown .markdown-table td:nth-child(5),
+.report-markdown .wmde-markdown .markdown-table th:nth-child(6),
+.report-markdown .wmde-markdown .markdown-table td:nth-child(6) {
+  white-space: nowrap;
+  min-width: 5.5rem;
+}
+
+.report-markdown .wmde-markdown table.markdown-table td:last-child,
+.report-markdown .wmde-markdown .markdown-table td:last-child {
+  min-width: 12rem;
+  max-width: 24rem;
+  white-space: normal;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.report-markdown .wmde-markdown table.markdown-table tr:nth-child(2n),
+.report-markdown .wmde-markdown .markdown-table tr:nth-child(2n) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.report-markdown .wmde-markdown table.markdown-table tbody tr:hover,
+.report-markdown .wmde-markdown .markdown-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .report-markdown .wmde-markdown {
@@ -2562,21 +2661,6 @@ a:hover {
   color: var(--link);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.report-markdown .wmde-markdown table {
-  display: table;
-  width: 100%;
-}
-
-.report-markdown .wmde-markdown table th,
-.report-markdown .wmde-markdown table td {
-  border: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
-}
-
-.report-markdown .wmde-markdown table tr:nth-child(2n) {
-  background: rgba(255, 255, 255, 0.02);
 }
 
 .report-markdown .wmde-markdown blockquote {

@@ -8,9 +8,16 @@ import { freeFetchJson } from './free/http.js';
 import { isIwencaiMcpConfigured } from '../../mastra/mcp/iwencai.js';
 import {
   fetchIwencaiBoardLeaderStocks,
+  fetchIwencaiBoardLeaderStocksSplit,
   fetchIwencaiConceptBoardRankings,
-  fetchIwencaiTopInflowStocks,
+  fetchIwencaiTopInflowStocksSplit,
 } from './iwencai-tail-entry.js';
+import {
+  enrichTailEntryStockPick,
+  pickBuyableTailEntryStocks,
+  splitTailEntryStocks,
+} from './tail-entry-filter.js';
+import { isRetailTradableStock } from './asset-type.js';
 
 const TTL_MS = 5 * 60 * 1000;
 const EM_UT = 'bd1d9ddb04089700cf9c0f827cacfc64';
@@ -65,6 +72,8 @@ export type TomorrowSectorPick = {
   priorityStars: number;
   logic: string;
   leaders: TailEntryStockPick[];
+  /** 已涨停，仅供观察，不建议尾盘买入 */
+  limitUpLeaders: TailEntryStockPick[];
 };
 
 export type TailEntryPlan = {
@@ -82,6 +91,8 @@ export type TailEntryOutlook = {
   hotThemes: string[];
   sectorPicks: TomorrowSectorPick[];
   topInflowStocks: TailEntryStockPick[];
+  /** 主力净流入前列但已涨停，仅供观察 */
+  limitUpInflowStocks: TailEntryStockPick[];
   plans: TailEntryPlan[];
   watchSignals: string[];
   avoidSectors: Array<{ name: string; reason: string }>;
@@ -236,25 +247,20 @@ function toStockPick(row: EmListRow): TailEntryStockPick | null {
   const symbol = String(row.f12 ?? '').trim();
   const name = String(row.f14 ?? '').trim();
   if (!/^\d{6}$/.test(symbol) || !name) return null;
+  if (!isRetailTradableStock(symbol)) return null;
 
   const pctChg = Number(row.f3 ?? 0);
   const netInflowWan = parseEmMoneyFlow(row.f62, 'wan');
-  const isLimitUp = pctChg >= 9.9;
 
-  return {
+  return enrichTailEntryStockPick({
     symbol,
     name,
     pctChg,
     netInflowWan,
-    tier: isLimitUp ? 'speculative' : netInflowWan >= 30000 ? 'first' : 'second',
-    tierLabel: isLimitUp ? '博弈' : netInflowWan >= 30000 ? '中军' : '弹性',
-    logic: isLimitUp
-      ? '今日涨停，明日或有惯性但追高风险大'
-      : netInflowWan >= 30000
-        ? '资金流入居前，板块内偏稳健'
-        : '板块内涨幅靠前，弹性较大',
-    riskNote: isLimitUp ? '已涨停，尾盘仅能排板或放弃' : undefined,
-  };
+    tier: netInflowWan >= 30000 ? 'first' : 'second',
+    tierLabel: netInflowWan >= 30000 ? '中军' : '弹性',
+    logic: '待筛选',
+  });
 }
 
 export function formatTradeDateLabel(isoDate: string): string {
@@ -380,16 +386,45 @@ export async function fetchBoardLeaderStocks(
   const cached = getCached<TailEntryStockPick[]>(cacheKey);
   if (cached) return cached;
 
-  const rows = await fetchEmList(
-    `${EM_LIST_BASE}&pn=1&pz=${limit}&po=1&fid=f3&fs=b:${boardCode}&fields=f12,f14,f3,f62`,
-  );
+  const fetchSize = Math.max(limit * 4, 16);
+  const [rowsByInflow, rowsByPct] = await Promise.all([
+    fetchEmList(
+      `${EM_LIST_BASE}&pn=1&pz=${fetchSize}&po=1&fid=f62&fs=b:${boardCode}&fields=f12,f14,f3,f62`,
+    ),
+    fetchEmList(
+      `${EM_LIST_BASE}&pn=1&pz=${fetchSize}&po=1&fid=f3&fs=b:${boardCode}&fields=f12,f14,f3,f62`,
+    ),
+  ]);
 
-  const picks = rows
+  const merged = [...rowsByInflow, ...rowsByPct]
     .map(toStockPick)
     .filter((item): item is TailEntryStockPick => item != null);
 
+  const picks = pickBuyableTailEntryStocks(merged, limit);
+
   setCached(cacheKey, picks, TTL_MS);
   return picks;
+}
+
+export async function fetchBoardLeaderStocksWithLimitUp(
+  boardCode: string,
+  limit = 5,
+): Promise<{ buyable: TailEntryStockPick[]; limitUp: TailEntryStockPick[] }> {
+  const fetchSize = Math.max(limit * 4, 16);
+  const [rowsByInflow, rowsByPct] = await Promise.all([
+    fetchEmList(
+      `${EM_LIST_BASE}&pn=1&pz=${fetchSize}&po=1&fid=f62&fs=b:${boardCode}&fields=f12,f14,f3,f62`,
+    ),
+    fetchEmList(
+      `${EM_LIST_BASE}&pn=1&pz=${fetchSize}&po=1&fid=f3&fs=b:${boardCode}&fields=f12,f14,f3,f62`,
+    ),
+  ]);
+
+  const merged = [...rowsByInflow, ...rowsByPct]
+    .map(toStockPick)
+    .filter((item): item is TailEntryStockPick => item != null);
+
+  return splitTailEntryStocks(merged, limit);
 }
 
 export async function fetchTopMainInflowStocks(
@@ -400,15 +435,28 @@ export async function fetchTopMainInflowStocks(
   if (cached) return cached;
 
   const rows = await fetchEmList(
-    `${EM_LIST_BASE}&pn=1&pz=${limit}&po=1&fid=f62&fs=m:1+t:2,m:0+t:6&fields=f12,f14,f3,f62`,
+    `${EM_LIST_BASE}&pn=1&pz=${Math.max(limit * 3, 24)}&po=1&fid=f62&fs=m:1+t:2,m:0+t:6&fields=f12,f14,f3,f62`,
   );
 
-  const picks = rows
-    .map(toStockPick)
-    .filter((item): item is TailEntryStockPick => item != null);
+  const picks = pickBuyableTailEntryStocks(
+    rows
+      .map(toStockPick)
+      .filter((item): item is TailEntryStockPick => item != null),
+    limit,
+  );
 
   setCached(cacheKey, picks, TTL_MS);
   return picks;
+}
+
+async function fetchTopMainInflowStocksSplit(limit = 10) {
+  const rows = await fetchEmList(
+    `${EM_LIST_BASE}&pn=1&pz=${Math.max(limit * 3, 24)}&po=1&fid=f62&fs=m:1+t:2,m:0+t:6&fields=f12,f14,f3,f62`,
+  );
+  const merged = rows
+    .map(toStockPick)
+    .filter((item): item is TailEntryStockPick => item != null);
+  return splitTailEntryStocks(merged, limit);
 }
 
 function buildPlans(
@@ -497,8 +545,13 @@ export async function buildTailEntryOutlook(
 async function assembleTailEntryOutlook(
   input: BuildTailEntryOutlookInput,
   boards: ConceptBoard[],
-  topInflowStocks: TailEntryStockPick[],
-  fetchBoardLeaders: (boardCode: string, limit: number) => Promise<TailEntryStockPick[]>,
+  fetchTopInflowSplit: (
+    limit: number,
+  ) => Promise<{ buyable: TailEntryStockPick[]; limitUp: TailEntryStockPick[] }>,
+  fetchBoardLeadersSplit: (
+    boardCode: string,
+    limit: number,
+  ) => Promise<{ buyable: TailEntryStockPick[]; limitUp: TailEntryStockPick[] }>,
   dataSource: 'eastmoney' | 'iwencai',
 ): Promise<TailEntryOutlook> {
   const hotThemes = input.hotThemes ?? [];
@@ -526,7 +579,10 @@ async function assembleTailEntryOutlook(
 
   const sectorPicks: TomorrowSectorPick[] = [];
   for (const item of focusBoards) {
-    const leaders = await fetchBoardLeaders(item.board.boardCode, 5);
+    const { buyable, limitUp } = await fetchBoardLeadersSplit(
+      item.board.boardCode,
+      4,
+    );
     sectorPicks.push({
       boardCode: item.board.boardCode,
       name: item.board.name,
@@ -535,9 +591,13 @@ async function assembleTailEntryOutlook(
       priority: item.priority,
       priorityStars: item.stars,
       logic: item.logic,
-      leaders: leaders.slice(0, 4),
+      leaders: buyable,
+      limitUpLeaders: limitUp.slice(0, 3),
     });
   }
+
+  const { buyable: topBuyable, limitUp: topLimitUp } =
+    await fetchTopInflowSplit(8);
 
   return {
     tradeDate: formatTradeDate(now),
@@ -545,8 +605,9 @@ async function assembleTailEntryOutlook(
     generatedAt: now.toISOString(),
     hotThemes,
     sectorPicks,
-    topInflowStocks: topInflowStocks.slice(0, 8),
-    plans: buildPlans(sectorPicks, topInflowStocks),
+    topInflowStocks: topBuyable,
+    limitUpInflowStocks: topLimitUp.slice(0, 6),
+    plans: buildPlans(sectorPicks, topBuyable),
     watchSignals: buildWatchSignals(sectorPicks),
     avoidSectors,
     dataSource,
@@ -556,16 +617,13 @@ async function assembleTailEntryOutlook(
 async function buildTailEntryOutlookFromEastmoney(
   input: BuildTailEntryOutlookInput = {},
 ): Promise<TailEntryOutlook> {
-  const [boards, topInflowStocks] = await Promise.all([
-    fetchConceptBoardRankings(20),
-    fetchTopMainInflowStocks(10),
-  ]);
+  const boards = await fetchConceptBoardRankings(20);
 
   return assembleTailEntryOutlook(
     input,
     boards,
-    topInflowStocks,
-    fetchBoardLeaderStocks,
+    fetchTopMainInflowStocksSplit,
+    fetchBoardLeaderStocksWithLimitUp,
     'eastmoney',
   );
 }
@@ -573,20 +631,17 @@ async function buildTailEntryOutlookFromEastmoney(
 async function buildTailEntryOutlookFromIwencai(
   input: BuildTailEntryOutlookInput = {},
 ): Promise<TailEntryOutlook> {
-  const [boards, topInflowStocks] = await Promise.all([
-    fetchIwencaiConceptBoardRankings(20),
-    fetchIwencaiTopInflowStocks(10),
-  ]);
+  const boards = await fetchIwencaiConceptBoardRankings(20);
 
-  if (boards.length === 0 && topInflowStocks.length === 0) {
-    throw new Error('问财 MCP 未返回板块或个股数据');
+  if (boards.length === 0) {
+    throw new Error('问财 MCP 未返回板块数据');
   }
 
   return assembleTailEntryOutlook(
     input,
     boards,
-    topInflowStocks,
-    (boardCode, limit) => fetchIwencaiBoardLeaderStocks(boardCode, limit),
+    fetchIwencaiTopInflowStocksSplit,
+    fetchIwencaiBoardLeaderStocksSplit,
     'iwencai',
   );
 }
@@ -636,10 +691,14 @@ export function formatTailEntryOutlookMarkdown(outlook: TailEntryOutlook): strin
   }
 
   lines.push('## 尾盘参考标的', '');
+  lines.push(
+    '> 优先列出**未涨停、尾盘仍可买入**的标的；已涨停个股单独放在下方「排板观察」，不建议作为默认介入参考。',
+    '',
+  );
 
   const grouped = outlook.sectorPicks.filter((s) => s.leaders.length > 0);
   for (const sector of grouped.slice(0, 4)) {
-    lines.push(`### ${sector.name}`, '');
+    lines.push(`### ${sector.name} · 可介入`, '');
     lines.push('| 代码 | 名称 | 涨幅 | 净流入 | 定位 | 逻辑 |');
     lines.push('|------|------|------|--------|------|------|');
     for (const stock of sector.leaders) {
@@ -649,13 +708,45 @@ export function formatTailEntryOutlookMarkdown(outlook: TailEntryOutlook): strin
   }
 
   if (outlook.topInflowStocks.length > 0) {
-    lines.push('### 全市场主力净流入前列', '');
+    lines.push('### 全市场主力净流入 · 可介入', '');
     lines.push('| 代码 | 名称 | 涨幅 | 净流入 | 定位 | 逻辑 |');
     lines.push('|------|------|------|--------|------|------|');
     for (const stock of outlook.topInflowStocks.slice(0, 6)) {
       lines.push(formatStockRow(stock));
     }
     lines.push('');
+  }
+
+  const limitUpFromSectors = outlook.sectorPicks.flatMap((s) => s.limitUpLeaders ?? []);
+  const limitUpAll = [...limitUpFromSectors, ...(outlook.limitUpInflowStocks ?? [])];
+  const limitUpSeen = new Set<string>();
+  const limitUpUnique = limitUpAll.filter((stock) => {
+    if (limitUpSeen.has(stock.symbol)) return false;
+    limitUpSeen.add(stock.symbol);
+    return true;
+  });
+
+  if (limitUpUnique.length > 0) {
+    lines.push('### 已涨停 · 排板观察（不建议默认追高）', '');
+    lines.push('| 代码 | 名称 | 涨幅 | 净流入 | 说明 |');
+    lines.push('|------|------|------|--------|------|');
+    for (const stock of limitUpUnique.slice(0, 8)) {
+      const inflow =
+        stock.netInflowWan >= 10000
+          ? `${(stock.netInflowWan / 10000).toFixed(1)} 亿`
+          : `${Math.round(stock.netInflowWan)} 万`;
+      lines.push(
+        `| ${stock.symbol} | ${stock.name} | ${stock.pctChg.toFixed(2)}% | ${inflow} | ${stock.logic} |`,
+      );
+    }
+    lines.push('');
+  }
+
+  if (grouped.length === 0 && outlook.topInflowStocks.length === 0) {
+    lines.push(
+      '_今日强势板块内普遍已涨停或接近涨停，暂无合适的尾盘可介入标的；可关注明日竞价分歧后再决策。_',
+      '',
+    );
   }
 
   if (outlook.plans.length > 0) {

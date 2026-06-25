@@ -1,0 +1,17 @@
+# 本机 crontab 示例（系统时区 Asia/Shanghai）
+# 用法：crontab -e，把下面路径改成你的项目目录
+#
+# 前提：agent-core 已配置 .env；Web 开发时另开 pnpm agent:serve + pnpm web:dev
+# 定时任务直接调 CLI，不经过 Next.js
+
+# 模拟盘 — ETF 14:30 调仓
+30 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
+
+# 模拟盘 — 股票 15:05 收盘后选股
+5 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:stock-schedule >> /tmp/paper-stock.log 2>&1
+
+# 跟踪池日快照
+35 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm watchlist:snapshot >> /tmp/watchlist.log 2>&1
+
+# 消息雷达轮询（交易时段，每 15 分钟）
+*/15 9-11,13-14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm monitor:poll >> /tmp/monitor.log 2>&1

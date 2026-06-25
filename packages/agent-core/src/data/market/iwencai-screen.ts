@@ -3,7 +3,7 @@ import {
   isIwencaiMcpConfigured,
 } from '../../mastra/mcp/iwencai.js';
 import { IWENCAI_DISCLAIMER } from './types.js';
-import { inferAssetType, isEtfSymbol, isStockSymbol } from './asset-type.js';
+import { inferAssetType, isEtfSymbol, isRetailTradableStock, isStockSymbol } from './asset-type.js';
 
 export type SectorItem = {
   name: string;
@@ -20,7 +20,7 @@ export type CandidateItem = {
 };
 
 const FALLBACK_SECTOR_QUERY = '今日概念板块涨幅排名前10';
-const FALLBACK_STOCK_QUERY = '今日A股主力净流入前20，排除ST';
+const FALLBACK_STOCK_QUERY = '今日A股主力净流入前20，排除ST，排除科创板';
 const FALLBACK_ETF_QUERY = 'A股ETF，成交额排名前15，60日涨幅靠前';
 
 function walkValues(node: unknown, out: unknown[]): void {
@@ -160,6 +160,7 @@ export function parseCandidatesFromIwencai(
     const rowText = JSON.stringify(row);
     const symbol = extractSymbol(rowText, kind);
     if (!symbol || seen.has(symbol)) continue;
+    if (kind !== 'etf' && !isRetailTradableStock(symbol)) continue;
     seen.add(symbol);
 
     const name = pickName(row) ?? symbol;
@@ -188,6 +189,7 @@ export function parseCandidatesFromIwencai(
       if (typeof item !== 'string') continue;
       const symbol = extractSymbol(item, kind);
       if (!symbol || seen.has(symbol)) continue;
+      if (kind !== 'etf' && !isRetailTradableStock(symbol)) continue;
       seen.add(symbol);
       candidates.push({
         symbol,
@@ -382,6 +384,7 @@ export async function fetchIwencaiCandidatesMerged(
       queriesUsed.push(query);
       for (const item of result.candidates) {
         if (item.assetType === 'etf' || seen.has(item.symbol)) continue;
+        if (!isRetailTradableStock(item.symbol)) continue;
         seen.add(item.symbol);
         merged.push({ ...item, assetType: 'stock' as const });
         if (merged.length >= limit) break;

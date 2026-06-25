@@ -5,6 +5,7 @@ import {
 } from '../monitor/auto-track-policy.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
+import { isRetailTradableStock } from '../market/asset-type.js';
 import { isLikelyLimitUp } from '../market/price-limit.js';
 import { getDailyQuote } from '../market/services.js';
 import { addWatchlistItem, listWatchlistItems } from '../watchlist/store.js';
@@ -238,6 +239,9 @@ async function getLimitUpBlockReason(
   symbol: string,
   name: string,
 ): Promise<string | null> {
+  if (!isRetailTradableStock(symbol)) {
+    return '科创板需开通权限，跳过自动跟踪/买入';
+  }
   try {
     const quote = await fetchIntradayQuote(symbol);
     if (

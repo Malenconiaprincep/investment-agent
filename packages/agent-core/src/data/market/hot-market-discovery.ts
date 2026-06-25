@@ -467,7 +467,8 @@ export async function discoverAutoScreenContext(options?: {
   const lookbackDays = options?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const asOfDate = options?.asOfDate?.trim();
   const isReplay = Boolean(asOfDate);
-  const excludeHint = options?.excludeSt !== false ? '，排除ST' : '';
+  const excludeHint =
+    options?.excludeSt !== false ? '，排除ST，排除科创板' : '，排除科创板';
   const userQuery = options?.userQuery?.trim();
 
   const { items: hotNews } = await fetchHotNews(20, {

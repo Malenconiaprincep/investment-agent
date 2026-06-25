@@ -13,6 +13,7 @@ import {
   discoverAutoScreenContext,
   buildEtfQueries,
 } from '../../data/market/hot-market-discovery.js';
+import { isRetailTradableStock } from '../../data/market/asset-type.js';
 import { getStockBasic } from '../../data/market/services.js';
 import { emitScreenStreamEvent } from '../../api/screen-stream-context.js';
 import { isIwencaiMcpConfigured } from '../mcp/iwencai.js';
@@ -159,9 +160,11 @@ const tailEntryOutlookSchema = z
         priorityStars: z.number(),
         logic: z.string(),
         leaders: z.array(tailEntryStockPickSchema),
+        limitUpLeaders: z.array(tailEntryStockPickSchema).optional(),
       }),
     ),
     topInflowStocks: z.array(tailEntryStockPickSchema),
+    limitUpInflowStocks: z.array(tailEntryStockPickSchema).optional(),
     plans: z.array(
       z.object({
         id: z.enum(['conservative', 'aggressive', 'speculative']),
@@ -345,6 +348,7 @@ const fetchCandidatesStep = createStep({
       }
 
       for (const item of inputData.parsed.newsSymbols) {
+        if (!isRetailTradableStock(item.symbol)) continue;
         if (candidates.some((c) => c.symbol === item.symbol)) continue;
         if (candidates.length >= fetchLimit) break;
         candidates.push({

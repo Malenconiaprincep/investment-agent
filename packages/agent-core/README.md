@@ -2,7 +2,7 @@
 
 投研 Agent 后端：Mastra 工作流、行情、Turso 持久化、问财 MCP。
 
-## HTTP 服务（Web / Cron 调用）
+## HTTP 服务（Web 调用）
 
 ```bash
 pnpm install
@@ -24,12 +24,23 @@ CLI 模块名：`watchlist` · `paper` · `reports` · `screenings` · `feedback
 
 若设置 `AGENT_CORE_TOKEN`，请求须带 `Authorization: Bearer <token>`。
 
-## 部署到 Railway / VPS
+## 本机定时任务
+
+模拟盘与其它日更任务在本机用 `crontab` 触发（见仓库根目录 `scripts/crontab.example`）：
+
+```bash
+pnpm paper:etf-schedule    # ETF 仓，建议 14:30
+pnpm paper:stock-schedule  # 股票仓，建议 15:05
+pnpm watchlist:snapshot
+pnpm monitor:poll
+```
+
+## 部署到 Railway / VPS（可选）
 
 1. Root Directory：`packages/agent-core`
 2. Start Command：`pnpm serve`（或 `tsx src/server/index.ts`）
 3. 环境变量：`.env.example` 中全部（含 `DEEPSEEK_API_KEY`、`LIBSQL_*`）
-4. 生成 `AGENT_CORE_TOKEN`，同时写入 Vercel 的 `AGENT_CORE_URL` + `AGENT_CORE_TOKEN`
+4. 生成 `AGENT_CORE_TOKEN`，写入 Web 的 `AGENT_CORE_URL` + `AGENT_CORE_TOKEN`
 
 问财 MCP 需要 Python 与 `IWENCAI_MCP_SERVER_PATH`，在独立服务器上可完整运行。
 

@@ -10,6 +10,7 @@
     { "path": "/api/cron/etf-tail-pick", "schedule": "0 6 * * 1-5" },
     { "path": "/api/cron/weekly-review", "schedule": "0 0 * * 1" },
     { "path": "/api/cron/diamond-scan", "schedule": "35 7 * * 1-5" },
+    { "path": "/api/cron/etf-paper-auto", "schedule": "30 6 * * 1-5" },
     { "path": "/api/cron/paper-auto", "schedule": "5 7 * * 1-5" }
   ]
 }

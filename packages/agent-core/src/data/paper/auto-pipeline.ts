@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
+import { isRetailTradableStock } from '../market/asset-type.js';
 import { getDailyQuote } from '../market/services.js';
 import {
   analyzeMomentum,
@@ -141,6 +142,7 @@ async function autoBuySignals(
   const held = new Set(summary.positions.map((p) => p.symbol));
 
   for (const c of candidates) {
+    if (!isRetailTradableStock(c.symbol)) continue;
     if (held.has(c.symbol)) continue;
     if (summary.positions.length + buys.length >= 5) break;
 

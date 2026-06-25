@@ -33,6 +33,8 @@
     "watchlist:snapshot": "pnpm --filter @investment-agent/agent-core watchlist:snapshot",
     "watchlist:weekly": "pnpm --filter @investment-agent/agent-core watchlist:weekly",
     "paper:schedule": "pnpm --filter @investment-agent/agent-core paper:schedule",
+    "paper:etf-schedule": "pnpm --filter @investment-agent/agent-core paper:etf-schedule",
+    "paper:stock-schedule": "pnpm --filter @investment-agent/agent-core paper:stock-schedule",
     "design:audit": "npx impeccable detect apps/web/app apps/web/components",
     "eval:all": "pnpm --filter @investment-agent/agent-core eval:all"
   },

@@ -50,6 +50,12 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(await runPaperAutoPipeline({ force }));
   }
 
+  if (command === 'stock-auto-run') {
+    const { runStockPaperAutoPipeline } = await import('../data/paper/auto-pipeline.js');
+    const force = args.includes('--force');
+    return JSON.stringify(await runStockPaperAutoPipeline({ force }));
+  }
+
   if (command === 'etf-auto-run') {
     const { runEtfPaperAutoPipeline } = await import('../data/paper/etf-paper-pipeline.js');
     const force = args.includes('--force');
@@ -88,6 +94,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|status|auto-run|etf-auto-run|trade ...',
+    'Usage: account|trades|equity|status|auto-run|stock-auto-run|etf-auto-run|trade ...',
   );
 }

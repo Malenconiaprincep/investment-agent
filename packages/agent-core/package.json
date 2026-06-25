@@ -37,6 +37,8 @@
     "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
     "watchlist:weekly": "tsx src/cli/scheduled-weekly-review.ts",
     "paper:schedule": "tsx src/cli/scheduled-paper.ts",
+    "paper:etf-schedule": "tsx src/cli/scheduled-paper.ts etf",
+    "paper:stock-schedule": "tsx src/cli/scheduled-paper.ts stock",
     "research:batch": "tsx src/cli/batch-research-json.ts",
     "setup:iwencai": "test -f vendor/iwencai-mcp/server.py || git clone --depth 1 https://github.com/lorek666/iwencai-mcp.git vendor/iwencai-mcp",
     "test:iwencai-mcp": "tsx src/scripts/test-iwencai-mcp.ts",

@@ -35,7 +35,14 @@ export function isTradingSession(date: Date = getBeijingNow()): boolean {
   return morning || afternoon;
 }
 
-/** 收盘后执行窗口：15:05 起（日 K 完整） */
+/** ETF 动量调仓窗口：14:30 起（仍在下午盘，可按盘口成交） */
+export function isEtfAutoRunWindow(date: Date = getBeijingNow()): boolean {
+  if (!isWeekday(date)) return false;
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 14 * 60 + 30;
+}
+
+/** 股票动量窗口：15:05 起（日 K 完整后再选股） */
 export function isPostMarketWindow(date: Date = getBeijingNow()): boolean {
   if (!isWeekday(date)) return false;
   const minutes = date.getHours() * 60 + date.getMinutes();
@@ -63,5 +70,11 @@ export function roundToLot(shares: number): number {
 export const TRADING_HOURS_LABEL =
   'A 股交易时段：9:30–11:30、13:00–15:00（北京时间）';
 
+export const ETF_AUTO_RUN_SCHEDULE_LABEL =
+  '每个交易日 14:30（北京时间，下午盘内）ETF 动量调仓';
+
+export const STOCK_AUTO_RUN_SCHEDULE_LABEL =
+  '每个交易日 15:05（北京时间，收盘后）股票动量选股';
+
 export const AUTO_RUN_SCHEDULE_LABEL =
-  '每个交易日 15:05（北京时间，收盘后）自动执行';
+  `${ETF_AUTO_RUN_SCHEDULE_LABEL}；${STOCK_AUTO_RUN_SCHEDULE_LABEL}`;

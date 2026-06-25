@@ -22,7 +22,7 @@ import {
 import {
   formatTradeDate,
   getBeijingNow,
-  isPostMarketWindow,
+  isEtfAutoRunWindow,
   isWeekday,
   roundToLot,
 } from './trading-calendar.js';
@@ -136,11 +136,11 @@ export async function runEtfPaperAutoPipeline(options?: {
   if (!options?.force && !isWeekday(now)) {
     return { tradeDate, skipped: true, reason: '周末非交易日' };
   }
-  if (!options?.force && !isPostMarketWindow(now)) {
+  if (!options?.force && !isEtfAutoRunWindow(now)) {
     return {
       tradeDate,
       skipped: true,
-      reason: '非收盘后窗口（ETF 调仓应在 15:05 后执行）',
+      reason: '非 ETF 调仓窗口（应在 14:30 后执行）',
     };
   }
 

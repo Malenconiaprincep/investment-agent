@@ -10,16 +10,16 @@ function checkCronAuth(request: Request) {
   return request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-/** 北京时间 15:05 = UTC 07:05（股票仓收盘后选股） */
+/** 北京时间 14:30 = UTC 06:30 */
 export async function GET(request: Request) {
   if (!checkCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const stdout = await runAgentCorePaperJson(['stock-auto-run']);
+    const stdout = await runAgentCorePaperJson(['etf-auto-run']);
     return NextResponse.json(JSON.parse(stdout));
   } catch (error) {
-    const message = error instanceof Error ? error.message : '股票模拟盘自动任务失败';
+    const message = error instanceof Error ? error.message : 'ETF 模拟盘自动任务失败';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

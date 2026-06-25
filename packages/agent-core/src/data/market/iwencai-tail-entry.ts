@@ -1,6 +1,12 @@
 import { callIwencaiTool } from '../../mastra/mcp/iwencai.js';
 import type { TailEntryStockPick } from './tail-entry-outlook.js';
 import {
+  enrichTailEntryStockPick,
+  pickBuyableTailEntryStocks,
+  splitTailEntryStocks,
+} from './tail-entry-filter.js';
+import { isRetailTradableStock } from './asset-type.js';
+import {
   extractSymbol,
   parseCandidatesFromIwencai,
   pickName,
@@ -64,27 +70,21 @@ function rowToStockPick(row: Record<string, unknown>): TailEntryStockPick | null
   const rowText = JSON.stringify(row);
   const symbol = extractSymbol(rowText);
   const name = pickName(row);
-  if (!symbol || !name) return null;
+  if (!symbol || !name || !isRetailTradableStock(symbol)) return null;
 
   const pctChg = pickPctChg(row);
   const netInflowYi = pickNetInflowYi(row);
   const netInflowWan = netInflowYi * 10000;
-  const isLimitUp = pctChg >= 9.9;
 
-  return {
+  return enrichTailEntryStockPick({
     symbol,
     name,
     pctChg,
     netInflowWan,
-    tier: isLimitUp ? 'speculative' : netInflowWan >= 30000 ? 'first' : 'second',
-    tierLabel: isLimitUp ? '博弈' : netInflowWan >= 30000 ? '中军' : '弹性',
-    logic: isLimitUp
-      ? '今日涨停，明日或有惯性但追高风险大'
-      : netInflowWan >= 30000
-        ? '问财筛选：资金流入居前'
-        : '问财筛选：板块内涨幅靠前',
-    riskNote: isLimitUp ? '已涨停，尾盘仅能排板或放弃' : undefined,
-  };
+    tier: netInflowWan >= 30000 ? 'first' : 'second',
+    tierLabel: netInflowWan >= 30000 ? '中军' : '弹性',
+    logic: '问财筛选',
+  });
 }
 
 function candidateToStockPick(input: {
@@ -100,18 +100,16 @@ function candidateToStockPick(input: {
     const raw = Number.parseFloat(inflowMatch[1]);
     netInflowWan = /亿/.test(input.thesis) ? raw * 10000 : raw;
   }
-  const isLimitUp = pctChg >= 9.9;
 
-  return {
+  return enrichTailEntryStockPick({
     symbol: input.symbol,
     name: input.name,
     pctChg,
     netInflowWan,
-    tier: isLimitUp ? 'speculative' : netInflowWan >= 30000 ? 'first' : 'second',
-    tierLabel: isLimitUp ? '博弈' : netInflowWan >= 30000 ? '中军' : '弹性',
+    tier: netInflowWan >= 30000 ? 'first' : 'second',
+    tierLabel: netInflowWan >= 30000 ? '中军' : '弹性',
     logic: input.thesis.slice(0, 80) || '问财筛选命中',
-    riskNote: isLimitUp ? '已涨停，尾盘仅能排板或放弃' : undefined,
-  };
+  });
 }
 
 async function queryIwencaiRows(
@@ -150,35 +148,58 @@ export async function fetchIwencaiConceptBoardRankings(
     .slice(0, limit);
 }
 
-export async function fetchIwencaiTopInflowStocks(
-  limit = 10,
+async function fetchIwencaiStockPicks(
+  query: string,
+  limit: number,
 ): Promise<TailEntryStockPick[]> {
   const raw = await callIwencaiTool('hithink_astock_selector', {
-    query: '今日A股主力净流入前20，排除ST',
-    limit: String(limit + 5),
+    query,
+    limit: String(limit + 8),
   });
   const rows = rowsFromQuery2Data(raw);
   const fromRows = rows
     .map(rowToStockPick)
     .filter((item): item is TailEntryStockPick => item != null);
-  if (fromRows.length > 0) return fromRows.slice(0, limit);
+  if (fromRows.length > 0) return fromRows;
+  return parseCandidatesFromIwencai(raw, limit + 8).map(candidateToStockPick);
+}
 
-  return parseCandidatesFromIwencai(raw, limit).map(candidateToStockPick);
+export async function fetchIwencaiTopInflowStocks(
+  limit = 10,
+): Promise<TailEntryStockPick[]> {
+  const picks = await fetchIwencaiStockPicks(
+    '今日A股主力净流入前20，排除ST，排除科创板',
+    limit + 8,
+  );
+  return pickBuyableTailEntryStocks(picks, limit);
+}
+
+export async function fetchIwencaiTopInflowStocksSplit(limit = 10) {
+  const picks = await fetchIwencaiStockPicks(
+    '今日A股主力净流入前20，排除ST，排除科创板',
+    limit + 8,
+  );
+  return splitTailEntryStocks(picks, limit);
 }
 
 export async function fetchIwencaiBoardLeaderStocks(
   sectorName: string,
   limit = 5,
 ): Promise<TailEntryStockPick[]> {
-  const raw = await callIwencaiTool('hithink_astock_selector', {
-    query: `${sectorName}概念，今日涨幅前5，主力净流入，排除ST`,
-    limit: String(limit + 2),
-  });
-  const rows = rowsFromQuery2Data(raw);
-  const fromRows = rows
-    .map(rowToStockPick)
-    .filter((item): item is TailEntryStockPick => item != null);
-  if (fromRows.length > 0) return fromRows.slice(0, limit);
+  const picks = await fetchIwencaiStockPicks(
+    `${sectorName}概念，今日涨幅前10，主力净流入，排除ST，排除科创板`,
+    limit + 8,
+  );
+  return pickBuyableTailEntryStocks(picks, limit);
+}
 
-  return parseCandidatesFromIwencai(raw, limit).map(candidateToStockPick);
+export async function fetchIwencaiBoardLeaderStocksSplit(
+  sectorName: string,
+  limit = 5,
+) {
+  const picks = await fetchIwencaiStockPicks(
+    `${sectorName}概念，今日涨幅前10，主力净流入，排除ST，排除科创板`,
+    limit + 8,
+  );
+  return splitTailEntryStocks(picks, limit);
 }

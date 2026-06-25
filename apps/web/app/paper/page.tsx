@@ -283,7 +283,7 @@ export default function PaperTradingPage() {
             {view.positions.length === 0 ? (
               <div className="empty-state">
                 {activeBucket === 'etf'
-                  ? 'ETF 仓暂无持仓。15:05 后自动任务会按动量轮动调仓。'
+                  ? 'ETF 仓暂无持仓。14:30 后自动任务会按动量轮动调仓（下午盘内成交）。'
                   : '暂无持仓。自动任务会在红钻信号出现时买入，也可在'}
                 {activeBucket !== 'etf' && (
                   <>
@@ -367,7 +367,7 @@ export default function PaperTradingPage() {
             <strong>成交定价：</strong>买入按卖一、卖出按买一；盘口缺失时退回最新价
           </li>
           <li>
-            <strong>ETF 仓：</strong>15:05 后 · Top4 动量轮动 · 10 日调仓 · -12% 止损 · Weak70/Bear25/Bull8
+            <strong>ETF 仓：</strong>14:30 后 · Top4 动量轮动 · 10 日调仓 · -12% 止损 · Weak70/Bear25/Bull8
           </li>
           <li>
             <strong>股票仓：</strong>15:05 后 · 红钻 + Checklist ≥4 · 单票约 15% · 硬止损 -8% / MA20 / 移动止盈

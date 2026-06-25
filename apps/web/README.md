@@ -21,25 +21,36 @@ pnpm web:dev
 
 打开 [http://localhost:3000](http://localhost:3000)
 
-## 部署架构
+## 本机定时任务（模拟盘）
 
-| 组件 | 部署位置 | 说明 |
-|------|----------|------|
-| `apps/web` | **Vercel** | 纯 Next.js，体积小，无 Mastra / tsx |
-| `packages/agent-core` | **Railway / VPS / Docker** | HTTP 服务，见 `packages/agent-core` README |
+全程在本机跑，不依赖 Vercel Cron。先保证 `pnpm agent:serve` 在跑（或 crontab 里直接调 CLI）。
 
-### Vercel 环境变量
+| 时间（北京时间） | 命令 | 说明 |
+|------------------|------|------|
+| 14:30 工作日 | `pnpm paper:etf-schedule` | ETF 动量调仓（下午盘内成交） |
+| 15:05 工作日 | `pnpm paper:stock-schedule` | 股票动量选股（收盘后） |
 
-参考 `.env.example`：
+`crontab -e` 示例（把路径改成你的项目目录，系统时区设为 Asia/Shanghai）：
 
-- `AGENT_CORE_URL`（必填）— agent-core 服务公网地址
-- `AGENT_CORE_TOKEN`（推荐）— 与后端一致的 Bearer Token
+```cron
+30 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
+5 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:stock-schedule >> /tmp/paper-stock.log 2>&1
+```
 
-Cron 仍由 Vercel 触发 `/api/cron/*`，Web 再转发到 agent-core。
-
-## 一键部署 Web（Vercel CLI）
+手动立即试跑（跳过时间窗）：
 
 ```bash
-cd apps/web
-vercel --prod
+pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts etf-auto-run --force
+pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts stock-auto-run --force
 ```
+
+日志：`packages/agent-core` 数据目录下的 `scheduled-paper.log`。
+
+## 可选：部署 Web
+
+若只需本机使用，忽略本节即可。
+
+| 组件 | 说明 |
+|------|------|
+| `apps/web` | Next.js 前端 |
+| `packages/agent-core` | HTTP 服务，见 `packages/agent-core` README |
