@@ -168,7 +168,7 @@ function buildOperationPlan(input: {
       riskPct: round(Math.max(riskPct, 0)),
       rewardPct: round(targetPct),
       positionHint: input.changePct > 1.5 ? '不追高，回落到买入区再看' : '轻仓试探，确认后再加',
-      note: '严格通过 8 条筛选；操作位仅生成待确认计划，不自动交易。',
+      note: '严格通过 8 条筛选；仅供手动参考，不自动下单。模拟盘 ETF 仓首笔仅部署约 25%。',
     };
   }
 

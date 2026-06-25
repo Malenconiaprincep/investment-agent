@@ -26,6 +26,9 @@ export const ETF_MOMENTUM_REBALANCE_DAYS = 10;
 export const ETF_MOMENTUM_STOP_LOSS_PCT = -12;
 export const ETF_MOMENTUM_STOP_COOLDOWN_DAYS = 10;
 
+/** 模拟盘 ETF 首笔建仓：总可部署资金的 25%（轻仓试探，后续调仓日可补至策略仓位） */
+export const ETF_PAPER_PROBE_DEPLOY_PCT = 0.25;
+
 export function parsePaperBucket(value: string | null | undefined): PaperBucket | null {
   if (value === 'etf' || value === 'stock') return value;
   return null;

@@ -7,8 +7,11 @@ import {
   ETF_MOMENTUM_REBALANCE_DAYS,
   ETF_MOMENTUM_STOP_COOLDOWN_DAYS,
   ETF_MOMENTUM_STOP_LOSS_PCT,
-  ETF_MOMENTUM_TOP_N,
 } from './bucket.js';
+import {
+  calcEtfPaperBuyShares,
+  countEtfTargetSlots,
+} from './etf-paper-sizing.js';
 import {
   executePaperTrade,
   getAvailableShares,
@@ -62,11 +65,11 @@ function calcEtfSlotShares(input: {
   totalEquity: number;
   deployableScale: number;
   price: number;
+  slotCount: number;
+  isProbeEntry: boolean;
+  currentMarketValue?: number;
 }): number {
-  const deployable = input.totalEquity * input.deployableScale;
-  const slotBudget = deployable / ETF_MOMENTUM_TOP_N;
-  if (slotBudget <= 0 || input.price <= 0) return 0;
-  return roundToLot(Math.floor(slotBudget / input.price));
+  return calcEtfPaperBuyShares(input);
 }
 
 async function autoStopLossEtfPositions(tradeDate: string) {
@@ -224,15 +227,25 @@ export async function runEtfPaperAutoPipeline(options?: {
     }
 
     const refreshed = await getPaperAccountSummary('etf');
-    const held = new Set(refreshed.positions.map((item) => item.symbol));
+    const slotCounts = countEtfTargetSlots(plan.targets);
 
-    for (const target of plan.targets) {
-      if (held.has(target.symbol)) continue;
-      const execution = await resolvePaperExecutionPrice(target.symbol, 'buy');
+    for (const [symbol, slotCount] of slotCounts) {
+      const target = plan.targets.find((item) => item.symbol === symbol);
+      if (!target) continue;
+
+      const existing = refreshed.positions.find((pos) => pos.symbol === symbol);
+      const isProbeEntry = !existing;
+      const execution = await resolvePaperExecutionPrice(symbol, 'buy');
+      const currentMv =
+        existing?.marketValue ??
+        (existing?.shares && execution.price ? existing.shares * execution.price : 0);
       const shares = calcEtfSlotShares({
         totalEquity: refreshed.totalValue,
         deployableScale: plan.regimeExposureScale,
         price: execution.price,
+        slotCount,
+        isProbeEntry,
+        currentMarketValue: currentMv,
       });
       if (shares < 100) continue;
       if (execution.price * shares > refreshed.account.cash) continue;
@@ -246,7 +259,13 @@ export async function runEtfPaperAutoPipeline(options?: {
         price: execution.price,
         tradeDate,
         source: 'auto',
-        note: target.isBenchmarkFill ? 'ETF 动量调仓买入（宽基槽位）' : 'ETF 动量调仓买入',
+        note: isProbeEntry
+          ? target.isBenchmarkFill
+            ? 'ETF 动量首笔轻仓（宽基槽位）'
+            : 'ETF 动量首笔轻仓'
+          : target.isBenchmarkFill
+            ? 'ETF 动量调仓加仓（宽基槽位）'
+            : 'ETF 动量调仓加仓',
         skipSessionCheck: true,
         useOrderBookPrice: false,
       });
@@ -256,7 +275,6 @@ export async function runEtfPaperAutoPipeline(options?: {
         shares,
         price: execution.price,
       });
-      held.add(target.symbol);
     }
 
     result.sells = sells;

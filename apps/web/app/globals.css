@@ -2117,6 +2117,26 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.paper-price-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.paper-th-sub {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.paper-live-tag {
+  margin-left: 0.25rem;
+  font-size: 0.625rem;
+  color: #8fd4a8;
+  vertical-align: middle;
+}
+
 .paper-equity-section {
   margin-bottom: 1.25rem;
 }

@@ -105,73 +105,83 @@ export default function PaperTradingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const bucketQuery =
-          activeBucket === 'combined' ? '' : `&bucket=${activeBucket}`;
-        const [accountRes, tradesRes, equityRes] = await Promise.all([
-          fetch('/api/paper'),
-          fetch(
-            activeBucket === 'combined'
-              ? '/api/paper/trades?limit=50'
-              : `/api/paper/trades?limit=50${bucketQuery}`,
-          ),
-          activeBucket === 'combined'
-            ? Promise.all([
-                fetch('/api/paper/equity?limit=90&bucket=etf'),
-                fetch('/api/paper/equity?limit=90&bucket=stock'),
-              ])
-            : fetch(`/api/paper/equity?limit=90${bucketQuery}`),
-        ]);
-
-        const accountJson = await accountRes.json();
-        if (!accountRes.ok) throw new Error(accountJson.error ?? '加载失败');
-        setDual(normalizeDualPaperPayload(accountJson));
-
-        if (activeBucket === 'combined' && Array.isArray(equityRes)) {
-          const [etfEquityRes, stockEquityRes] = equityRes;
-          const etfJson = await etfEquityRes.json();
-          const stockJson = await stockEquityRes.json();
-          const etfPoints = (etfJson.snapshots ?? []).map(
-            (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
-              tradeDate: s.tradeDate,
-              totalValue: s.totalValue,
-              returnPct: s.returnPct,
-            }),
-          );
-          const stockPoints = (stockJson.snapshots ?? []).map(
-            (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
-              tradeDate: s.tradeDate,
-              totalValue: s.totalValue,
-              returnPct: s.returnPct,
-            }),
-          );
-          setEquity(mergeEquityCurves(etfPoints, stockPoints));
-        } else if (!Array.isArray(equityRes)) {
-          const equityJson = await equityRes.json();
-          setEquity(
-            (equityJson.snapshots ?? []).map(
-              (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
-                tradeDate: s.tradeDate,
-                totalValue: s.totalValue,
-                returnPct: s.returnPct,
-              }),
-            ),
-          );
-        }
-
-        const tradesJson = await tradesRes.json();
-        setTrades(tradesJson.trades ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '未知错误');
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
     }
-    setLoading(true);
-    void load();
+    try {
+      const bucketQuery =
+        activeBucket === 'combined' ? '' : `&bucket=${activeBucket}`;
+      const [accountRes, tradesRes, equityRes] = await Promise.all([
+        fetch('/api/paper'),
+        fetch(
+          activeBucket === 'combined'
+            ? '/api/paper/trades?limit=50'
+            : `/api/paper/trades?limit=50${bucketQuery}`,
+        ),
+        activeBucket === 'combined'
+          ? Promise.all([
+              fetch('/api/paper/equity?limit=90&bucket=etf'),
+              fetch('/api/paper/equity?limit=90&bucket=stock'),
+            ])
+          : fetch(`/api/paper/equity?limit=90${bucketQuery}`),
+      ]);
+
+      const accountJson = await accountRes.json();
+      if (!accountRes.ok) throw new Error(accountJson.error ?? '加载失败');
+      setDual(normalizeDualPaperPayload(accountJson));
+
+      if (activeBucket === 'combined' && Array.isArray(equityRes)) {
+        const [etfEquityRes, stockEquityRes] = equityRes;
+        const etfJson = await etfEquityRes.json();
+        const stockJson = await stockEquityRes.json();
+        const etfPoints = (etfJson.snapshots ?? []).map(
+          (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
+            tradeDate: s.tradeDate,
+            totalValue: s.totalValue,
+            returnPct: s.returnPct,
+          }),
+        );
+        const stockPoints = (stockJson.snapshots ?? []).map(
+          (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
+            tradeDate: s.tradeDate,
+            totalValue: s.totalValue,
+            returnPct: s.returnPct,
+          }),
+        );
+        setEquity(mergeEquityCurves(etfPoints, stockPoints));
+      } else if (!Array.isArray(equityRes)) {
+        const equityJson = await equityRes.json();
+        setEquity(
+          (equityJson.snapshots ?? []).map(
+            (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
+              tradeDate: s.tradeDate,
+              totalValue: s.totalValue,
+              returnPct: s.returnPct,
+            }),
+          ),
+        );
+      }
+
+      const tradesJson = await tradesRes.json();
+      setTrades(tradesJson.trades ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '未知错误');
+    } finally {
+      if (!options?.silent) setLoading(false);
+    }
   }, [activeBucket]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!dual?.combined?.isTradingSession) return;
+    const timer = setInterval(() => void load({ silent: true }), 60_000);
+    return () => clearInterval(timer);
+  }, [dual?.combined?.isTradingSession, load]);
 
   const view = useMemo(() => {
     if (!dual?.etf || !dual?.stock || !dual?.combined) return null;
@@ -280,6 +290,11 @@ export default function PaperTradingPage() {
             <h3 className="pane-card-title">
               {activeBucket === 'combined' ? '全部持仓' : `${bucketLabel(activeBucket)}持仓`}
             </h3>
+            {view.isTradingSession && (
+              <p className="muted paper-price-hint">
+                交易时段现价来自东财实时行情，约每 60 秒自动刷新；非交易时段显示最近收盘价。
+              </p>
+            )}
             {!(view.positions?.length) ? (
               <div className="empty-state">
                 {activeBucket === 'etf'
@@ -305,7 +320,14 @@ export default function PaperTradingPage() {
                       <th>数量</th>
                       <th>可卖</th>
                       <th>成本</th>
-                      <th>现价</th>
+                      <th>
+                        现价
+                        {view.isTradingSession ? (
+                          <span className="paper-th-sub">实时</span>
+                        ) : (
+                          <span className="paper-th-sub">收盘</span>
+                        )}
+                      </th>
                       <th>市值</th>
                       <th>盈亏</th>
                       <th>止损</th>
@@ -332,7 +354,12 @@ export default function PaperTradingPage() {
                           <td>{p.shares}</td>
                           <td>{p.availableShares}</td>
                           <td>{p.avgCost.toFixed(2)}</td>
-                          <td>{p.latestPrice?.toFixed(2) ?? '—'}</td>
+                          <td>
+                            {p.latestPrice?.toFixed(2) ?? '—'}
+                            {'markPriceSource' in p && p.markPriceSource === 'intraday' && (
+                              <span className="paper-live-tag">实时</span>
+                            )}
+                          </td>
                           <td>{p.marketValue != null ? fmtMoney(p.marketValue) : '—'}</td>
                           <td
                             className={
@@ -367,7 +394,7 @@ export default function PaperTradingPage() {
             <strong>成交定价：</strong>买入按卖一、卖出按买一；盘口缺失时退回最新价
           </li>
           <li>
-            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · Top4 动量轮动 · 10 日调仓 · -12% 止损 · Weak70/Bear25/Bull8
+            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · 首笔轻仓 25% · 调仓日可补至策略仓位 · Top4 动量 · 10 日调仓 · -12% 止损
           </li>
           <li>
             <strong>股票仓：</strong>15:05 后 · 红钻 + Checklist ≥4 · 单票约 15% · 硬止损 -8% / MA20 / 移动止盈
@@ -385,6 +412,13 @@ export default function PaperTradingPage() {
       </div>
 
       <nav className="page-toolbar">
+        <button
+          type="button"
+          className="button button-secondary"
+          onClick={() => void load()}
+        >
+          刷新行情
+        </button>
         <OpenWatchlistPanelButton className="button button-secondary">
           跟踪池
         </OpenWatchlistPanelButton>
