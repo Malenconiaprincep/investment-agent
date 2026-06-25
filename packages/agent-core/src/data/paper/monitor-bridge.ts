@@ -3,7 +3,10 @@ import {
   evaluateAutoTrack,
   getAutoTrackMode,
 } from '../monitor/auto-track-policy.js';
-import { scanDiamondSignal } from '../market/diamond-signal.js';
+import {
+  scanDiamondSignal,
+  scanDiamondSignalHistory,
+} from '../market/diamond-signal.js';
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
 import { isRetailTradableStock } from '../market/asset-type.js';
 import { isLikelyLimitUp } from '../market/price-limit.js';
@@ -318,10 +321,23 @@ async function maybeAutoTrack(input: {
 
   try {
     const quote = await getDailyQuote(alert.symbol, 2).catch(() => null);
+    const setup =
+      decision.category === 'catalyst'
+        ? { ready: true, reason: '正向催化短观察' }
+        : await checkWatchlistEntrySetup(alert.symbol, alert.name);
+    if (!setup.ready) {
+      if (recommendation.status !== 'bought') {
+        recommendation.status = 'skipped';
+        recommendation.skipReason = setup.reason;
+        recommendation.reason = setup.reason;
+      }
+      return null;
+    }
+
     await addWatchlistItem({
       symbol: alert.symbol,
       name: alert.name,
-      reason: alert.summary.slice(0, 120),
+      reason: `${setup.reason}；${alert.summary}`.slice(0, 120),
       sourceType: 'signal',
       sourceId: alert.id,
       entryPrice: quote?.latestClose ?? undefined,
@@ -354,6 +370,52 @@ async function maybeAutoTrack(input: {
       alertId: alert.id,
       reason: message,
       error: message,
+    };
+  }
+}
+
+async function checkWatchlistEntrySetup(symbol: string, name: string): Promise<{
+  ready: boolean;
+  reason: string;
+}> {
+  try {
+    const kline = await getDailyQuote(symbol, 120);
+    const bars = kline.quotes.filter((q) => q.close != null);
+    const recentTradeDates = new Set(
+      bars.slice(0, 30).map((bar) => bar.tradeDate.replace(/-/g, '')),
+    );
+    const recentDiamond = scanDiamondSignalHistory(symbol, name, bars, 120).find(
+      (signal) => recentTradeDates.has(signal.tradeDate.replace(/-/g, '')),
+    );
+    if (recentDiamond) {
+      return {
+        ready: true,
+        reason: `近 30 日出现${recentDiamond.strength === 'red' ? '红钻' : '蓝钻'}，自动加入跟踪池`,
+      };
+    }
+
+    const latestDiamond = await scanDiamondSignal(symbol, name, 60);
+    const momentum = analyzeMomentum(symbol, name, bars, latestDiamond);
+    if (
+      momentum &&
+      momentum.trendUp &&
+      momentum.checklistScore >= MOMENTUM_MIN_CHECKLIST &&
+      (momentum.breakout || (momentum.volumeRatio != null && momentum.volumeRatio >= 1.2))
+    ) {
+      return {
+        ready: true,
+        reason: `动量升温 Checklist ${momentum.checklistScore}，等待出钻`,
+      };
+    }
+
+    return {
+      ready: false,
+      reason: '无近期红/蓝钻，动量升温条件不足，不加入跟踪池',
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      reason: `技术复核失败：${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

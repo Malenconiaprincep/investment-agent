@@ -28,7 +28,12 @@ describe('evaluateAutoTrack', () => {
   it('balanced: pre_move urgent tracks', () => {
     const result = evaluateAutoTrack({
       mode: 'balanced',
-      alert: alert({ alertType: 'pre_move', severity: 'urgent', pctChg: 1 }),
+      alert: alert({
+        alertType: 'pre_move',
+        severity: 'urgent',
+        pctChg: 1,
+        newsTitle: '公司业绩预增，净利预计大幅增长',
+      }),
     });
     expect(result.shouldTrack).toBe(true);
   });
@@ -41,16 +46,44 @@ describe('evaluateAutoTrack', () => {
     expect(result.shouldTrack).toBe(false);
   });
 
-  it('balanced: news_catalyst urgent with small move tracks', () => {
+  it('balanced: positive news_catalyst urgent with small move tracks', () => {
     const result = evaluateAutoTrack({
       mode: 'balanced',
       alert: alert({
         alertType: 'news_catalyst',
         severity: 'urgent',
         pctChg: 2,
+        newsTitle: '公司业绩预增，净利预计大幅增长',
       }),
     });
     expect(result.shouldTrack).toBe(true);
+  });
+
+  it('balanced: urgent news without positive catalyst only notifies', () => {
+    const result = evaluateAutoTrack({
+      mode: 'balanced',
+      alert: alert({
+        alertType: 'news_catalyst',
+        severity: 'urgent',
+        pctChg: 2,
+        newsTitle: '公司发布一般经营动态',
+      }),
+    });
+    expect(result.shouldTrack).toBe(false);
+  });
+
+  it('negative legal/delisting events only notify', () => {
+    const result = evaluateAutoTrack({
+      mode: 'balanced',
+      alert: alert({
+        alertType: 'news_catalyst',
+        severity: 'urgent',
+        pctChg: 2,
+        newsTitle: '股民索赔案倒计时，相关公司存在诉讼风险',
+      }),
+    });
+    expect(result.shouldTrack).toBe(false);
+    expect(result.reason).toContain('负面事件');
   });
 
   it('balanced: overheated daily pct skips', () => {

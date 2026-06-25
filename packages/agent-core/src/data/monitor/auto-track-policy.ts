@@ -20,10 +20,47 @@ const AUTO_TRACK_STATE_KEY = 'auto-track-mode';
 const OVERHEAT_DAILY_PCT = 7;
 const OVERHEAT_RET20_PCT = 30;
 const NEWS_CATALYST_MAX_PCT = 3;
+const NEGATIVE_AUTO_TRACK_KEYWORDS = [
+  '退市',
+  '索赔',
+  '诉讼',
+  '刑事',
+  '立案',
+  '处罚',
+  '调查',
+  '违规',
+  '减持',
+  '爆雷',
+  '债务逾期',
+];
+const POSITIVE_CATALYST_KEYWORDS = [
+  '业绩预增',
+  '净利预计',
+  '增长',
+  '扭亏',
+  '订单',
+  '中标',
+  '回购',
+  '增持',
+  '合作',
+  '扩产',
+  '投产',
+  '涨价',
+  '政策',
+  '获批',
+  '调研',
+  '分红',
+  '重组',
+];
+const WARM_DAILY_PCT_MIN = 3;
+const WARM_DAILY_PCT_MAX = 6.5;
+const WARM_RET20_PCT_MIN = 8;
+const WARM_RET20_PCT_MAX = 25;
 
 export type AutoTrackDecision = {
   shouldTrack: boolean;
   reason: string;
+  category?: 'warming' | 'catalyst';
 };
 
 export type AutoTrackRuleItem = {
@@ -68,6 +105,33 @@ function isOverheated(alert: MonitorAlert): string | null {
   return null;
 }
 
+function getNegativeAutoTrackReason(alert: MonitorAlert): string | null {
+  const text = [alert.name, alert.title, alert.summary, alert.newsTitle, alert.theme]
+    .filter(Boolean)
+    .join(' ');
+  const keyword = NEGATIVE_AUTO_TRACK_KEYWORDS.find((item) => text.includes(item));
+  return keyword ? `命中负面事件「${keyword}」，仅提醒不自动加池` : null;
+}
+
+function hasPositiveCatalyst(alert: MonitorAlert): boolean {
+  const text = [alert.title, alert.summary, alert.newsTitle, alert.theme]
+    .filter(Boolean)
+    .join(' ');
+  return POSITIVE_CATALYST_KEYWORDS.some((item) => text.includes(item));
+}
+
+function hasWarmMomentumHint(alert: MonitorAlert): boolean {
+  const dailyWarm =
+    alert.pctChg != null &&
+    alert.pctChg >= WARM_DAILY_PCT_MIN &&
+    alert.pctChg <= WARM_DAILY_PCT_MAX;
+  const ret20Warm =
+    alert.ret20dPct != null &&
+    alert.ret20dPct >= WARM_RET20_PCT_MIN &&
+    alert.ret20dPct <= WARM_RET20_PCT_MAX;
+  return dailyWarm || ret20Warm;
+}
+
 export function evaluateAutoTrack(input: {
   alert: MonitorAlert;
   mode: AutoTrackMode;
@@ -100,6 +164,11 @@ export function evaluateAutoTrack(input: {
     };
   }
 
+  const negative = getNegativeAutoTrackReason(alert);
+  if (negative) {
+    return { shouldTrack: false, reason: negative };
+  }
+
   const overheat = isOverheated(alert);
   if (overheat) {
     return { shouldTrack: false, reason: overheat };
@@ -107,23 +176,40 @@ export function evaluateAutoTrack(input: {
 
   if (mode === 'aggressive') {
     if (
-      alert.alertType === 'pre_move' ||
-      alert.alertType === 'early_move' ||
-      alert.alertType === 'news_catalyst' ||
-      alert.alertType === 'watchlist_surge'
+      hasPositiveCatalyst(alert) ||
+      hasWarmMomentumHint(alert) ||
+      alert.alertType === 'pre_move'
     ) {
-      return { shouldTrack: true, reason: '积极模式：符合条件的提醒自动加池' };
+      return {
+        shouldTrack: true,
+        reason: '积极模式：正向催化或升温提醒自动加池',
+        category: hasPositiveCatalyst(alert) ? 'catalyst' : 'warming',
+      };
     }
     return { shouldTrack: false, reason: '消息记录，不自动加池' };
   }
 
   // balanced (default)
   if (alert.alertType === 'pre_move' && alert.severity === 'urgent') {
-    return { shouldTrack: true, reason: '潜伏催化且涨幅尚小，自动加入跟踪池' };
+    if (!hasPositiveCatalyst(alert)) {
+      return { shouldTrack: false, reason: '潜伏提醒缺少正向催化，仅提醒' };
+    }
+    return {
+      shouldTrack: true,
+      reason: '正向潜伏催化且涨幅尚小，自动加入跟踪池',
+      category: 'catalyst',
+    };
   }
 
   if (alert.alertType === 'early_move') {
-    return { shouldTrack: true, reason: '主线温和启动，自动加入跟踪池' };
+    if (!hasWarmMomentumHint(alert)) {
+      return { shouldTrack: false, reason: '启动提醒尚未达到升温阈值，仅提醒' };
+    }
+    return {
+      shouldTrack: true,
+      reason: '主线温和启动并出现升温迹象，自动加入跟踪池',
+      category: 'warming',
+    };
   }
 
   if (alert.alertType === 'news_catalyst') {
@@ -139,7 +225,14 @@ export function evaluateAutoTrack(input: {
         reason: `新闻催化时涨幅已达 ${alert.pctChg.toFixed(2)}%，仅提醒`,
       };
     }
-    return { shouldTrack: true, reason: '高优先级新闻催化且涨幅不大，自动加池' };
+    if (!hasPositiveCatalyst(alert)) {
+      return { shouldTrack: false, reason: '新闻催化缺少正向关键词，仅提醒' };
+    }
+    return {
+      shouldTrack: true,
+      reason: '高优先级正向新闻催化且涨幅不大，自动加池',
+      category: 'catalyst',
+    };
   }
 
   return { shouldTrack: false, reason: '未满足均衡模式自动加池条件' };
@@ -150,6 +243,10 @@ export function describeAutoTrackRules(mode: AutoTrackMode): AutoTrackRuleItem[]
     {
       label: '过热过滤',
       detail: `当日涨幅 > ${OVERHEAT_DAILY_PCT}% 或 20 日 > ${OVERHEAT_RET20_PCT}% 不自动加池`,
+    },
+    {
+      label: '负面过滤',
+      detail: '退市、索赔、诉讼、刑事、处罚、爆雷等事件只提醒不自动加池',
     },
     { label: 'ST 标的', detail: '不自动加入跟踪池' },
     {
@@ -173,7 +270,7 @@ export function describeAutoTrackRules(mode: AutoTrackMode): AutoTrackRuleItem[]
     return [
       {
         label: '自动加池',
-        detail: '潜伏、资讯、启动、自选波动等个股提醒均尝试加池（仍受过热/ST 过滤）',
+        detail: '正向催化或升温提醒尝试加池（仍受负面/过热/ST 过滤）',
       },
       ...common,
     ];
@@ -182,15 +279,15 @@ export function describeAutoTrackRules(mode: AutoTrackMode): AutoTrackRuleItem[]
   return [
     {
       label: '潜伏催化',
-      detail: '高优先级 + 涨幅尚小 → 自动加池',
+      detail: '高优先级 + 正向催化 + 涨幅尚小 → 自动加池',
     },
     {
       label: '温和启动',
-      detail: '主线温和走强 → 自动加池',
+      detail: `当日 ${WARM_DAILY_PCT_MIN}%–${WARM_DAILY_PCT_MAX}% 或 20 日 ${WARM_RET20_PCT_MIN}%–${WARM_RET20_PCT_MAX}% → 自动加池候选`,
     },
     {
       label: '新闻催化',
-      detail: `仅高优先级且当日涨幅 < ${NEWS_CATALYST_MAX_PCT}% → 自动加池`,
+      detail: `高优先级 + 正向关键词 + 当日涨幅 < ${NEWS_CATALYST_MAX_PCT}% → 自动加池`,
     },
     {
       label: '自选波动',
