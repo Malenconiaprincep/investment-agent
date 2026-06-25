@@ -756,7 +756,7 @@ export async function getMonitorStatus() {
   const now = getBeijingNow();
   const tradeDate = formatTradeDate(now);
   const { getLatestMonitorPollRun } = await import('./store.js');
-  const { runMonitorPaperBridge, listRecentMonitorPaperActions, mergeMonitorPaperActionsForStatus } =
+  const { buildMonitorRecommendations, listRecentMonitorPaperActions, mergeMonitorPaperActionsForStatus } =
     await import('../paper/monitor-bridge.js');
   const { getAutoTrackSettings } = await import('./auto-track-policy.js');
   const { listWatchlistItems } = await import('../watchlist/store.js');
@@ -767,13 +767,9 @@ export async function getMonitorStatus() {
     listRecentMonitorPaperActions(20),
     listWatchlistItems(),
   ]);
-  const bridgeResult = await runMonitorPaperBridge({
-    alerts: todayAlerts,
-    tradeDate,
-    includeSells: false,
-  });
+  const recommendations = buildMonitorRecommendations(todayAlerts);
   const paperActions = mergeMonitorPaperActionsForStatus(
-    bridgeResult.paperActions,
+    [],
     recentPaperActions,
     20,
   );
@@ -786,7 +782,7 @@ export async function getMonitorStatus() {
     tradingHours: TRADING_HOURS_LABEL,
     lastRun,
     todayAlerts,
-    recommendations: bridgeResult.recommendations,
+    recommendations,
     paperActions,
     autoTrack,
     unacknowledgedCount: todayAlerts.filter((a) => !a.acknowledged).length,

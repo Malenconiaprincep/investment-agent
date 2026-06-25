@@ -245,6 +245,9 @@ export function WatchlistPanel() {
         </ul>
 
         <div className="watchlist-panel-foot">
+          <Link href="/watchlist" className="saved-link">
+            工作台
+          </Link>
           <Link href="/monitor" className="saved-link">
             消息雷达
           </Link>

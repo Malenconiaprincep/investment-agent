@@ -27,6 +27,12 @@ const NAV: NavItem[] = [
       pathname === '/paper' || pathname.startsWith('/paper/'),
   },
   {
+    href: '/watchlist',
+    label: '跟踪池',
+    isActive: (pathname) =>
+      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
+  },
+  {
     href: '/etf',
     label: 'ETF',
     isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),

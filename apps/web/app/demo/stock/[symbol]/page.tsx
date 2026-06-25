@@ -46,6 +46,10 @@ function formatDate(tradeDate: string): string {
   return `${tradeDate.slice(0, 4)}-${tradeDate.slice(4, 6)}-${tradeDate.slice(6, 8)}`;
 }
 
+function recentSignalDates(bars: KlineBar[], lookback = 30) {
+  return new Set(bars.slice(0, lookback).map((bar) => bar.tradeDate.replace(/-/g, '')));
+}
+
 export default function StockDiamondChartPage() {
   const params = useParams<{ symbol: string }>();
   const [data, setData] = useState<ChartPayload | null>(null);
@@ -82,15 +86,15 @@ export default function StockDiamondChartPage() {
         close: q.close!,
       })) ?? [];
 
+  const recentDates = recentSignalDates(bars);
   const diamonds =
-    data?.diamondHistory.map((signal) => ({
+    data?.diamondHistory.filter((signal) => recentDates.has(signal.tradeDate.replace(/-/g, ''))).map((signal) => ({
       tradeDate: signal.tradeDate,
       strength: signal.strength,
     })) ?? [];
 
   const redSignals = data?.diamondHistory.filter((s) => s.strength === 'red') ?? [];
   const latestRed = redSignals[0] ?? null;
-  const latestDiamond = data?.diamondHistory[0] ?? data?.latestDiamond ?? null;
   const stopLossPrice = data?.momentum?.stopLossPrice ?? null;
   const trailingStopPrice = data?.momentum?.trailingStopPrice ?? null;
 
@@ -123,7 +127,7 @@ export default function StockDiamondChartPage() {
           <div className="signal-legend" style={{ marginBottom: '1rem' }}>
             <span className="diamond-badge diamond-badge--red">红钻 · 真实检测</span>
             <span className="diamond-badge diamond-badge--blue">蓝钻</span>
-            <span className="muted">K 线下方标记 = 历史钻石买点（基于收盘后规则计算）</span>
+            <span className="muted">图上仅标记近 30 个交易日内的钻石信号，历史信号保留在下方列表。</span>
           </div>
 
           <div className="page-workspace page-workspace--chart">
@@ -172,8 +176,6 @@ export default function StockDiamondChartPage() {
                     bars={bars}
                     diamonds={diamonds}
                     priceLines={buildMomentumPriceLines({
-                      latestDiamondClose: latestDiamond?.close ?? null,
-                      latestDiamondStrength: latestDiamond?.strength ?? null,
                       stopLossPrice,
                       trailingStopPrice,
                     })}

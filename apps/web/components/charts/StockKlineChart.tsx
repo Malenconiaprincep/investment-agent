@@ -47,6 +47,10 @@ function toBars(quotes: ChartPayload['kline']['quotes']): KlineBar[] {
     }));
 }
 
+function recentSignalDates(bars: KlineBar[], lookback = 30) {
+  return new Set(bars.slice(0, lookback).map((bar) => bar.tradeDate.replace(/-/g, '')));
+}
+
 export function StockKlineChart({
   symbol,
   height = 220,
@@ -105,16 +109,17 @@ export function StockKlineChart({
     };
   }, [symbol, visible]);
 
+  const bars = data ? toBars(data.kline.quotes) : [];
+  const recentDates = recentSignalDates(bars);
   const diamonds: DiamondMarker[] =
-    data?.diamondHistory.map((signal) => ({
-      tradeDate: signal.tradeDate,
-      strength: signal.strength,
-    })) ?? [];
+    data?.diamondHistory
+      .filter((signal) => recentDates.has(signal.tradeDate.replace(/-/g, '')))
+      .map((signal) => ({
+        tradeDate: signal.tradeDate,
+        strength: signal.strength,
+      })) ?? [];
 
-  const latestDiamond = data?.diamondHistory[0] ?? null;
   const priceLines = buildMomentumPriceLines({
-    latestDiamondClose: showPriceLines ? (latestDiamond?.close ?? null) : null,
-    latestDiamondStrength: showPriceLines ? (latestDiamond?.strength ?? null) : null,
     stopLossPrice: showPriceLines ? (data?.momentum?.stopLossPrice ?? null) : null,
     trailingStopPrice: showPriceLines ? (data?.momentum?.trailingStopPrice ?? null) : null,
   });
@@ -126,7 +131,7 @@ export function StockKlineChart({
       {visible && error && <div className="chart-empty chart-empty--compact">{error}</div>}
       {visible && !loading && !error && data && (
         <KlineChart
-          bars={toBars(data.kline.quotes)}
+          bars={bars}
           diamonds={diamonds}
           priceLines={priceLines}
           height={height}
