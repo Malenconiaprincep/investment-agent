@@ -37,6 +37,8 @@ export type RunEtfMomentumBacktestInput = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  cashFallbackInWeakRegime?: boolean;
+  exitOnTrendBreak?: boolean;
 };
 
 type MomentumBar = {
@@ -363,6 +365,19 @@ function markPositionValue(position: SimPosition, tradeDate: string): number {
   return position.shares * bar.close;
 }
 
+function isPositionTrendBroken(
+  position: SimPosition,
+  bar: MomentumBar & { index: number },
+): boolean {
+  const maDays = Math.max(1, position.effectiveTrendMaDays);
+  if (bar.index <= position.entryIndex || bar.index < maDays - 1) return false;
+  const trendSlice = position.history.bars
+    .slice(bar.index - maDays + 1, bar.index + 1)
+    .map((item) => item.close);
+  const trendMa = avg(trendSlice);
+  return trendMa != null && bar.close < trendMa;
+}
+
 function resolveTargetSlots(input: {
   histories: EtfHistory[];
   benchmarkHistory: EtfHistory | undefined;
@@ -372,6 +387,7 @@ function resolveTargetSlots(input: {
   trendMaDays: number;
   reserveBenchmarkSlotCount?: number;
   excludedSymbols?: Set<string>;
+  allowBenchmarkFallback?: boolean;
 }): Array<{
   history: EtfHistory;
   pick?: MomentumPick;
@@ -430,7 +446,7 @@ function resolveTargetSlots(input: {
       });
       continue;
     }
-    if (input.benchmarkHistory) {
+    if (input.benchmarkHistory && input.allowBenchmarkFallback !== false) {
       slots.push({
         history: input.benchmarkHistory,
         isBenchmarkFill: true,
@@ -542,6 +558,8 @@ function simulateDailyPortfolio(input: {
   weakRegimeMaxExposure?: number;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount: number;
+  cashFallbackInWeakRegime: boolean;
+  exitOnTrendBreak: boolean;
 }): {
   trades: BacktestTrade[];
   equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
@@ -598,6 +616,13 @@ function simulateDailyPortfolio(input: {
     const scheduleVol = benchmarkBarForSchedule
       ? computeAnnualizedVolPct(input.benchmarkHistory, benchmarkBarForSchedule.index)
       : null;
+    const dailyWeakRegime = input.exitOnTrendBreak
+      ? isWeakRegime({
+          benchmarkHistory: input.benchmarkHistory,
+          tradeDate,
+          momentumDays: input.momentumDays,
+        })
+      : false;
     const requiredRebalanceDays = input.rebalanceDays;
     const isRebalanceDay = daysSinceRebalance >= requiredRebalanceDays;
 
@@ -645,6 +670,30 @@ function simulateDailyPortfolio(input: {
         continue;
       }
 
+      if (dailyWeakRegime && isPositionTrendBroken(position, bar)) {
+        trades.push(
+          closeSimPosition({
+            position,
+            exitDate: tradeDate,
+            exitPrice: bar.close,
+            exitReason: 'ma20_break',
+            topN: input.topN,
+            momentumDays: input.momentumDays,
+            rebalanceDays: input.rebalanceDays,
+            commissionRate: input.commissionRate,
+            slippageRate: input.slippageRate,
+          }),
+        );
+        cash += sellProceeds({
+          shares: position.shares,
+          price: bar.close,
+          commissionRate: input.commissionRate,
+          slippageRate: input.slippageRate,
+        });
+        closedTrades += 1;
+        continue;
+      }
+
       remainingPositions.push(position);
     }
     positions = remainingPositions;
@@ -679,10 +728,6 @@ function simulateDailyPortfolio(input: {
         ? Math.min(weakExposureScale, input.bearRegimeMaxExposure)
         : weakExposureScale;
 
-      const totalEquity = cash;
-      const deployable = totalEquity * regimeExposureScale;
-      cash = totalEquity - deployable;
-      const slotBudget = deployable / input.topN;
       const excludedSymbols = buildStopCooldownExclusions(cooldownUntil, dateIndex);
       const reserveBenchmarkSlotCount = isBullBenchmarkSlotEnabled({
         benchmarkHistory: input.benchmarkHistory,
@@ -701,7 +746,12 @@ function simulateDailyPortfolio(input: {
         trendMaDays: input.trendMaDays,
         reserveBenchmarkSlotCount,
         excludedSymbols,
+        allowBenchmarkFallback: !(input.cashFallbackInWeakRegime && weakRegime),
       });
+      const totalEquity = cash;
+      const deployable = totalEquity * regimeExposureScale;
+      const slotBudget = deployable / input.topN;
+      cash = totalEquity - slotBudget * targetSlots.length;
       const plannedExitIndex = Math.min(
         dateIndex + requiredRebalanceDays,
         input.allDates.length - 1,
@@ -806,6 +856,7 @@ function buildCurrentDecisions(input: {
   trendMaDays: number;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount: number;
+  cashFallbackInWeakRegime?: boolean;
 }): BacktestCurrentDecision[] {
   const latestDate = [...new Set(input.histories.flatMap((item) => item.bars.map((bar) => bar.tradeDate)))]
     .sort()
@@ -845,7 +896,17 @@ function buildCurrentDecisions(input: {
   const selected = new Set(
     ranked.slice(0, sectorSlotCount).map((pick) => pick.history.symbol),
   );
-  if (input.benchmarkHistory && (reserveBenchmarkSlotCount > 0 || ranked.length < input.topN)) {
+  const weakRegime = isWeakRegime({
+    benchmarkHistory: input.benchmarkHistory,
+    tradeDate: latestDate,
+    momentumDays: input.momentumDays,
+  });
+  const allowBenchmarkFallback =
+    !input.cashFallbackInWeakRegime || !weakRegime;
+  if (
+    input.benchmarkHistory
+    && (reserveBenchmarkSlotCount > 0 || (allowBenchmarkFallback && ranked.length < input.topN))
+  ) {
     selected.add(input.benchmarkHistory.symbol);
   }
 
@@ -927,6 +988,8 @@ export async function runEtfMomentumBacktest(
     0,
     topN,
   );
+  const cashFallbackInWeakRegime = input.cashFallbackInWeakRegime === true;
+  const exitOnTrendBreak = input.exitOnTrendBreak === true;
 
   const dateRange = resolveBacktestDateRange({
     startDate: input.startDate,
@@ -984,6 +1047,8 @@ export async function runEtfMomentumBacktest(
     weakRegimeMaxExposure,
     bullBenchmarkSlotMomentumPct,
     bullBenchmarkSlotCount,
+    cashFallbackInWeakRegime,
+    exitOnTrendBreak,
   });
 
   const sortedTrades = trades.sort((a, b) => {
@@ -1034,6 +1099,7 @@ export async function runEtfMomentumBacktest(
       trendMaDays,
       bullBenchmarkSlotMomentumPct,
       bullBenchmarkSlotCount,
+      cashFallbackInWeakRegime,
     }),
     config: {
       topN,
@@ -1053,6 +1119,8 @@ export async function runEtfMomentumBacktest(
       weakRegimeMaxExposure,
       bullBenchmarkSlotMomentumPct,
       bullBenchmarkSlotCount,
+      cashFallbackInWeakRegime,
+      exitOnTrendBreak,
       stopLossPct: POSITION_STOP_LOSS_PCT,
       stopCooldownDays: STOP_COOLDOWN_DAYS,
     },
@@ -1062,6 +1130,9 @@ export async function runEtfMomentumBacktest(
       `沪深300 站上 MA${MARKET_REGIME_MA_DAYS} 时，单只 ETF 趋势过滤放宽至 MA${BULL_RELAXED_TREND_MA_DAYS}，减少 V 型反弹踏空。`,
       `动量标的不足 ${topN} 只时，剩余仓位用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底，避免空仓错过大盘反弹。`,
       `单个持仓从入场价下跌至 ${POSITION_STOP_LOSS_PCT}% 时按日线收盘止损；止损后 ${STOP_COOLDOWN_DAYS} 个交易日内不再买回同一 ETF，冷却挡掉的槽位只用基准兜底，不后补弱势动量。`,
+      exitOnTrendBreak
+        ? `大盘弱市中，若持仓 ETF 收盘跌破入场时使用的趋势均线（MA${BULL_RELAXED_TREND_MA_DAYS} 或 MA${trendMaDays}），提前退出并等待下一次调仓。`
+        : '持仓期内不按均线破位提前退出，仅在调仓日、止损或样本结束时平仓。',
       `组合权益按每个交易日持仓市值 + 现金滚动计算，不再仅用调仓点近似。`,
       `交易成本：单边佣金 ${(COMMISSION_RATE * 100).toFixed(2)}%、滑点 ${(SLIPPAGE_RATE * 100).toFixed(2)}%；买卖均计入。`,
       `波动率目标：以沪深300 ${VOL_LOOKBACK_DAYS} 日年化波动率为参考，目标 ${TARGET_ANNUAL_VOL_PCT}%；仅当波动率高于目标时降仓，范围 ${MIN_VOL_EXPOSURE * 100}% ~ ${MAX_VOL_EXPOSURE * 100}%。`,
@@ -1072,6 +1143,9 @@ export async function runEtfMomentumBacktest(
       bullBenchmarkSlotMomentumPct > 0
         ? `大盘站上 MA${MARKET_REGIME_MA_DAYS} 且 ${momentumDays} 日动量不低于 ${bullBenchmarkSlotMomentumPct}% 时，保留 ${bullBenchmarkSlotCount} 个槽位给 ${BENCHMARK_SYMBOL}，其余槽位继续做 ETF 动量轮动。`
         : '默认不强制保留宽基槽位；基准 ETF 只在动量标的不足或冷却替补时兜底。',
+      cashFallbackInWeakRegime
+        ? `弱市中动量标的不足或止损冷却释放的槽位不再用 ${BENCHMARK_SYMBOL} 兜底，保留现金等待下一次调仓。`
+        : `动量标的不足 ${topN} 只或止损冷却释放槽位时，仍用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底。`,
       '该策略不使用新闻过滤，避免历史新闻覆盖不足和标题情绪噪声影响回测。',
       '收益曲线为日线组合净值，基准为沪深300ETF同期买入持有收益。',
       usedLocalCsv

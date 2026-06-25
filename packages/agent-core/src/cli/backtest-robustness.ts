@@ -13,6 +13,8 @@ type Variant = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  cashFallbackInWeakRegime?: boolean;
+  exitOnTrendBreak?: boolean;
 };
 
 type WindowSpec = {
@@ -43,6 +45,8 @@ type VariantSummary = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  cashFallbackInWeakRegime?: boolean;
+  exitOnTrendBreak?: boolean;
   windows: number;
   positiveWindows: number;
   positiveWindowPct: number | null;
@@ -66,6 +70,74 @@ const variants: Variant[] = [
     rebalanceDays: 10,
     trendMaDays: 20,
     weakRegimeMaxExposure: 0.7,
+  },
+  {
+    name: 'Default + weak cash fallback',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    cashFallbackInWeakRegime: true,
+  },
+  {
+    name: 'Default + trend-break exit',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    exitOnTrendBreak: true,
+  },
+  {
+    name: 'Default + weak cash fallback + trend-break exit',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    cashFallbackInWeakRegime: true,
+    exitOnTrendBreak: true,
+  },
+  {
+    name: 'Weak70 + Bear20 + Bull8',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    bearRegimeMaxExposure: 0.2,
+    bullBenchmarkSlotMomentumPct: 8,
+  },
+  {
+    name: 'Weak70 + Bear30 + Bull8',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    bearRegimeMaxExposure: 0.3,
+    bullBenchmarkSlotMomentumPct: 8,
+  },
+  {
+    name: 'Weak70 + Bear25 + Bull6',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    bearRegimeMaxExposure: 0.25,
+    bullBenchmarkSlotMomentumPct: 6,
+  },
+  {
+    name: 'Weak70 + Bear25 + Bull10',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    bearRegimeMaxExposure: 0.25,
+    bullBenchmarkSlotMomentumPct: 10,
   },
   {
     name: 'Previous Top4/20/10/MA20 + Bear cap 50%',
@@ -435,6 +507,8 @@ function summarizeVariant(
     weakRegimeMaxExposure: variant.weakRegimeMaxExposure ?? null,
     bullBenchmarkSlotMomentumPct: variant.bullBenchmarkSlotMomentumPct,
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
+    cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
+    exitOnTrendBreak: variant.exitOnTrendBreak,
     windows: results.length,
     positiveWindows,
     positiveWindowPct,
@@ -466,6 +540,8 @@ async function runWindow(
     weakRegimeMaxExposure: variant.weakRegimeMaxExposure ?? null,
     bullBenchmarkSlotMomentumPct: variant.bullBenchmarkSlotMomentumPct,
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
+    cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
+    exitOnTrendBreak: variant.exitOnTrendBreak,
   });
   const returnPct = result.equityCurve?.at(-1)?.returnPct ?? null;
   const benchmarkPct = result.benchmark?.finalReturnPct ?? null;

@@ -13,6 +13,8 @@ type Variant = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  cashFallbackInWeakRegime?: boolean;
+  exitOnTrendBreak?: boolean;
 };
 
 type WindowSpec = {
@@ -51,6 +53,44 @@ const DEFAULT_VARIANT: Variant = {
 
 const variants: Variant[] = [
   DEFAULT_VARIANT,
+  {
+    name: 'Default + weak cash fallback',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    cashFallbackInWeakRegime: true,
+  },
+  {
+    name: 'Default + trend-break exit',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    exitOnTrendBreak: true,
+  },
+  {
+    name: 'Default + weak cash fallback + trend-break exit',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    cashFallbackInWeakRegime: true,
+    exitOnTrendBreak: true,
+  },
+  {
+    name: 'Weak70 + Bear30 + Bull8',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    bearRegimeMaxExposure: 0.3,
+    bullBenchmarkSlotMomentumPct: 8,
+  },
   {
     name: 'Previous Top4/20/10/MA20 + Bear cap 50%',
     topN: 4,
@@ -361,6 +401,8 @@ async function runWindow(variant: Variant, window: WindowSpec): Promise<WindowRe
     variant.weakRegimeMaxExposure ?? 'off',
     variant.bullBenchmarkSlotMomentumPct ?? 8,
     variant.bullBenchmarkSlotCount ?? 1,
+    variant.cashFallbackInWeakRegime ? 'weak-cash' : 'benchmark-fill',
+    variant.exitOnTrendBreak ? 'trend-exit' : 'scheduled-exit',
   ].join('|');
   const cached = resultCache.get(cacheKey);
   if (cached) return cached;
@@ -376,6 +418,8 @@ async function runWindow(variant: Variant, window: WindowSpec): Promise<WindowRe
     weakRegimeMaxExposure: variant.weakRegimeMaxExposure ?? null,
     bullBenchmarkSlotMomentumPct: variant.bullBenchmarkSlotMomentumPct,
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
+    cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
+    exitOnTrendBreak: variant.exitOnTrendBreak,
   }).then((result) => {
     const returnPct = result.equityCurve?.at(-1)?.returnPct ?? null;
     const benchmarkPct = result.benchmark?.finalReturnPct ?? null;

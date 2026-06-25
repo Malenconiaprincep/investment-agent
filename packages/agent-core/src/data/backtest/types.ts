@@ -122,6 +122,8 @@ export type BacktestRunConfig = {
   weakRegimeMaxExposure?: number;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  cashFallbackInWeakRegime?: boolean;
+  exitOnTrendBreak?: boolean;
   stopLossPct?: number;
   stopCooldownDays?: number;
 };
