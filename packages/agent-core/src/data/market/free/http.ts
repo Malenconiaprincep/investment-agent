@@ -4,6 +4,7 @@ import { eastmoneyMarketCode, eastmoneySecId } from '../asset-type.js';
 export const FREE_ALLOWED_HOSTS = [
   'push2.eastmoney.com',
   'push2delay.eastmoney.com',
+  'searchapi.eastmoney.com',
   'emweb.securities.eastmoney.com',
   'np-anotice-stock.eastmoney.com',
   'search-api-web.eastmoney.com',

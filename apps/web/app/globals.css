@@ -1612,6 +1612,27 @@ a:hover {
   margin: 0.5rem 0;
 }
 
+.research-chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.research-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.research-chart-head .section-title {
+  margin-bottom: 0.25rem;
+}
+
+.research-chart-head .muted {
+  margin: 0;
+}
+
 .result-toolbar--stack {
   flex-direction: column;
   align-items: flex-start;
@@ -3583,6 +3604,28 @@ a:hover {
   padding: 0;
   list-style: none;
   overflow: auto;
+  scrollbar-color: rgba(154, 163, 173, 0.42) transparent;
+  scrollbar-width: thin;
+}
+
+.watchlist-panel-list::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+.watchlist-panel-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.watchlist-panel-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(154, 163, 173, 0.38);
+  background-clip: padding-box;
+}
+
+.watchlist-panel-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(154, 163, 173, 0.58);
+  background-clip: padding-box;
 }
 
 .watchlist-panel-item {
@@ -3613,15 +3656,84 @@ a:hover {
 .watchlist-panel-item-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
+  align-items: center;
+  gap: 0.4rem 0.625rem;
   margin-top: 0.25rem;
   font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.watchlist-panel-level {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0.08rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.watchlist-level--hot {
+  border-color: rgba(224, 112, 112, 0.6);
+  background: rgba(224, 112, 112, 0.14);
+  color: #ffb0a8;
+}
+
+.watchlist-level--warm {
+  border-color: rgba(126, 184, 218, 0.55);
+  background: rgba(126, 184, 218, 0.13);
+  color: #a8d7f2;
+}
+
+.watchlist-level--rise {
+  border-color: rgba(201, 146, 74, 0.6);
+  background: rgba(201, 146, 74, 0.14);
+  color: #e4ba7c;
+}
+
+.watchlist-level--risk {
+  border-color: rgba(224, 112, 112, 0.45);
+  background: rgba(224, 112, 112, 0.1);
+  color: #f0a2a2;
+}
+
+.watchlist-level--track {
+  border-color: rgba(92, 184, 122, 0.45);
+  background: rgba(92, 184, 122, 0.1);
+  color: #9ed9b0;
+}
+
+.watchlist-level--manual {
+  border-color: var(--border-strong);
+  background: rgba(154, 163, 173, 0.08);
   color: var(--muted);
 }
 
 .watchlist-panel-source {
   color: var(--link);
   font-weight: 600;
+}
+
+.watchlist-panel-pct--up {
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.watchlist-panel-pct--down {
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.watchlist-panel-pct--flat,
+.watchlist-panel-pct--empty {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .watchlist-panel-item-reason {

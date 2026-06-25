@@ -111,9 +111,10 @@ export function StockKlineChart({
       strength: signal.strength,
     })) ?? [];
 
-  const latestRed = data?.diamondHistory.find((s) => s.strength === 'red');
+  const latestDiamond = data?.diamondHistory[0] ?? null;
   const priceLines = buildMomentumPriceLines({
-    latestRedClose: showPriceLines ? (latestRed?.close ?? null) : null,
+    latestDiamondClose: showPriceLines ? (latestDiamond?.close ?? null) : null,
+    latestDiamondStrength: showPriceLines ? (latestDiamond?.strength ?? null) : null,
     stopLossPrice: showPriceLines ? (data?.momentum?.stopLossPrice ?? null) : null,
     trailingStopPrice: showPriceLines ? (data?.momentum?.trailingStopPrice ?? null) : null,
   });

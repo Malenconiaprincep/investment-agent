@@ -29,11 +29,72 @@ function fmtPct(v: number | null | undefined) {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
+function pctTone(v: number | null | undefined) {
+  if (v == null) return 'watchlist-panel-pct--empty';
+  if (v > 0) return 'watchlist-panel-pct--up';
+  if (v < 0) return 'watchlist-panel-pct--down';
+  return 'watchlist-panel-pct--flat';
+}
+
 function sourceLabel(sourceType: string | null) {
   if (sourceType === 'signal') return '雷达';
   if (sourceType === 'screening') return '扫描';
   if (sourceType === 'report') return '研报';
   return '手动';
+}
+
+function watchLevel(item: WatchlistItem) {
+  const diamond = item.latest?.diamondStrength;
+  const today = item.latest?.pctChg;
+  const sinceEntry = item.latest?.vsEntryPct;
+
+  if (diamond === 'red') {
+    return {
+      label: 'S 红钻',
+      className: 'watchlist-level--hot',
+      title: '红钻信号，优先进入动量与 AI 复核队列',
+    };
+  }
+  if (diamond === 'blue') {
+    return {
+      label: 'A 蓝钻',
+      className: 'watchlist-level--warm',
+      title: '蓝钻关注，趋势温和但尚未到强买点',
+    };
+  }
+  if ((today ?? 0) >= 5 || (sinceEntry ?? 0) >= 8) {
+    return {
+      label: 'B 升温',
+      className: 'watchlist-level--rise',
+      title: '涨幅升温，留意是否补出红钻与动量确认',
+    };
+  }
+  if ((sinceEntry ?? 0) <= -5) {
+    return {
+      label: 'R 回撤',
+      className: 'watchlist-level--risk',
+      title: '自加入后回撤较大，优先复核入池逻辑或移出',
+    };
+  }
+  if (item.sourceType === 'signal') {
+    return {
+      label: 'C 雷达',
+      className: 'watchlist-level--track',
+      title: '消息雷达入池，等待红钻与动量确认',
+    };
+  }
+  if (item.sourceType === 'screening' || item.sourceType === 'report') {
+    return {
+      label: 'C 研究',
+      className: 'watchlist-level--track',
+      title: '研究/扫描入池，等待价格信号确认',
+    };
+  }
+  return {
+    label: 'D 手动',
+    className: 'watchlist-level--manual',
+    title: '手动观察标的，当前不自动买入模拟盘',
+  };
 }
 
 export function WatchlistPanel() {
@@ -141,24 +202,46 @@ export function WatchlistPanel() {
         )}
 
         <ul className="watchlist-panel-list">
-          {items.map((item) => (
-            <li key={item.id}>
-              <Link href={`/watchlist/${item.id}`} className="watchlist-panel-item">
-                <div className="watchlist-panel-item-head">
-                  <strong>{item.name}</strong>
-                  <span className="watchlist-panel-item-code">{item.symbol}</span>
-                </div>
-                <div className="watchlist-panel-item-meta">
-                  <span className="watchlist-panel-source">{sourceLabel(item.sourceType)}</span>
-                  <span>今日 {fmtPct(item.latest?.pctChg)}</span>
-                  <span>自加入 {fmtPct(item.latest?.vsEntryPct)}</span>
-                </div>
-                {item.reason ? (
-                  <p className="watchlist-panel-item-reason">{item.reason}</p>
-                ) : null}
-              </Link>
-            </li>
-          ))}
+          {items.map((item) => {
+            const level = watchLevel(item);
+            return (
+              <li key={item.id}>
+                <Link href={`/watchlist/${item.id}`} className="watchlist-panel-item">
+                  <div className="watchlist-panel-item-head">
+                    <strong>{item.name}</strong>
+                    <span className="watchlist-panel-item-code">{item.symbol}</span>
+                  </div>
+                  <div className="watchlist-panel-item-meta">
+                    <span
+                      className={`watchlist-panel-level ${level.className}`}
+                      title={level.title}
+                    >
+                      {level.label}
+                    </span>
+                    <span className="watchlist-panel-source">
+                      {sourceLabel(item.sourceType)}
+                    </span>
+                    <span className={pctTone(item.latest?.pctChg)}>
+                      今日 {fmtPct(item.latest?.pctChg)}
+                    </span>
+                    <span
+                      className={pctTone(item.latest?.vsEntryPct)}
+                      title={
+                        item.entryPrice == null
+                          ? '缺少加入价，暂不能计算自加入涨幅'
+                          : undefined
+                      }
+                    >
+                      自加入 {fmtPct(item.latest?.vsEntryPct)}
+                    </span>
+                  </div>
+                  {item.reason ? (
+                    <p className="watchlist-panel-item-reason">{item.reason}</p>
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="watchlist-panel-foot">

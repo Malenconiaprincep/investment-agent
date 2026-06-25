@@ -24,6 +24,47 @@ import {
 import { generateWeeklyReview } from '../data/watchlist/weekly-review.js';
 import { listScreeningSessions, getScreeningSession } from '../data/screening/store.js';
 
+type WatchlistListItem = Awaited<ReturnType<typeof listWatchlistItems>>[number];
+type LatestWatchlistSnapshot = Awaited<ReturnType<typeof listLatestSnapshots>>[number];
+
+function calcVsEntryPct(close: number | null | undefined, entryPrice: number | null) {
+  if (close == null || entryPrice == null || entryPrice <= 0) return null;
+  return Number((((close - entryPrice) / entryPrice) * 100).toFixed(2));
+}
+
+async function buildLatestWatchlistMetrics(
+  item: WatchlistListItem,
+  snapshot?: LatestWatchlistSnapshot,
+) {
+  const needsLiveFallback =
+    !snapshot || snapshot.pctChg == null || snapshot.vsEntryPct == null;
+
+  if (!needsLiveFallback) return snapshot;
+
+  try {
+    const quote = await getDailyQuote(item.symbol, 2);
+    const latest = quote.quotes[0];
+    const close = quote.latestClose ?? latest?.close ?? snapshot?.close ?? null;
+
+    if (close == null) return snapshot ?? null;
+
+    return {
+      id: snapshot?.id ?? `live:${item.id}`,
+      watchlistId: item.id,
+      symbol: item.symbol,
+      tradeDate:
+        latest?.tradeDate ?? snapshot?.tradeDate ?? new Date().toISOString().slice(0, 10),
+      close,
+      pctChg: quote.latestPctChg ?? latest?.pctChg ?? snapshot?.pctChg ?? null,
+      vsEntryPct: calcVsEntryPct(close, item.entryPrice) ?? snapshot?.vsEntryPct ?? null,
+      diamondStrength: snapshot?.diamondStrength ?? null,
+      snapshotAt: snapshot?.snapshotAt ?? new Date().toISOString(),
+    };
+  } catch {
+    return snapshot ?? null;
+  }
+}
+
 export async function dispatchWatchlist(args: string[]): Promise<string> {
   const command = args[0];
 
@@ -31,7 +72,13 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
     const items = await listWatchlistItems();
     const snapshots = await listLatestSnapshots();
     const snapMap = Object.fromEntries(snapshots.map((s) => [s.symbol, s]));
-    return JSON.stringify(items.map((i) => ({ ...i, latest: snapMap[i.symbol] ?? null })));
+    const enriched = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        latest: await buildLatestWatchlistMetrics(item, snapMap[item.symbol]),
+      })),
+    );
+    return JSON.stringify(enriched);
   }
 
   if (command === 'add') {

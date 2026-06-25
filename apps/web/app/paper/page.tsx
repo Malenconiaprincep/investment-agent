@@ -35,6 +35,15 @@ function fmtMoney(v: number) {
   return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 }
 
+function isEtfSymbol(symbol: string) {
+  return /^(51|56|58|15|16)\d{4}$/.test(symbol) || /^159\d{3}$/.test(symbol);
+}
+
+function fmtTradePrice(symbol: string, value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(isEtfSymbol(symbol) ? 3 : 2);
+}
+
 function formatTradeSource(trade: Trade) {
   if (trade.note?.includes('ETF 动量')) return 'ETF 动量';
   if (trade.note?.startsWith('monitor-watchlist:')) return '消息雷达';
@@ -357,18 +366,22 @@ export default function PaperTradingPage() {
                             {'settlementRule' in p && p.settlementRule === 't0' && (
                               <span className="paper-settlement-tag">T+0</span>
                             )}
-                            {'settlementRule' in p && p.settlementRule === 't1' && p.frozenShares > 0 && (
-                              <span className="paper-settlement-tag paper-settlement-tag--t1">
-                                冻 {p.frozenShares}
-                              </span>
-                            )}
+                            {'settlementRule' in p &&
+                              p.settlementRule === 't1' &&
+                              p.frozenShares > 0 && (
+                                <span className="paper-settlement-tag paper-settlement-tag--t1">
+                                  冻 {p.frozenShares}
+                                </span>
+                              )}
                           </td>
-                          <td>{p.avgCost.toFixed(2)}</td>
+                          <td>{fmtTradePrice(p.symbol, p.avgCost)}</td>
                           <td>
-                            {p.latestPrice?.toFixed(2) ?? '—'}
-                            {'markPriceSource' in p && p.markPriceSource === 'intraday' && (
-                              <span className="paper-live-tag">实时</span>
-                            )}
+                            {fmtTradePrice(p.symbol, p.latestPrice)}
+                            {'markPriceSource' in p &&
+                              p.markPriceSource === 'intraday' &&
+                              view.isTradingSession && (
+                                <span className="paper-live-tag">实时</span>
+                              )}
                           </td>
                           <td>{p.marketValue != null ? fmtMoney(p.marketValue) : '—'}</td>
                           <td
@@ -378,7 +391,7 @@ export default function PaperTradingPage() {
                           >
                             {p.pnlPct != null ? `${p.pnlPct > 0 ? '+' : ''}${p.pnlPct}%` : '—'}
                           </td>
-                          <td>{p.stopLoss?.toFixed(2) ?? '—'}</td>
+                          <td>{fmtTradePrice(p.symbol, p.stopLoss)}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -476,7 +489,7 @@ export default function PaperTradingPage() {
                         <span className="muted"> ({t.symbol})</span>
                       </td>
                       <td>{t.shares}</td>
-                      <td>{t.price.toFixed(2)}</td>
+                      <td>{fmtTradePrice(t.symbol, t.price)}</td>
                       <td>{t.amount.toFixed(0)}</td>
                       <td>{formatTradeSource(t)}</td>
                       <td className="paper-trade-note">{formatTradeNote(t.note)}</td>

@@ -4,15 +4,19 @@ type MomentumPriceLinesInput = {
   stopLossPrice?: number | null;
   trailingStopPrice?: number | null;
   latestRedClose?: number | null;
+  latestDiamondClose?: number | null;
+  latestDiamondStrength?: 'red' | 'blue' | null;
 };
 
 export function buildMomentumPriceLines(input: MomentumPriceLinesInput): PriceLineSpec[] {
   const lines: PriceLineSpec[] = [];
-  if (input.latestRedClose != null) {
+  const diamondClose = input.latestDiamondClose ?? input.latestRedClose ?? null;
+  if (diamondClose != null) {
+    const strength = input.latestDiamondStrength ?? 'red';
     lines.push({
-      price: input.latestRedClose,
-      color: '#5b9cf5',
-      title: '最近红钻',
+      price: diamondClose,
+      color: strength === 'red' ? '#e85d5d' : '#5b9cf5',
+      title: strength === 'red' ? '最近红钻' : '最近蓝钻',
     });
   }
   if (input.stopLossPrice != null) {

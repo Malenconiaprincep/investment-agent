@@ -4,6 +4,7 @@ import {
   fetchIndustryPeers,
   fetchLatestFinancial,
   fetchNews,
+  fetchStockSuggestions,
   fetchStockSnapshot,
 } from './free/eastmoney.js';
 import { fetchNewsBrowser } from './free/news-browser.js';
@@ -16,6 +17,24 @@ import {
 import { buildMeta } from './meta.js';
 import { isEtfSymbol } from './asset-type.js';
 import { toSymbol, toTsCode } from './symbols.js';
+
+export async function resolveStockSymbol(input: string): Promise<string> {
+  const raw = input.trim();
+  const code = raw.replace(/\D/g, '');
+  if (/^\d{6}$/.test(code)) return code;
+
+  const { data } = await fetchStockSuggestions(raw, 8);
+  const astocks = data.filter((item) => item.classify === 'AStock');
+  const pool = astocks.length > 0 ? astocks : data;
+  const exact =
+    pool.find((item) => item.name === raw || item.symbol === raw) ?? pool[0];
+
+  if (!exact) {
+    throw new Error(`未找到股票名称或代码: ${input}`);
+  }
+
+  return exact.symbol;
+}
 
 export async function getStockBasic(symbol: string) {
   const tsCode = toTsCode(symbol);

@@ -4,7 +4,10 @@ import { emitResearchStreamEvent } from '../../api/research-stream-context.js';
 import { formatNewsMarkdown } from '../../data/market/format-report-news.js';
 import { enrichMarketDataWithIwencai } from '../../data/market/iwencai-fallback.js';
 import { searchResearchNotes } from '../../data/rag/search-notes.js';
-import { getStockBasic } from '../../data/market/services.js';
+import {
+  getStockBasic,
+  resolveStockSymbol,
+} from '../../data/market/services.js';
 import {
   comparePeers,
   getAnnouncements,
@@ -54,7 +57,7 @@ const identifyTargetStep = createStep({
   inputSchema: workflowInputSchema,
   outputSchema: targetSchema,
   execute: async ({ inputData }) => {
-    const symbol = extractSymbol(inputData);
+    const symbol = await resolveStockSymbol(extractSymbol(inputData));
     const basic = await getStockBasic(symbol);
     return {
       symbol: basic.symbol,

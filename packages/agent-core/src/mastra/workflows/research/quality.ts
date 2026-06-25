@@ -44,5 +44,8 @@ export function extractSymbol(input: {
   const match = input.query?.match(/\b(\d{6})\b/);
   if (match) return match[1];
 
-  throw new Error('请提供 6 位股票代码（symbol）或包含代码的问题（query）');
+  const query = input.query?.trim();
+  if (query) return query;
+
+  throw new Error('请提供股票名称或 6 位股票代码');
 }

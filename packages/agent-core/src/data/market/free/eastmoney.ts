@@ -79,6 +79,62 @@ type IndustryPeersResponse = {
   };
 };
 
+type StockSuggestResponse = {
+  QuotationCodeTable?: {
+    Data?: Array<{
+      Code?: string;
+      Name?: string;
+      PinYin?: string;
+      Classify?: string;
+      SecurityTypeName?: string;
+      QuoteID?: string;
+    }>;
+  };
+};
+
+export type StockSuggestItem = {
+  symbol: string;
+  name: string;
+  pinyin: string | null;
+  classify: string | null;
+  securityTypeName: string | null;
+  quoteId: string | null;
+};
+
+export async function fetchStockSuggestions(keyword: string, limit = 8) {
+  const input = keyword.trim();
+  if (!input) return { data: [] as StockSuggestItem[], cached: false as const };
+
+  const cacheKey = `em:suggest:${input}:${limit}`;
+  const cached = getCached<StockSuggestItem[]>(cacheKey);
+  if (cached) return { data: cached, cached: true as const };
+
+  const json = await freeFetchJson<StockSuggestResponse>(
+    `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(input)}&type=14&token=1`,
+  );
+
+  const data = (json.QuotationCodeTable?.Data ?? [])
+    .map((item): StockSuggestItem | null => {
+      const symbol = String(item.Code ?? '').trim();
+      const name = String(item.Name ?? '').trim();
+      if (!/^\d{6}$/.test(symbol) || !name) return null;
+      return {
+        symbol,
+        name,
+        pinyin: item.PinYin != null ? String(item.PinYin) : null,
+        classify: item.Classify != null ? String(item.Classify) : null,
+        securityTypeName:
+          item.SecurityTypeName != null ? String(item.SecurityTypeName) : null,
+        quoteId: item.QuoteID != null ? String(item.QuoteID) : null,
+      };
+    })
+    .filter((item): item is StockSuggestItem => item != null)
+    .slice(0, limit);
+
+  setCached(cacheKey, data, TTL_MS.profile);
+  return { data, cached: false as const };
+}
+
 export async function fetchStockSnapshot(symbol: string) {
   const cacheKey = `em:snapshot:${symbol}`;
   const cached = getCached<ReturnType<typeof mapSnapshot>>(cacheKey);

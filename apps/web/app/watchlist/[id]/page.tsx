@@ -129,6 +129,7 @@ export default function WatchlistDetailPage() {
 
   const latestRed = diamondHistory.find((s) => s.strength === 'red');
   const highlightSignal = latestRed ?? data?.diamondSignal ?? null;
+  const latestDiamond = diamondHistory[0] ?? data?.diamondSignal ?? null;
 
   return (
     <main className="page page--workspace">
@@ -189,7 +190,8 @@ export default function WatchlistDetailPage() {
                     bars={bars}
                     diamonds={diamonds}
                     priceLines={buildMomentumPriceLines({
-                      latestRedClose: latestRed?.close ?? null,
+                      latestDiamondClose: latestDiamond?.close ?? null,
+                      latestDiamondStrength: latestDiamond?.strength ?? null,
                       stopLossPrice: data.momentum?.stopLossPrice ?? null,
                       trailingStopPrice: data.momentum?.trailingStopPrice ?? null,
                     })}

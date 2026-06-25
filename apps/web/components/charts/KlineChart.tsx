@@ -132,7 +132,10 @@ export function KlineChart({
         horzLines: { color: 'rgba(255,255,255,0.06)' },
       },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.12)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.12)' },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.12)',
+        rightOffset: 8,
+      },
     });
 
     const series = chart.addSeries(CandlestickSeries, {
@@ -204,6 +207,7 @@ export function KlineChart({
     markersRef.current?.setMarkers(markerList);
 
     chartRef.current?.timeScale().fitContent();
+    chartRef.current?.timeScale().applyOptions({ rightOffset: 8 });
   }, [bars, diamonds, tradeMarkers, priceLines]);
 
   if (bars.length === 0) {

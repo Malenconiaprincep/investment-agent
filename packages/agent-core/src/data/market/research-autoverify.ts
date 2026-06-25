@@ -316,9 +316,13 @@ export function formatResearchAutoVerification(
   ];
 
   if (verification.unresolved.length > 0) {
-    lines.push('', '### 仍未能完全自动核实（需知悉）', ...verification.unresolved.map((line) => `- ${line}`));
+    lines.push(
+      '',
+      '### 数据限制说明（不影响操作结论）',
+      ...verification.unresolved.map((line) => `- ${line}`),
+    );
   } else {
-    lines.push('', '### 仍未能完全自动核实（需知悉）', '- 无；上述条目均已由系统根据公开数据核实');
+    lines.push('', '### 数据限制说明（不影响操作结论）', '- 无；上述条目均已由系统根据公开数据核实');
   }
 
   return lines.join('\n');

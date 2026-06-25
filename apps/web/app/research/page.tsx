@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReportSummary } from '@/app/api/reports/route';
 import { ReportMarkdown } from '@/components/ReportMarkdown';
+import { StockKlineChart } from '@/components/charts/StockKlineChart';
 import { PageHeader } from '@/components/ui/PageHeader';
 import {
   formatMissingHint,
@@ -88,6 +89,7 @@ export default function ResearchPage() {
   const searchParams = useSearchParams();
   const archiveId = searchParams.get('id');
   const symbolFromUrl = searchParams.get('symbol');
+  const queryFromUrl = searchParams.get('query');
 
   const [symbol, setSymbol] = useState('600519');
   const [loading, setLoading] = useState(false);
@@ -132,8 +134,10 @@ export default function ResearchPage() {
   useEffect(() => {
     if (symbolFromUrl && /^\d{6}$/.test(symbolFromUrl)) {
       setSymbol(symbolFromUrl);
+    } else if (queryFromUrl) {
+      setSymbol(queryFromUrl);
     }
-  }, [symbolFromUrl]);
+  }, [queryFromUrl, symbolFromUrl]);
 
   useEffect(() => {
     if (!archiveId) {
@@ -199,7 +203,13 @@ export default function ResearchPage() {
     setStreamingReport('');
     setError(null);
     const params = new URLSearchParams();
-    if (symbol.trim()) params.set('symbol', symbol.trim().replace(/\D/g, '').slice(0, 6));
+    const input = symbol.trim();
+    const code = input.replace(/\D/g, '');
+    if (/^\d{6}$/.test(code) && code === input) {
+      params.set('symbol', code);
+    } else if (input) {
+      params.set('query', input);
+    }
     const qs = params.toString();
     router.push(qs ? `/research?${qs}` : '/research');
   }
@@ -213,20 +223,27 @@ export default function ResearchPage() {
     setCurrentStep(null);
     setStreamingReport('');
 
+    const input = symbol.trim();
+    const digits = input.replace(/\D/g, '');
+    const isCode = /^\d{6}$/.test(digits) && digits === input;
     const params = new URLSearchParams();
-    params.set('symbol', symbol.trim().replace(/\D/g, '').slice(0, 6));
-    router.replace(`/research?${params.toString()}`);
+    if (isCode) {
+      params.set('symbol', digits);
+    } else if (input) {
+      params.set('query', input);
+    }
+    router.replace(params.toString() ? `/research?${params.toString()}` : '/research');
 
     try {
-      const code = symbol.trim().replace(/\D/g, '').slice(0, 6);
-      if (!/^\d{6}$/.test(code)) {
-        throw new Error('请输入 6 位 A 股代码');
+      if (!input) {
+        throw new Error('请输入股票名称或 6 位 A 股代码');
       }
 
+      const code = isCode ? digits : input;
       const response = await fetch('/api/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: code }),
+        body: JSON.stringify(isCode ? { symbol: digits } : { query: input }),
       });
 
       if (!response.ok) {
@@ -342,10 +359,9 @@ export default function ResearchPage() {
                   className="input"
                   value={symbol}
                   onChange={(event) => setSymbol(event.target.value)}
-                  placeholder="6 位代码，如 600519"
-                  maxLength={6}
+                  placeholder="股票名称或代码，如 贵州茅台 / 600519"
                   disabled={loading}
-                  aria-label="股票代码"
+                  aria-label="股票名称或代码"
                 />
                 <button className="button" type="submit" disabled={loading}>
                   {loading ? '生成中…' : '生成'}
@@ -472,9 +488,30 @@ export default function ResearchPage() {
           {archiveLoading ? (
             <div className="empty-state pane-empty">加载研报…</div>
           ) : showReport && displayReport ? (
-            <article className="report report--pane">
-              <ReportMarkdown source={displayReport} />
-            </article>
+            <>
+              {activeMeta && (
+                <section className="pane-card research-chart-panel">
+                  <div className="research-chart-head">
+                    <div>
+                      <h2 className="section-title">钻石 K 线</h2>
+                      <p className="muted">
+                        {activeMeta.name} ({activeMeta.symbol}) · 红/蓝钻信号与止损参考
+                      </p>
+                    </div>
+                  </div>
+                  <StockKlineChart
+                    symbol={activeMeta.symbol}
+                    height={320}
+                    lazy={false}
+                    showPriceLines
+                    placeholder="加载钻石 K 线…"
+                  />
+                </section>
+              )}
+              <article className="report report--pane">
+                <ReportMarkdown source={displayReport} />
+              </article>
+            </>
           ) : (
             <div className="empty-state pane-empty">
               输入代码生成研报，或从左侧档案中选择一篇回看

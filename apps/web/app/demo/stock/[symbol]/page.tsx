@@ -90,6 +90,7 @@ export default function StockDiamondChartPage() {
 
   const redSignals = data?.diamondHistory.filter((s) => s.strength === 'red') ?? [];
   const latestRed = redSignals[0] ?? null;
+  const latestDiamond = data?.diamondHistory[0] ?? data?.latestDiamond ?? null;
   const stopLossPrice = data?.momentum?.stopLossPrice ?? null;
   const trailingStopPrice = data?.momentum?.trailingStopPrice ?? null;
 
@@ -171,7 +172,8 @@ export default function StockDiamondChartPage() {
                     bars={bars}
                     diamonds={diamonds}
                     priceLines={buildMomentumPriceLines({
-                      latestRedClose: latestRed?.close ?? null,
+                      latestDiamondClose: latestDiamond?.close ?? null,
+                      latestDiamondStrength: latestDiamond?.strength ?? null,
                       stopLossPrice,
                       trailingStopPrice,
                     })}
