@@ -319,10 +319,8 @@ function resolveTargetSlots(input: {
     tradeDate: input.tradeDate,
     trendMaDays: input.trendMaDays,
   });
-  const excludedSymbols = input.excludedSymbols ?? new Set<string>();
   const picks = input.histories
     .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
-    .filter((history) => !excludedSymbols.has(history.symbol))
     .map((history) =>
       scoreMomentumPick({
         history,
@@ -334,6 +332,7 @@ function resolveTargetSlots(input: {
     .filter((pick): pick is MomentumPick => pick != null)
     .sort((a, b) => b.score - a.score)
     .slice(0, input.topN);
+  const excludedSymbols = input.excludedSymbols ?? new Set<string>();
 
   const slots: Array<{
     history: EtfHistory;
@@ -344,7 +343,7 @@ function resolveTargetSlots(input: {
 
   for (let slot = 0; slot < input.topN; slot += 1) {
     const pick = picks[slot];
-    if (pick) {
+    if (pick && !excludedSymbols.has(pick.history.symbol)) {
       slots.push({
         history: pick.history,
         pick,
