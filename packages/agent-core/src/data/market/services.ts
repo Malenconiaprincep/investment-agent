@@ -127,27 +127,29 @@ export async function comparePeers(symbol: string, limit = 5) {
     limit - 1,
   );
 
-  const targetPeer = {
-    tsCode,
-    symbol: basic.symbol,
-    name: basic.name,
-    roe: null as number | null,
-    debtRatio: null as number | null,
-    revenueYoy: null as number | null,
-    endDate: null as string | null,
-    pe: null as number | null,
-    pb: null as number | null,
-    marketCap: null as number | null,
-  };
+  const targetPeer = await buildPeerRow(symbol, basic.name, tsCode);
 
-  try {
-    const financial = await fetchLatestFinancial(code);
-    targetPeer.roe = financial.data.roe;
-    targetPeer.debtRatio = financial.data.debtRatio;
-    targetPeer.endDate = financial.data.endDate;
-  } catch {
-    // 财务数据缺失时仍返回行业 peers
-  }
+  const presetPeers = await fetchPresetIndustryPeers(code, industry);
+  const otherPeers = mergePeerRows(
+    [
+      ...presetPeers,
+      ...industryPeers.map((peer) => ({
+        tsCode: toTsCode(peer.symbol),
+        symbol: peer.symbol,
+        name: peer.name,
+        roe: peer.roe,
+        debtRatio: peer.debtRatio,
+        revenueYoy: peer.revenueYoy,
+        netProfitYoy: null as number | null,
+        endDate: peer.endDate,
+        pe: peer.pe,
+        pb: peer.pb,
+        marketCap: peer.marketCap,
+      })),
+    ],
+    code,
+    Math.max(limit - 1, presetPeers.length),
+  );
 
   return {
     target: {
@@ -156,23 +158,142 @@ export async function comparePeers(symbol: string, limit = 5) {
       name: basic.name,
       industry,
     },
-    peers: [
-      targetPeer,
-      ...industryPeers.map((peer) => ({
-        tsCode: toTsCode(peer.symbol),
-        symbol: peer.symbol,
-        name: peer.name,
-        roe: peer.roe,
-        debtRatio: peer.debtRatio,
-        revenueYoy: peer.revenueYoy,
-        endDate: peer.endDate,
-        pe: peer.pe,
-        pb: peer.pb,
-        marketCap: peer.marketCap,
-      })),
-    ],
+    peers: [targetPeer, ...otherPeers],
+    presetPeerSymbols: presetPeers.map((p) => p.symbol),
     ...buildMeta('eastmoney', cached),
   };
+}
+
+type PeerRow = {
+  tsCode: string;
+  symbol: string;
+  name: string;
+  roe: number | null;
+  debtRatio: number | null;
+  revenueYoy: number | null;
+  netProfitYoy?: number | null;
+  endDate: string | null;
+  pe: number | null;
+  pb: number | null;
+  marketCap: number | null;
+};
+
+const INDUSTRY_PEER_PRESETS: Array<{
+  keywords: string[];
+  peers: Array<{ symbol: string; name: string }>;
+}> = [
+  {
+    keywords: ['医药', '外包', 'CRO', 'CDMO', 'CXO', '医疗研发', '生物'],
+    peers: [
+      { symbol: '603259', name: '药明康德' },
+      { symbol: '300759', name: '康龙化成' },
+      { symbol: '300347', name: '泰格医药' },
+      { symbol: '002821', name: '凯莱英' },
+    ],
+  },
+];
+
+function mergePeerRows(rows: PeerRow[], excludeSymbol: string, limit: number) {
+  const seen = new Set<string>();
+  const merged: PeerRow[] = [];
+
+  for (const row of rows) {
+    if (row.symbol === excludeSymbol || seen.has(row.symbol)) continue;
+    seen.add(row.symbol);
+    merged.push(row);
+    if (merged.length >= limit) break;
+  }
+
+  return merged;
+}
+
+async function buildPeerRow(
+  symbol: string,
+  name: string,
+  tsCode: string,
+): Promise<PeerRow> {
+  const row: PeerRow = {
+    tsCode,
+    symbol: toSymbol(tsCode),
+    name,
+    roe: null,
+    debtRatio: null,
+    revenueYoy: null,
+    netProfitYoy: null,
+    endDate: null,
+    pe: null,
+    pb: null,
+    marketCap: null,
+  };
+
+  try {
+    const [financial, snapshot] = await Promise.all([
+      fetchLatestFinancial(symbol),
+      fetchStockSnapshot(symbol),
+    ]);
+    row.roe = financial.data.roe;
+    row.debtRatio = financial.data.debtRatio;
+    row.revenueYoy = financial.data.revenueYoy;
+    row.netProfitYoy = financial.data.netProfitYoy;
+    row.endDate = financial.data.endDate;
+    row.pe = snapshot.data.pe;
+    row.pb = snapshot.data.pb;
+  } catch {
+    // 单票财务缺失时仍返回基础行
+  }
+
+  return row;
+}
+
+const KNOWN_CXO_SYMBOLS = new Set([
+  '002821',
+  '603259',
+  '300759',
+  '300347',
+  '300363',
+  '603127',
+  '688131',
+  '688076',
+]);
+
+async function fetchPresetIndustryPeers(
+  excludeSymbol: string,
+  industry: string,
+): Promise<PeerRow[]> {
+  const preset =
+    KNOWN_CXO_SYMBOLS.has(excludeSymbol)
+      ? INDUSTRY_PEER_PRESETS[0]
+      : INDUSTRY_PEER_PRESETS.find((entry) =>
+          entry.keywords.some((keyword) => industry.includes(keyword)),
+        );
+  if (!preset) return [];
+
+  const rows = await Promise.all(
+    preset.peers
+      .filter((peer) => peer.symbol !== excludeSymbol)
+      .map(async (peer) => buildPeerRow(peer.symbol, peer.name, toTsCode(peer.symbol))),
+  );
+
+  return rows;
+}
+
+export async function comparePeerSymbols(
+  symbols: string[],
+  excludeSymbol?: string,
+) {
+  const unique = [...new Set(symbols.map((s) => toSymbol(toTsCode(s))))].filter(
+    (symbol) => symbol !== excludeSymbol,
+  );
+
+  const peers = await Promise.all(
+    unique.map(async (symbol) => {
+      const tsCode = toTsCode(symbol);
+      const basic = await getStockBasic(symbol).catch(() => null);
+      return buildPeerRow(symbol, basic?.name ?? symbol, tsCode);
+    }),
+  );
+
+  return { peers, ...buildMeta('eastmoney', false) };
 }
 
 export async function searchNews(symbol: string, days = 7) {

@@ -8,13 +8,22 @@ import { getStockBasic } from '../../data/market/services.js';
 import {
   comparePeers,
   getAnnouncements,
-  getDailyQuote,
   getFinancialReport,
   searchNews,
 } from '../../data/market/services.js';
 import {
+  formatResearchQuoteBlock,
+  getResearchMarketSnapshot,
+  type ResearchMarketSnapshot,
+} from '../../data/market/research-quote.js';
+import {
+  buildResearchAutoVerification,
+  formatResearchAutoVerification,
+} from '../../data/market/research-autoverify.js';
+import {
   buildCommitteeTradePlan,
-  formatTradePlansForPrompt,
+  formatSingleTradePlanForPrompt,
+  type CommitteeTradePlan,
 } from '../../data/screening/committee-trading-plan.js';
 import { checkReportQuality, extractSymbol } from './research/quality.js';
 
@@ -89,7 +98,7 @@ const fetchMarketDataStep = createStep({
     const symbol = inputData.symbol;
 
     const tasks = [
-      { key: 'quote', run: () => getDailyQuote(symbol, 5) },
+      { key: 'quote', run: () => getResearchMarketSnapshot(symbol, 5) },
       { key: 'financial', run: () => getFinancialReport(symbol) },
       { key: 'announcements', run: () => getAnnouncements(symbol, 30) },
       { key: 'news', run: () => searchNews(symbol, 7) },
@@ -207,18 +216,37 @@ const preparePromptStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const newsMarkdown = formatNewsMarkdown(inputData.news);
+    const quoteSnapshot = inputData.quote as ResearchMarketSnapshot;
+    const livePrice = quoteSnapshot?.currentPrice ?? null;
+
+    let tradePlan: CommitteeTradePlan | null = null;
     let tradePlanMarkdown = '（K 线数据不足，请根据已有基本面与行情综合判断，动作优先选「等待信号」）';
     try {
-      const tradePlan = await buildCommitteeTradePlan({
+      tradePlan = await buildCommitteeTradePlan({
         symbol: inputData.target.symbol,
         name: inputData.target.name,
       });
       if (tradePlan) {
-        tradePlanMarkdown = formatTradePlansForPrompt([tradePlan]);
+        tradePlanMarkdown = formatSingleTradePlanForPrompt(tradePlan, livePrice);
       }
     } catch {
       // 单票 K 线计划失败不阻断研报
     }
+
+    const autoVerification = buildResearchAutoVerification({
+      quote: quoteSnapshot ?? null,
+      financial: inputData.financial as Record<string, unknown> | null,
+      peers: inputData.peers as Record<string, unknown> | null,
+      news: inputData.news,
+      announcements: inputData.announcements,
+      tradePlan,
+      livePrice,
+    });
+    const autoVerifyMarkdown = formatResearchAutoVerification(autoVerification);
+
+    const liveQuoteMarkdown = quoteSnapshot
+      ? formatResearchQuoteBlock(quoteSnapshot)
+      : '（实时行情不可用）';
 
     const prompt = `请根据以下结构化数据撰写 A 股投研 Markdown 研报。
 
@@ -227,7 +255,10 @@ const preparePromptStep = createStep({
 采集时间：${inputData.fetchedAt}
 问财补充字段：${inputData.iwencaiFallbacks.length > 0 ? inputData.iwencaiFallbacks.join('、') : '无'}
 
-=== 行情数据 ===
+=== 实时行情（查询时刻，「行情快照」「投资建议」须优先引用） ===
+${liveQuoteMarkdown}
+
+=== 行情数据（日 K 历史 + 结构化 JSON） ===
 ${JSON.stringify(inputData.quote, null, 2)}
 
 === 财务数据 ===
@@ -256,6 +287,9 @@ ${JSON.stringify(inputData.notes, null, 2)}
 
 === K 线交易计划（「投资建议」章节须引用，不得编造价格） ===
 ${tradePlanMarkdown}
+
+=== 系统核实结论（必须写入「系统核实结论」章节，禁止改写成「请人工查阅/确认」） ===
+${autoVerifyMarkdown}
 
 请严格按 instructions 中的章节模板输出，不要编造数据中不存在的数字。`;
 

@@ -143,7 +143,7 @@ function mapProfile(json: CompanySurveyResponse) {
 }
 
 export async function fetchLatestFinancial(symbol: string) {
-  const cacheKey = `em:financial:${symbol}`;
+  const cacheKey = `em:financial:v3:${symbol}`;
   const cached = getCached<ReturnType<typeof mapFinancial>>(cacheKey);
   if (cached) return { data: cached, cached: true as const };
 
@@ -152,17 +152,56 @@ export async function fetchLatestFinancial(symbol: string) {
     `https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/DBFXAjaxNew?type=0&code=${code}`,
   );
 
-  const row = json.bgq?.[0];
-  if (!row) {
+  const rows = json.bgq ?? [];
+  if (rows.length === 0) {
     throw new Error(`暂无财务数据: ${symbol}`);
   }
 
-  const data = mapFinancial(row);
+  const data = mapFinancial(rows);
   setCached(cacheKey, data, TTL_MS.financial);
   return { data, cached: false as const };
 }
 
-function mapFinancial(row: NonNullable<FinancialResponse['bgq']>[number]) {
+function yoyPct(current: number | null, prior: number | null): number | null {
+  if (current == null || prior == null || prior === 0) return null;
+  return Number((((current - prior) / Math.abs(prior)) * 100).toFixed(2));
+}
+
+function findPriorYearSameQuarterRow(
+  rows: NonNullable<FinancialResponse['bgq']>,
+  currentRow: NonNullable<FinancialResponse['bgq']>[number],
+) {
+  const currentDate = String(currentRow.REPORT_DATE ?? '').slice(0, 10);
+  const monthDay = currentDate.slice(5);
+  if (!monthDay) return null;
+
+  const currentYear = Number(currentDate.slice(0, 4));
+  if (!Number.isFinite(currentYear)) return null;
+
+  return (
+    rows.find((row) => {
+      const date = String(row.REPORT_DATE ?? '').slice(0, 10);
+      const year = Number(date.slice(0, 4));
+      return date.slice(5) === monthDay && year === currentYear - 1;
+    }) ?? null
+  );
+}
+
+function mapFinancial(rows: NonNullable<FinancialResponse['bgq']>) {
+  const row = rows[0];
+  const priorYearRow = findPriorYearSameQuarterRow(rows, row);
+  const revenue =
+    row.TOTAL_OPERATE_INCOME != null
+      ? Number(row.TOTAL_OPERATE_INCOME)
+      : null;
+  const netProfit = row.NETPROFIT != null ? Number(row.NETPROFIT) : null;
+  const priorRevenue =
+    priorYearRow?.TOTAL_OPERATE_INCOME != null
+      ? Number(priorYearRow.TOTAL_OPERATE_INCOME)
+      : null;
+  const priorNetProfit =
+    priorYearRow?.NETPROFIT != null ? Number(priorYearRow.NETPROFIT) : null;
+
   return {
     endDate:
       row.REPORT_DATE != null
@@ -172,17 +211,14 @@ function mapFinancial(row: NonNullable<FinancialResponse['bgq']>[number]) {
       row.NOTICE_DATE != null
         ? String(row.NOTICE_DATE).slice(0, 10).replace(/-/g, '')
         : null,
-    revenue:
-      row.TOTAL_OPERATE_INCOME != null
-        ? Number(row.TOTAL_OPERATE_INCOME)
-        : null,
-    netProfit: row.NETPROFIT != null ? Number(row.NETPROFIT) : null,
+    revenue,
+    netProfit,
     roe: row.ROE != null ? Number(row.ROE) : null,
     debtRatio:
       row.DEBT_ASSET_RATIO != null ? Number(row.DEBT_ASSET_RATIO) : null,
     grossMargin: row.SALE_NPR != null ? Number(row.SALE_NPR) : null,
-    revenueYoy: null as number | null,
-    netProfitYoy: null as number | null,
+    revenueYoy: yoyPct(revenue, priorRevenue),
+    netProfitYoy: yoyPct(netProfit, priorNetProfit),
   };
 }
 
@@ -314,7 +350,8 @@ function mapPeers(
   excludeSymbol: string,
   limit: number,
 ) {
-  const diff = json.data?.diff ?? [];
+  const raw = json.data?.diff ?? [];
+  const diff = Array.isArray(raw) ? raw : Object.values(raw);
 
   return diff
     .filter((item) => String(item.f12) !== excludeSymbol)

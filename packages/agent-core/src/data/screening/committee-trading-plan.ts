@@ -210,23 +210,48 @@ export function formatTradePlansForPrompt(plans: CommitteeTradePlan[]): string {
   if (plans.length === 0) return '（无可用 K 线交易计划）';
 
   return plans
-    .map((plan) => {
-      const signalLines = plan.signals
-        .slice(0, 6)
-        .map(
-          (s) =>
-            `  - ${s.kind === 'buy' ? '买入' : '卖出'} ${s.tradeDate} @ ${s.price.toFixed(2)}：${s.reason}`,
-        )
-        .join('\n');
+    .map((plan) => formatSingleTradePlanForPrompt(plan))
+    .join('\n\n');
+}
 
-      return `### ${plan.name}(${plan.symbol})
+export function formatSingleTradePlanForPrompt(
+  plan: CommitteeTradePlan,
+  livePrice?: number | null,
+): string {
+  const signalLines = plan.signals
+    .slice(0, 6)
+    .map(
+      (s) =>
+        `  - ${s.kind === 'buy' ? '买入' : '卖出'} ${s.tradeDate} @ ${s.price.toFixed(2)}：${s.reason}`,
+    )
+    .join('\n');
+
+  const priceRef =
+    livePrice != null && livePrice > 0 ? livePrice : plan.latestClose;
+  const vsStopPct = ((priceRef - plan.stopLossPrice) / plan.stopLossPrice) * 100;
+  const vsStopLabel = priceRef <= plan.stopLossPrice ? '已低于或触及' : '高于';
+  const stopInterpretation =
+    priceRef > plan.stopLossPrice
+      ? '现价高于止损位属正常（硬止损为下行保护线，非入场上限；持有时止损随趋势上移）'
+      : '现价已接近或跌破止损，须警惕趋势转弱';
+
+  const liveLines =
+    livePrice != null && livePrice > 0
+      ? [
+          `- **查询时刻现价**：${livePrice.toFixed(2)}（相对 K 线计划最新收盘 ${plan.latestClose.toFixed(2)}）`,
+          plan.entryPrice
+            ? `- 相对建议入场 ${plan.entryPrice.toFixed(2)}：${(((livePrice - plan.entryPrice) / plan.entryPrice) * 100).toFixed(2)}%`
+            : `- 建议入场：暂无（动作为等待/回避；现价 ${livePrice.toFixed(2)}，请结合实时涨跌判断是否追高）`,
+          `- 相对建议止损 ${plan.stopLossPrice.toFixed(2)}：${vsStopPct.toFixed(2)}%（现价${vsStopLabel}止损位；${stopInterpretation}）`,
+        ].join('\n')
+      : '';
+
+  return `### ${plan.name}(${plan.symbol})
 - 操作建议：${ACTION_LABEL[plan.action]}（${plan.actionReason}）
 - 最新收盘：${plan.latestClose.toFixed(2)}
 - 建议入场参考：${plan.entryPrice?.toFixed(2) ?? '—'}
 - 建议止损：${plan.stopLossPrice.toFixed(2)}
 - 出场规则：${plan.targetHint}
-- K线信号点：
+${liveLines ? `${liveLines}\n` : ''}- K线信号点：
 ${signalLines || '  - 暂无历史信号'}`;
-    })
-    .join('\n\n');
 }
