@@ -14,6 +14,7 @@ export type BucketSummary = {
     availableShares: number;
     frozenShares: number;
     latestPrice: number | null;
+    markPriceSource?: 'intraday' | 'daily' | null;
     marketValue: number | null;
     pnlPct: number | null;
     stopLoss: number | null;

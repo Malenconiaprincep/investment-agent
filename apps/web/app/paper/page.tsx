@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EquityChart, type EquityPoint } from '@/components/charts/EquityChart';
 import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
 import { PageHeader } from '@/components/ui/PageHeader';

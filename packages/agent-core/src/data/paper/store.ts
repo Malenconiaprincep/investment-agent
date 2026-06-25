@@ -1,6 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
-import { getDailyQuote } from '../market/services.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import {
   BUCKET_INITIAL_CASH,
@@ -13,6 +12,7 @@ import {
   formatTradeDate,
   roundToLot,
 } from './trading-calendar.js';
+import { resolvePaperMarkPrices } from './mark-price.js';
 import { calcStopLoss } from './momentum.js';
 
 export type PaperAccount = {
@@ -45,6 +45,7 @@ export type PaperPosition = {
   availableShares: number;
   frozenShares: number;
   latestPrice: number | null;
+  markPriceSource?: 'intraday' | 'daily' | null;
   marketValue: number | null;
   pnlPct: number | null;
   stopLoss: number | null;
@@ -817,12 +818,12 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
   let marketValue = 0;
 
   const enriched: PaperPosition[] = [];
+  const markPrices = await resolvePaperMarkPrices(positions.map((pos) => pos.symbol));
+
   for (const pos of positions) {
-    let latestPrice: number | null = null;
-    try {
-      const q = await getDailyQuote(pos.symbol, 2);
-      latestPrice = q.latestClose;
-    } catch {
+    const mark = markPrices.get(pos.symbol);
+    let latestPrice: number | null = mark?.price ?? null;
+    if (latestPrice == null) {
       latestPrice = pos.avgCost;
     }
     const mv = latestPrice ? pos.shares * latestPrice : null;
@@ -841,6 +842,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
       availableShares,
       frozenShares: pos.shares - availableShares,
       latestPrice,
+      markPriceSource: mark?.source ?? null,
       marketValue: mv,
       pnlPct,
       stopLoss: meta?.stopLoss ?? calcStopLoss(pos.avgCost),
