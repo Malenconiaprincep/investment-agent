@@ -5,8 +5,8 @@ import {
   KlineChart,
   type KlineBar,
   type DiamondMarker,
-  type PriceLineSpec,
 } from '@/components/charts/KlineChart';
+import { buildMomentumPriceLines } from '@/lib/momentum-price-lines';
 
 type ChartPayload = {
   diamondHistory: Array<{
@@ -14,7 +14,7 @@ type ChartPayload = {
     strength: 'red' | 'blue';
     close: number;
   }>;
-  momentum: { stopLossPrice: number | null } | null;
+  momentum: { stopLossPrice: number | null; trailingStopPrice?: number | null } | null;
   kline: {
     quotes: Array<{
       tradeDate: string;
@@ -112,21 +112,11 @@ export function StockKlineChart({
     })) ?? [];
 
   const latestRed = data?.diamondHistory.find((s) => s.strength === 'red');
-  const priceLines: PriceLineSpec[] = [];
-  if (showPriceLines && latestRed) {
-    priceLines.push({
-      price: latestRed.close,
-      color: '#5b9cf5',
-      title: '最近红钻',
-    });
-  }
-  if (showPriceLines && data?.momentum?.stopLossPrice != null) {
-    priceLines.push({
-      price: data.momentum.stopLossPrice,
-      color: '#e07070',
-      title: '止损参考',
-    });
-  }
+  const priceLines = buildMomentumPriceLines({
+    latestRedClose: showPriceLines ? (latestRed?.close ?? null) : null,
+    stopLossPrice: showPriceLines ? (data?.momentum?.stopLossPrice ?? null) : null,
+    trailingStopPrice: showPriceLines ? (data?.momentum?.trailingStopPrice ?? null) : null,
+  });
 
   return (
     <div ref={rootRef} className={className ?? 'stock-kline-chart'}>

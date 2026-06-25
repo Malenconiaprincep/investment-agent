@@ -30,6 +30,10 @@ export type MomentumAnalysis = {
   checklistScore: number;
   action: 'buy' | 'hold' | 'wait' | 'sell';
   stopLossPrice: number | null;
+  /** 持仓/观察期内最高收盘，用于移动止盈 */
+  highWaterMark: number | null;
+  /** 移动止盈触发参考价 = highWaterMark × (1 - 12%) */
+  trailingStopPrice: number | null;
   entryMemo: string;
   diamondStrength: 'red' | 'blue' | null;
 };
@@ -128,9 +132,12 @@ export function analyzeMomentum(
     strength === 'red' ? '红钻启动' : strength === 'blue' ? '蓝钻关注' : '暂无钻石信号',
     breakout ? '突破20日高' : '',
     `止损 ${(close * (1 - MOMENTUM_STOP_LOSS_PCT)).toFixed(2)}（-8%）`,
+    `移动止盈参考 ${calcTrailingStopPrice(Math.max(...closes.slice(0, 60))).toFixed(2)}（自高点 -12%）`,
   ]
     .filter(Boolean)
     .join(' · ');
+
+  const highWaterMark = Math.max(...closes.slice(0, 60));
 
   return {
     close,
@@ -143,6 +150,8 @@ export function analyzeMomentum(
     checklistScore,
     action,
     stopLossPrice: Number((close * (1 - MOMENTUM_STOP_LOSS_PCT)).toFixed(2)),
+    highWaterMark: Number(highWaterMark.toFixed(2)),
+    trailingStopPrice: calcTrailingStopPrice(highWaterMark),
     entryMemo,
     diamondStrength: strength,
   };
@@ -188,4 +197,9 @@ export function evaluateMomentumExit(input: {
 
 export function calcStopLoss(entryPrice: number): number {
   return Number((entryPrice * (1 - MOMENTUM_STOP_LOSS_PCT)).toFixed(2));
+}
+
+export function calcTrailingStopPrice(highWaterMark: number): number {
+  if (!Number.isFinite(highWaterMark) || highWaterMark <= 0) return 0;
+  return Number((highWaterMark * (1 - MOMENTUM_TRAILING_STOP_PCT)).toFixed(2));
 }

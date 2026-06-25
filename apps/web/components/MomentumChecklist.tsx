@@ -12,6 +12,8 @@ type MomentumChecklistProps = {
   action: 'buy' | 'hold' | 'wait' | 'sell';
   entryMemo?: string;
   stopLossPrice?: number | null;
+  trailingStopPrice?: number | null;
+  highWaterMark?: number | null;
 };
 
 const ACTION_LABEL: Record<MomentumChecklistProps['action'], string> = {
@@ -35,6 +37,8 @@ export function MomentumChecklist({
   action,
   entryMemo,
   stopLossPrice,
+  trailingStopPrice,
+  highWaterMark,
 }: MomentumChecklistProps) {
   return (
     <section className="pane-card momentum-panel">
@@ -66,6 +70,12 @@ export function MomentumChecklist({
       {stopLossPrice != null && (
         <p className="muted momentum-stop">
           建议止损价 <strong>{stopLossPrice.toFixed(2)}</strong>（-8%）
+        </p>
+      )}
+      {trailingStopPrice != null && trailingStopPrice > 0 && (
+        <p className="muted momentum-stop">
+          移动止盈参考 <strong>{trailingStopPrice.toFixed(2)}</strong>
+          {highWaterMark != null ? `（自高点 ${highWaterMark.toFixed(2)} 回撤 12%）` : '（自高点回撤 12%）'}
         </p>
       )}
     </section>

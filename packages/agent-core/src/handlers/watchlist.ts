@@ -3,7 +3,7 @@ import {
   detectDiamondSignal,
   scanDiamondSignalHistory,
 } from '../data/market/diamond-signal.js';
-import { analyzeMomentum } from '../data/paper/momentum.js';
+import { analyzeMomentum, calcTrailingStopPrice } from '../data/paper/momentum.js';
 import {
   addWatchlistItem,
   getWatchlistItem,
@@ -15,6 +15,7 @@ import {
   removeWatchlistItem,
   listSnapshotsForSymbol,
 } from '../data/watchlist/store.js';
+import { getPositionMeta, listPaperPositions } from '../data/paper/store.js';
 import {
   runDailyWatchlistSnapshot,
   scanSymbolsDiamondSignals,
@@ -70,6 +71,18 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
     }
     const diamondHistory = scanDiamondSignalHistory(item.symbol, item.name, bars, 120);
     const momentum = analyzeMomentum(item.symbol, item.name, bars, liveSignal);
+    if (momentum) {
+      const held = (await listPaperPositions('stock')).find((p) => p.symbol === item.symbol);
+      if (held) {
+        const meta = await getPositionMeta(item.symbol, 'stock');
+        const highWaterMark = Math.max(
+          meta?.highWaterMark ?? held.avgCost,
+          momentum.close,
+        );
+        momentum.highWaterMark = Number(highWaterMark.toFixed(2));
+        momentum.trailingStopPrice = calcTrailingStopPrice(highWaterMark);
+      }
+    }
     return JSON.stringify({ item, kline, snapshots, diamondSignal: liveSignal, diamondHistory, momentum });
   }
 

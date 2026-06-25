@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
 import { MomentumChecklist } from '@/components/MomentumChecklist';
 import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
+import { buildMomentumPriceLines } from '@/lib/momentum-price-lines';
 
 type DiamondSignal = {
   tradeDate: string;
@@ -41,6 +42,8 @@ type DetailPayload = {
     action: 'buy' | 'hold' | 'wait' | 'sell';
     entryMemo: string;
     stopLossPrice: number | null;
+    trailingStopPrice?: number | null;
+    highWaterMark?: number | null;
   } | null;
   snapshots: Array<{
     tradeDate: string;
@@ -185,26 +188,11 @@ export default function WatchlistDetailPage() {
                   <KlineChart
                     bars={bars}
                     diamonds={diamonds}
-                    priceLines={[
-                      ...(latestRed
-                        ? [
-                            {
-                              price: latestRed.close,
-                              color: '#5b9cf5',
-                              title: '最近红钻',
-                            },
-                          ]
-                        : []),
-                      ...(data.momentum?.stopLossPrice != null
-                        ? [
-                            {
-                              price: data.momentum.stopLossPrice,
-                              color: '#e07070',
-                              title: '止损参考',
-                            },
-                          ]
-                        : []),
-                    ]}
+                    priceLines={buildMomentumPriceLines({
+                      latestRedClose: latestRed?.close ?? null,
+                      stopLossPrice: data.momentum?.stopLossPrice ?? null,
+                      trailingStopPrice: data.momentum?.trailingStopPrice ?? null,
+                    })}
                     height={420}
                   />
                 </div>
@@ -218,6 +206,8 @@ export default function WatchlistDetailPage() {
                   action={data.momentum.action}
                   entryMemo={data.momentum.entryMemo}
                   stopLossPrice={data.momentum.stopLossPrice}
+                  trailingStopPrice={data.momentum.trailingStopPrice}
+                  highWaterMark={data.momentum.highWaterMark}
                 />
               )}
 

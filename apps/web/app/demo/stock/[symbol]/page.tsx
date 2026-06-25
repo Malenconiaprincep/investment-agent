@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { KlineChart, type KlineBar } from '@/components/charts/KlineChart';
 import { MomentumChecklist } from '@/components/MomentumChecklist';
+import { buildMomentumPriceLines } from '@/lib/momentum-price-lines';
 
 type DiamondSignal = {
   tradeDate: string;
@@ -35,6 +36,8 @@ type ChartPayload = {
     action: 'buy' | 'hold' | 'wait' | 'sell';
     entryMemo: string;
     stopLossPrice: number | null;
+    trailingStopPrice?: number | null;
+    highWaterMark?: number | null;
   } | null;
 };
 
@@ -88,6 +91,7 @@ export default function StockDiamondChartPage() {
   const redSignals = data?.diamondHistory.filter((s) => s.strength === 'red') ?? [];
   const latestRed = redSignals[0] ?? null;
   const stopLossPrice = data?.momentum?.stopLossPrice ?? null;
+  const trailingStopPrice = data?.momentum?.trailingStopPrice ?? null;
 
   return (
     <main className="page page--workspace">
@@ -166,26 +170,11 @@ export default function StockDiamondChartPage() {
                   <KlineChart
                     bars={bars}
                     diamonds={diamonds}
-                    priceLines={[
-                      ...(latestRed
-                        ? [
-                            {
-                              price: latestRed.close,
-                              color: '#5b9cf5',
-                              title: '最近红钻',
-                            },
-                          ]
-                        : []),
-                      ...(stopLossPrice != null
-                        ? [
-                            {
-                              price: stopLossPrice,
-                              color: '#e07070',
-                              title: '止损参考',
-                            },
-                          ]
-                        : []),
-                    ]}
+                    priceLines={buildMomentumPriceLines({
+                      latestRedClose: latestRed?.close ?? null,
+                      stopLossPrice,
+                      trailingStopPrice,
+                    })}
                     height={420}
                   />
                 </div>
@@ -199,6 +188,8 @@ export default function StockDiamondChartPage() {
                   action={data.momentum.action}
                   entryMemo={data.momentum.entryMemo}
                   stopLossPrice={data.momentum.stopLossPrice}
+                  trailingStopPrice={data.momentum.trailingStopPrice}
+                  highWaterMark={data.momentum.highWaterMark}
                 />
               )}
 
