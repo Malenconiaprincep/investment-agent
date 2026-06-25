@@ -450,6 +450,7 @@ async function executeMonitorBuy(input: {
   }
 
   const result = await executePaperTrade({
+    bucket: 'stock',
     symbol: alert.symbol,
     name: alert.name,
     side: 'buy',
@@ -508,8 +509,8 @@ async function maybeAutoBuy(input: {
 
   try {
     const [summary, trades] = await Promise.all([
-      getPaperAccountSummary(),
-      listPaperTrades(500),
+      getPaperAccountSummary('stock'),
+      listPaperTrades(500, 'stock'),
     ]);
 
     return await executeMonitorBuy({
@@ -543,8 +544,8 @@ async function maybeAutoBuy(input: {
 async function autoBuyMonitorWatchlist(tradeDate: string): Promise<MonitorPaperAction[]> {
   const actions: MonitorPaperAction[] = [];
   const watchlist = await listWatchlistItems();
-  let summary = await getPaperAccountSummary();
-  let trades = await listPaperTrades(500);
+  let summary = await getPaperAccountSummary('stock');
+  let trades = await listPaperTrades(500, 'stock');
 
   const held = new Set(summary.positions.map((p) => p.symbol));
   const monitorItems = watchlist.filter((item) => item.sourceType === 'signal');
@@ -608,8 +609,8 @@ async function autoBuyMonitorWatchlist(tradeDate: string): Promise<MonitorPaperA
         actions.push(action);
         if (action.status === 'bought') {
           held.add(item.symbol);
-          summary = await getPaperAccountSummary();
-          trades = await listPaperTrades(500);
+          summary = await getPaperAccountSummary('stock');
+          trades = await listPaperTrades(500, 'stock');
         }
       }
     } catch {
@@ -622,7 +623,7 @@ async function autoBuyMonitorWatchlist(tradeDate: string): Promise<MonitorPaperA
 
 async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaperAction[]> {
   const actions: MonitorPaperAction[] = [];
-  const positions = await listPaperPositions();
+  const positions = await listPaperPositions('stock');
 
   for (const pos of positions) {
     try {
@@ -641,8 +642,8 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
         continue;
       }
 
-      await updateHighWaterMark(pos.symbol, close);
-      const meta = await getPositionMeta(pos.symbol);
+      await updateHighWaterMark(pos.symbol, close, 'stock');
+      const meta = await getPositionMeta(pos.symbol, 'stock');
       const exit = evaluateMomentumExit({
         avgCost: pos.avgCost,
         close,
@@ -652,7 +653,7 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
       });
       if (!exit) continue;
 
-      const summary = await getPaperAccountSummary();
+      const summary = await getPaperAccountSummary('stock');
       const held = summary.positions.find((p) => p.symbol === pos.symbol);
       const available = held?.availableShares ?? 0;
       if (available < 100) {
@@ -669,6 +670,7 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
 
       const shares = Math.floor(available / 100) * 100;
       const result = await executePaperTrade({
+        bucket: 'stock',
         symbol: pos.symbol,
         name: pos.name,
         side: 'sell',

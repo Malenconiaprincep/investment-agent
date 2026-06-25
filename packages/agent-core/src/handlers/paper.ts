@@ -1,26 +1,42 @@
 import {
-  getPaperAccountSummary,
+  getPaperDualSummary,
   executePaperTrade,
   listPaperTrades,
   listEquitySnapshots,
+  type PaperBucket,
 } from '../data/paper/store.js';
-import { getDailyQuote } from '../data/market/services.js';
+
+function parsePaperArgs(args: string[]): { bucket?: PaperBucket; rest: string[] } {
+  let bucket: PaperBucket | undefined;
+  const rest: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--bucket' && args[i + 1]) {
+      const value = args[++i];
+      if (value === 'etf' || value === 'stock') bucket = value;
+      continue;
+    }
+    if (args[i] === '--force') continue;
+    rest.push(args[i]);
+  }
+  return { bucket, rest };
+}
 
 export async function dispatchPaper(args: string[]): Promise<string> {
   const command = args[0];
+  const { bucket, rest } = parsePaperArgs(args.slice(1));
 
   if (command === 'account') {
-    return JSON.stringify(await getPaperAccountSummary());
+    return JSON.stringify(await getPaperDualSummary());
   }
 
   if (command === 'trades') {
-    const limit = Number(args[1] ?? 100);
-    return JSON.stringify({ trades: await listPaperTrades(limit) });
+    const limit = Number(rest[0] ?? 100);
+    return JSON.stringify({ trades: await listPaperTrades(limit, bucket) });
   }
 
   if (command === 'equity') {
-    const limit = Number(args[1] ?? 90);
-    return JSON.stringify({ snapshots: await listEquitySnapshots(limit) });
+    const limit = Number(rest[0] ?? 90);
+    return JSON.stringify({ snapshots: await listEquitySnapshots(limit, bucket) });
   }
 
   if (command === 'status') {
@@ -34,35 +50,44 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(await runPaperAutoPipeline({ force }));
   }
 
+  if (command === 'etf-auto-run') {
+    const { runEtfPaperAutoPipeline } = await import('../data/paper/etf-paper-pipeline.js');
+    const force = args.includes('--force');
+    return JSON.stringify(await runEtfPaperAutoPipeline({ force }));
+  }
+
   if (command === 'trade') {
-    const side = args[1] as 'buy' | 'sell';
-    const symbol = args[2];
-    const name = args[3];
-    const shares = Number(args[4]);
-    const priceArg = args[5];
+    const side = rest[0] as 'buy' | 'sell';
+    const symbol = rest[1];
+    const name = rest[2];
+    const shares = Number(rest[3]);
+    const priceArg = rest[4];
+    const tradeBucket = bucket ?? 'stock';
 
     if (!side || !symbol || !name || !shares) {
-      throw new Error('Usage: trade <buy|sell> <symbol> <name> <shares> [price]');
+      throw new Error(
+        'Usage: trade <buy|sell> <symbol> <name> <shares> [price] [--bucket etf|stock]',
+      );
     }
 
-    let price = priceArg ? Number(priceArg) : null;
-    if (price == null || !Number.isFinite(price)) {
-      const q = await getDailyQuote(symbol, 2);
-      price = q.latestClose;
-    }
-    if (price == null) throw new Error('无法获取最新价');
+    const manualPrice =
+      priceArg && Number.isFinite(Number(priceArg)) ? Number(priceArg) : undefined;
 
     return JSON.stringify(
       await executePaperTrade({
+        bucket: tradeBucket,
         symbol,
         name,
         side,
         shares,
-        price,
+        price: manualPrice,
+        useOrderBookPrice: manualPrice == null,
         source: 'manual',
       }),
     );
   }
 
-  throw new Error('Usage: account|trades|equity|status|auto-run|trade ...');
+  throw new Error(
+    'Usage: account|trades|equity|status|auto-run|etf-auto-run|trade ...',
+  );
 }

@@ -20,9 +20,9 @@ export async function generateWeeklyReview() {
   const items = await listWatchlistItems();
   const snapshots = await listLatestSnapshots();
   const diamonds = await listDiamondSignals(20);
-  const account = await getOrCreatePaperAccount();
-  const positions = await listPaperPositions();
-  const trades = await listPaperTrades(20);
+  const account = await getOrCreatePaperAccount('stock');
+  const positions = await listPaperPositions('stock');
+  const trades = await listPaperTrades(20, 'stock');
 
   const snapshotMap = new Map(snapshots.map((s) => [s.symbol, s]));
   const returns = items

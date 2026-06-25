@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { runAgentCorePaperJson } from '@/lib/agent-core';
+import { normalizeDualPaperPayload } from '@/lib/paper-dual';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
     const stdout = await runAgentCorePaperJson(['account']);
-    return NextResponse.json(JSON.parse(stdout));
+    return NextResponse.json(normalizeDualPaperPayload(JSON.parse(stdout)));
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取模拟账户失败';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       name?: string;
       shares?: number;
       price?: number;
+      bucket?: 'etf' | 'stock';
     };
 
     if (!body.side || !body.symbol || !body.name || !body.shares) {
@@ -36,6 +38,9 @@ export async function POST(request: Request) {
       String(body.shares),
       body.price != null ? String(body.price) : '',
     ];
+    if (body.bucket === 'etf' || body.bucket === 'stock') {
+      args.push('--bucket', body.bucket);
+    }
     const stdout = await runAgentCorePaperJson(args);
     return NextResponse.json(JSON.parse(stdout));
   } catch (error) {

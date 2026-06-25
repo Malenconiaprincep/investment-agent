@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
+import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import { getDailyQuote } from '../market/services.js';
 import {
   analyzeMomentum,
@@ -61,7 +62,7 @@ async function refreshPositionMarks(positions: Array<{ symbol: string }>) {
     try {
       const q = await getDailyQuote(pos.symbol, 2);
       if (q.latestClose != null) {
-        await updateHighWaterMark(pos.symbol, q.latestClose);
+        await updateHighWaterMark(pos.symbol, q.latestClose, 'stock');
       }
     } catch {
       // skip
@@ -78,7 +79,7 @@ async function autoSellExits(tradeDate: string) {
     reason: string;
   }> = [];
 
-  const positions = await listPaperPositions();
+  const positions = await listPaperPositions('stock');
   for (const pos of positions) {
     try {
       const kline = await getDailyQuote(pos.symbol, 60);
@@ -87,7 +88,7 @@ async function autoSellExits(tradeDate: string) {
       const close = momentum?.close ?? kline.latestClose;
       if (close == null) continue;
 
-      const meta = await getPositionMeta(pos.symbol);
+      const meta = await getPositionMeta(pos.symbol, 'stock');
       const exit = evaluateMomentumExit({
         avgCost: pos.avgCost,
         close,
@@ -97,13 +98,14 @@ async function autoSellExits(tradeDate: string) {
       });
       if (!exit) continue;
 
-      const summary = await getPaperAccountSummary();
+      const summary = await getPaperAccountSummary('stock');
       const held = summary.positions.find((p) => p.symbol === pos.symbol);
       const available = held?.availableShares ?? 0;
       if (available < 100) continue;
 
       const shares = Math.floor(available / 100) * 100;
       await executePaperTrade({
+        bucket: 'stock',
         symbol: pos.symbol,
         name: pos.name,
         side: 'sell',
@@ -135,7 +137,7 @@ async function autoBuySignals(
   candidates: Array<{ symbol: string; name: string; memo: string }>,
 ) {
   const buys: NonNullable<PaperAutoPipelineResult['trades']>['buys'] = [];
-  const summary = await getPaperAccountSummary();
+  const summary = await getPaperAccountSummary('stock');
   const held = new Set(summary.positions.map((p) => p.symbol));
 
   for (const c of candidates) {
@@ -143,14 +145,13 @@ async function autoBuySignals(
     if (summary.positions.length + buys.length >= 5) break;
 
     try {
-      const q = await getDailyQuote(c.symbol, 2);
-      const price = q.latestClose;
-      if (price == null) continue;
-
+      const execution = await resolvePaperExecutionPrice(c.symbol, 'buy');
+      const price = execution.price;
       const shares = calcAutoBuyShares(summary.account.cash, price);
       if (shares < 100) continue;
 
       await executePaperTrade({
+        bucket: 'stock',
         symbol: c.symbol,
         name: c.name,
         side: 'buy',
@@ -158,9 +159,10 @@ async function autoBuySignals(
         price,
         tradeDate,
         source: 'auto',
-        note: '动量派：红钻 + checklist 通过',
+        note: `动量派：红钻 + checklist 通过 · 成交价=${execution.priceSource}`,
         entryMemo: c.memo,
         skipSessionCheck: true,
+        useOrderBookPrice: false,
       });
 
       buys.push({ symbol: c.symbol, name: c.name, shares, price, memo: c.memo });
@@ -173,7 +175,7 @@ async function autoBuySignals(
   return buys;
 }
 
-export async function runPaperAutoPipeline(options?: {
+export async function runStockPaperAutoPipeline(options?: {
   force?: boolean;
 }): Promise<PaperAutoPipelineResult> {
   const tradeDate = formatTradeDate();
@@ -199,7 +201,7 @@ export async function runPaperAutoPipeline(options?: {
   };
 
   try {
-    await refreshPositionMarks(await listPaperPositions());
+    await refreshPositionMarks(await listPaperPositions('stock'));
 
     const screeningOutcome: PaperAutoPipelineResult['screening'] = {
       passed: false,
@@ -274,7 +276,7 @@ export async function runPaperAutoPipeline(options?: {
 
     result.trades = { buys, sells };
 
-    const equity = await saveEquitySnapshot(tradeDate);
+    const equity = await saveEquitySnapshot(tradeDate, 'stock');
     result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
 
     await finishAutoRun(runId, 'ok', result as Record<string, unknown>);
@@ -286,13 +288,24 @@ export async function runPaperAutoPipeline(options?: {
   }
 }
 
+export async function runPaperAutoPipeline(options?: {
+  force?: boolean;
+}) {
+  const { runEtfPaperAutoPipeline } = await import('./etf-paper-pipeline.js');
+  const [stock, etf] = await Promise.all([
+    runStockPaperAutoPipeline(options),
+    runEtfPaperAutoPipeline(options),
+  ]);
+  return { tradeDate: stock.tradeDate, stock, etf };
+}
+
 export async function getPaperAutoStatus() {
   const latest = await getLatestAutoRun();
-  const summary = await getPaperAccountSummary();
+  const dual = await import('./store.js').then((m) => m.getPaperDualSummary());
   return {
     latestRun: latest,
-    account: summary,
-    strategy: 'momentum',
+    buckets: dual,
+    strategy: 'dual-bucket',
     nextSchedule: AUTO_RUN_SCHEDULE_LABEL,
   };
 }

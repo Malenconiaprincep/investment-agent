@@ -15,6 +15,7 @@ import {
   isTradeDateInRange,
   normalizeTradeDateKey,
   resolveBacktestDateRange,
+  todayDateKey,
 } from './date-range.js';
 import type {
   BacktestCurrentDecision,
@@ -943,6 +944,114 @@ function buildCurrentDecisions(input: {
       if (a.action !== b.action) return a.action === 'buy' ? -1 : 1;
       return b.changePct - a.changePct;
     });
+}
+
+export type EtfMomentumLiveTarget = {
+  symbol: string;
+  name: string;
+  isBenchmarkFill: boolean;
+};
+
+export type EtfMomentumLivePlan = {
+  tradeDate: string;
+  topN: number;
+  rebalanceDays: number;
+  regimeExposureScale: number;
+  weakRegime: boolean;
+  bearRegime: boolean;
+  targets: EtfMomentumLiveTarget[];
+};
+
+async function loadEtfMomentumHistories(days: number): Promise<{
+  histories: EtfHistory[];
+  benchmarkHistory: EtfHistory | undefined;
+}> {
+  const histories: EtfHistory[] = [];
+  for (const item of ETF_POOL_19) {
+    try {
+      const quoteDays = hasLocalEtfDailyCsv(item.symbol)
+        ? LOCAL_ETF_LOAD_ALL_DAYS
+        : days;
+      const data = await getDailyQuote(item.symbol, quoteDays);
+      histories.push(toHistory(item.symbol, item.name, data.quotes));
+    } catch {
+      // skip missing symbols
+    }
+  }
+  return {
+    histories,
+    benchmarkHistory: histories.find((item) => item.symbol === BENCHMARK_SYMBOL),
+  };
+}
+
+export async function buildEtfMomentumLivePlan(input?: {
+  tradeDate?: string;
+  excludedSymbols?: Set<string>;
+}): Promise<EtfMomentumLivePlan> {
+  const tradeDate = normalizeTradeDateKey(input?.tradeDate ?? formatTradeDateKey(todayDateKey()));
+  const topN = DEFAULT_TOP_N;
+  const momentumDays = DEFAULT_MOMENTUM_DAYS;
+  const trendMaDays = DEFAULT_TREND_MA_DAYS;
+  const { histories, benchmarkHistory } = await loadEtfMomentumHistories(
+    Math.max(120, momentumDays + trendMaDays + 45),
+  );
+
+  const benchmarkBar = benchmarkHistory?.byDate.get(tradeDate);
+  const scheduleVol =
+    benchmarkBar != null
+      ? computeAnnualizedVolPct(benchmarkHistory, benchmarkBar.index)
+      : null;
+  const exposureScale = resolveVolTargetExposure(scheduleVol);
+  const weakRegime = isWeakRegime({
+    benchmarkHistory,
+    tradeDate,
+    momentumDays,
+  });
+  const bearRegime = isBearRegime({
+    benchmarkHistory,
+    tradeDate,
+    momentumDays,
+  });
+  const weakExposureScale =
+    weakRegime && WEAK_REGIME_MAX_EXPOSURE != null
+      ? Math.min(exposureScale, WEAK_REGIME_MAX_EXPOSURE)
+      : exposureScale;
+  const regimeExposureScale = bearRegime
+    ? Math.min(weakExposureScale, BEAR_REGIME_MAX_EXPOSURE)
+    : weakExposureScale;
+  const reserveBenchmarkSlotCount = isBullBenchmarkSlotEnabled({
+    benchmarkHistory,
+    tradeDate,
+    momentumDays,
+    thresholdPct: BULL_BENCHMARK_SLOT_MOMENTUM_PCT,
+  })
+    ? BULL_BENCHMARK_SLOT_COUNT
+    : 0;
+  const slots = resolveTargetSlots({
+    histories,
+    benchmarkHistory,
+    tradeDate,
+    topN,
+    momentumDays,
+    trendMaDays,
+    reserveBenchmarkSlotCount,
+    excludedSymbols: input?.excludedSymbols ?? new Set<string>(),
+    allowBenchmarkFallback: true,
+  });
+
+  return {
+    tradeDate,
+    topN,
+    rebalanceDays: DEFAULT_REBALANCE_DAYS,
+    regimeExposureScale,
+    weakRegime,
+    bearRegime,
+    targets: slots.map((slot) => ({
+      symbol: slot.history.symbol,
+      name: slot.history.name,
+      isBenchmarkFill: slot.isBenchmarkFill,
+    })),
+  };
 }
 
 export async function runEtfMomentumBacktest(

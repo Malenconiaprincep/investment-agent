@@ -6,8 +6,13 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limit = searchParams.get('limit') ?? '90';
+  const bucket = searchParams.get('bucket');
   try {
-    const stdout = await runAgentCorePaperJson(['equity', limit]);
+    const args = ['equity', limit];
+    if (bucket === 'etf' || bucket === 'stock') {
+      args.push('--bucket', bucket);
+    }
+    const stdout = await runAgentCorePaperJson(args);
     return NextResponse.json(JSON.parse(stdout));
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取收益曲线失败';

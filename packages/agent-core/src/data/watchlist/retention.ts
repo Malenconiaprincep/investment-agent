@@ -84,7 +84,7 @@ export async function purgeExpiredWatchlistItems(): Promise<WatchlistPurgeResult
   const retention = getWatchlistRetentionDays();
   const now = getBeijingNow();
   const items = await listWatchlistItems();
-  const positions = await listPaperPositions();
+  const positions = await listPaperPositions('stock');
   const heldSymbols = new Set(
     positions.filter((p) => p.shares > 0).map((p) => p.symbol),
   );
