@@ -33,6 +33,10 @@ export type RunEtfMomentumBacktestInput = {
   momentumDays?: number;
   rebalanceDays?: number;
   trendMaDays?: number;
+  bearRegimeMaxExposure?: number;
+  weakRegimeMaxExposure?: number | null;
+  bullBenchmarkSlotMomentumPct?: number;
+  bullBenchmarkSlotCount?: number;
 };
 
 type MomentumBar = {
@@ -55,7 +59,7 @@ type MomentumPick = {
 };
 
 const DEFAULT_DAYS = 365;
-const DEFAULT_TOP_N = 3;
+const DEFAULT_TOP_N = 4;
 const DEFAULT_MOMENTUM_DAYS = 20;
 const DEFAULT_REBALANCE_DAYS = 10;
 const DEFAULT_TREND_MA_DAYS = 20;
@@ -70,8 +74,10 @@ const TARGET_ANNUAL_VOL_PCT = 15;
 const MIN_VOL_EXPOSURE = 0.7;
 const MAX_VOL_EXPOSURE = 1.0;
 const STOP_COOLDOWN_DAYS = 10;
-const HIGH_VOL_REBALANCE_DAYS = 12;
-const HIGH_VOL_REBALANCE_TRIGGER_PCT = 30;
+const WEAK_REGIME_MAX_EXPOSURE = 0.7;
+const BEAR_REGIME_MAX_EXPOSURE = 0.25;
+const BULL_BENCHMARK_SLOT_MOMENTUM_PCT = 8;
+const BULL_BENCHMARK_SLOT_COUNT = 1;
 
 type SimPosition = {
   symbol: string;
@@ -224,35 +230,68 @@ function resolveVolTargetExposure(
   return Math.max(minExposure, Math.min(maxExposure, scale));
 }
 
-function resolveRebalanceDays(input: {
-  annualizedVolPct: number | null;
+function isBearRegime(input: {
   benchmarkHistory: EtfHistory | undefined;
   tradeDate: string;
-  baseDays: number;
-  highVolDays?: number;
-  triggerPct?: number;
-}): number {
-  const highVolDays = input.highVolDays ?? HIGH_VOL_REBALANCE_DAYS;
-  const triggerPct = input.triggerPct ?? HIGH_VOL_REBALANCE_TRIGGER_PCT;
+  momentumDays: number;
+}): boolean {
   const benchmark = input.benchmarkHistory?.byDate.get(input.tradeDate);
-  if (!benchmark || benchmark.index < MARKET_REGIME_MA_DAYS) {
-    return input.baseDays;
+  if (!benchmark || benchmark.index < Math.max(MARKET_REGIME_MA_DAYS, input.momentumDays)) {
+    return false;
   }
 
   const regimeSlice = input.benchmarkHistory!.bars
     .slice(benchmark.index - MARKET_REGIME_MA_DAYS + 1, benchmark.index + 1)
     .map((bar) => bar.close);
   const regimeMa = avg(regimeSlice);
-  const bearRegime = regimeMa != null && benchmark.close < regimeMa;
-  if (
-    bearRegime
-    && input.annualizedVolPct != null
-    && input.annualizedVolPct >= triggerPct
-  ) {
-    return highVolDays;
+  const past = input.benchmarkHistory!.bars[benchmark.index - input.momentumDays];
+  if (regimeMa == null || !past?.close) return false;
+
+  return benchmark.close < regimeMa && benchmark.close < past.close;
+}
+
+function isWeakRegime(input: {
+  benchmarkHistory: EtfHistory | undefined;
+  tradeDate: string;
+  momentumDays: number;
+}): boolean {
+  const benchmark = input.benchmarkHistory?.byDate.get(input.tradeDate);
+  if (!benchmark || benchmark.index < Math.max(MARKET_REGIME_MA_DAYS, input.momentumDays)) {
+    return false;
   }
 
-  return input.baseDays;
+  const regimeSlice = input.benchmarkHistory!.bars
+    .slice(benchmark.index - MARKET_REGIME_MA_DAYS + 1, benchmark.index + 1)
+    .map((bar) => bar.close);
+  const regimeMa = avg(regimeSlice);
+  const past = input.benchmarkHistory!.bars[benchmark.index - input.momentumDays];
+  if (regimeMa == null || !past?.close) return false;
+
+  return benchmark.close < regimeMa || benchmark.close < past.close;
+}
+
+function isBullBenchmarkSlotEnabled(input: {
+  benchmarkHistory: EtfHistory | undefined;
+  tradeDate: string;
+  momentumDays: number;
+  thresholdPct: number | undefined;
+}): boolean {
+  if (input.thresholdPct == null || input.thresholdPct <= 0) return false;
+
+  const benchmark = input.benchmarkHistory?.byDate.get(input.tradeDate);
+  if (!benchmark || benchmark.index < Math.max(MARKET_REGIME_MA_DAYS, input.momentumDays)) {
+    return false;
+  }
+
+  const regimeSlice = input.benchmarkHistory!.bars
+    .slice(benchmark.index - MARKET_REGIME_MA_DAYS + 1, benchmark.index + 1)
+    .map((bar) => bar.close);
+  const regimeMa = avg(regimeSlice);
+  const past = input.benchmarkHistory!.bars[benchmark.index - input.momentumDays];
+  if (regimeMa == null || !past?.close || benchmark.close < regimeMa) return false;
+
+  const momentumPct = ((benchmark.close - past.close) / past.close) * 100;
+  return momentumPct >= input.thresholdPct;
 }
 
 function buildStopCooldownExclusions(
@@ -294,8 +333,32 @@ function sellProceeds(input: {
   );
 }
 
+function findBarAtOrBefore(
+  history: EtfHistory,
+  tradeDate: string,
+): (MomentumBar & { index: number }) | undefined {
+  const exact = history.byDate.get(tradeDate);
+  if (exact) return exact;
+
+  let left = 0;
+  let right = history.bars.length - 1;
+  let matchIndex = -1;
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const bar = history.bars[mid];
+    if (bar.tradeDate <= tradeDate) {
+      matchIndex = mid;
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+  const bar = matchIndex >= 0 ? history.bars[matchIndex] : undefined;
+  return bar ? { ...bar, index: matchIndex } : undefined;
+}
+
 function markPositionValue(position: SimPosition, tradeDate: string): number {
-  const bar = position.history.byDate.get(tradeDate);
+  const bar = findBarAtOrBefore(position.history, tradeDate);
   if (!bar || position.entryPrice <= 0) return position.grossBasis;
   return position.shares * bar.close;
 }
@@ -307,6 +370,7 @@ function resolveTargetSlots(input: {
   topN: number;
   momentumDays: number;
   trendMaDays: number;
+  reserveBenchmarkSlotCount?: number;
   excludedSymbols?: Set<string>;
 }): Array<{
   history: EtfHistory;
@@ -340,8 +404,22 @@ function resolveTargetSlots(input: {
     isBenchmarkFill: boolean;
     effectiveTrendMaDays: number;
   }> = [];
+  const sectorSlotCount =
+    input.reserveBenchmarkSlotCount && input.benchmarkHistory
+      ? Math.max(0, input.topN - input.reserveBenchmarkSlotCount)
+      : input.topN;
 
-  for (let slot = 0; slot < input.topN; slot += 1) {
+  if (input.reserveBenchmarkSlotCount && input.benchmarkHistory) {
+    for (let slot = 0; slot < input.reserveBenchmarkSlotCount; slot += 1) {
+      slots.push({
+        history: input.benchmarkHistory,
+        isBenchmarkFill: true,
+        effectiveTrendMaDays,
+      });
+    }
+  }
+
+  for (let slot = 0; slot < sectorSlotCount; slot += 1) {
     const pick = picks[slot];
     if (pick && !excludedSymbols.has(pick.history.symbol)) {
       slots.push({
@@ -385,7 +463,9 @@ function closeSimPosition(input: {
     input.position.grossBasis > 0
       ? round(((proceeds - input.position.grossBasis) / input.position.grossBasis) * 100)
       : null;
-  const exitIndex = input.position.history.byDate.get(input.exitDate)?.index ?? 0;
+  const exitIndex =
+    findBarAtOrBefore(input.position.history, input.exitDate)?.index
+    ?? input.position.entryIndex;
 
   const signal: BacktestSignal = input.position.pick
     ? {
@@ -458,7 +538,10 @@ function simulateDailyPortfolio(input: {
   minVolExposure: number;
   maxVolExposure: number;
   stopCooldownDays: number;
-  highVolRebalanceDays: number;
+  bearRegimeMaxExposure: number;
+  weakRegimeMaxExposure?: number;
+  bullBenchmarkSlotMomentumPct?: number;
+  bullBenchmarkSlotCount: number;
 }): {
   trades: BacktestTrade[];
   equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
@@ -473,7 +556,7 @@ function simulateDailyPortfolio(input: {
 
   const closeAllPositions = (tradeDate: string, exitReason: BacktestTrade['exitReason']) => {
     for (const position of positions) {
-      const bar = position.history.byDate.get(tradeDate);
+      const bar = findBarAtOrBefore(position.history, tradeDate);
       if (!bar) continue;
       trades.push(
         closeSimPosition({
@@ -515,13 +598,7 @@ function simulateDailyPortfolio(input: {
     const scheduleVol = benchmarkBarForSchedule
       ? computeAnnualizedVolPct(input.benchmarkHistory, benchmarkBarForSchedule.index)
       : null;
-    const requiredRebalanceDays = resolveRebalanceDays({
-      annualizedVolPct: scheduleVol,
-      benchmarkHistory: input.benchmarkHistory,
-      tradeDate,
-      baseDays: input.rebalanceDays,
-      highVolDays: input.highVolRebalanceDays,
-    });
+    const requiredRebalanceDays = input.rebalanceDays;
     const isRebalanceDay = daysSinceRebalance >= requiredRebalanceDays;
 
     const remainingPositions: SimPosition[] = [];
@@ -584,12 +661,37 @@ function simulateDailyPortfolio(input: {
         input.minVolExposure,
         input.maxVolExposure,
       );
+      const weakRegime = isWeakRegime({
+        benchmarkHistory: input.benchmarkHistory,
+        tradeDate,
+        momentumDays: input.momentumDays,
+      });
+      const bearRegime = isBearRegime({
+        benchmarkHistory: input.benchmarkHistory,
+        tradeDate,
+        momentumDays: input.momentumDays,
+      });
+      const weakExposureScale =
+        weakRegime && input.weakRegimeMaxExposure != null
+          ? Math.min(exposureScale, input.weakRegimeMaxExposure)
+          : exposureScale;
+      const regimeExposureScale = bearRegime
+        ? Math.min(weakExposureScale, input.bearRegimeMaxExposure)
+        : weakExposureScale;
 
       const totalEquity = cash;
-      const deployable = totalEquity * exposureScale;
+      const deployable = totalEquity * regimeExposureScale;
       cash = totalEquity - deployable;
       const slotBudget = deployable / input.topN;
       const excludedSymbols = buildStopCooldownExclusions(cooldownUntil, dateIndex);
+      const reserveBenchmarkSlotCount = isBullBenchmarkSlotEnabled({
+        benchmarkHistory: input.benchmarkHistory,
+        tradeDate,
+        momentumDays: input.momentumDays,
+        thresholdPct: input.bullBenchmarkSlotMomentumPct,
+      })
+        ? input.bullBenchmarkSlotCount
+        : 0;
       const targetSlots = resolveTargetSlots({
         histories: input.histories,
         benchmarkHistory: input.benchmarkHistory,
@@ -597,6 +699,7 @@ function simulateDailyPortfolio(input: {
         topN: input.topN,
         momentumDays: input.momentumDays,
         trendMaDays: input.trendMaDays,
+        reserveBenchmarkSlotCount,
         excludedSymbols,
       });
       const plannedExitIndex = Math.min(
@@ -701,6 +804,8 @@ function buildCurrentDecisions(input: {
   topN: number;
   momentumDays: number;
   trendMaDays: number;
+  bullBenchmarkSlotMomentumPct?: number;
+  bullBenchmarkSlotCount: number;
 }): BacktestCurrentDecision[] {
   const latestDate = [...new Set(input.histories.flatMap((item) => item.bars.map((bar) => bar.tradeDate)))]
     .sort()
@@ -713,7 +818,20 @@ function buildCurrentDecisions(input: {
     trendMaDays: input.trendMaDays,
   });
 
+  const reserveBenchmarkSlotCount = isBullBenchmarkSlotEnabled({
+    benchmarkHistory: input.benchmarkHistory,
+    tradeDate: latestDate,
+    momentumDays: input.momentumDays,
+    thresholdPct: input.bullBenchmarkSlotMomentumPct,
+  })
+    ? input.bullBenchmarkSlotCount
+    : 0;
+  const sectorSlotCount =
+    reserveBenchmarkSlotCount > 0 && input.benchmarkHistory
+      ? Math.max(0, input.topN - reserveBenchmarkSlotCount)
+      : input.topN;
   const ranked = input.histories
+    .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
     .map((history) =>
       scoreMomentumPick({
         history,
@@ -724,7 +842,12 @@ function buildCurrentDecisions(input: {
     )
     .filter((pick): pick is MomentumPick => pick != null)
     .sort((a, b) => b.score - a.score);
-  const selected = new Set(ranked.slice(0, input.topN).map((pick) => pick.history.symbol));
+  const selected = new Set(
+    ranked.slice(0, sectorSlotCount).map((pick) => pick.history.symbol),
+  );
+  if (input.benchmarkHistory && (reserveBenchmarkSlotCount > 0 || ranked.length < input.topN)) {
+    selected.add(input.benchmarkHistory.symbol);
+  }
 
   return input.histories
     .map((history) => {
@@ -739,11 +862,18 @@ function buildCurrentDecisions(input: {
         actionLabel: isSelected ? '轮动持有' : '等待轮动',
         price: current?.close ?? 0,
         changePct: pick?.momentumPct ?? 0,
-        failCount: pick ? 0 : 1,
-        passedRules: pick ? 2 : 0,
-        failedRules: pick ? [] : [`未站上 MA${effectiveTrendMaDays} 或动量不足`],
+        failCount: pick || isSelected ? 0 : 1,
+        passedRules: pick || isSelected ? 2 : 0,
+        failedRules:
+          pick || isSelected
+            ? []
+            : [`未站上 MA${effectiveTrendMaDays} 或动量不足`],
         reason: pick
           ? `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${effectiveTrendMaDays}，按排名${isSelected ? '进入前' + input.topN : '未进入前' + input.topN}。`
+          : history.symbol === BENCHMARK_SYMBOL && isSelected
+            ? reserveBenchmarkSlotCount > 0
+              ? `沪深300站上 MA${MARKET_REGIME_MA_DAYS} 且 ${input.momentumDays} 日动量达到宽基保留槽位阈值，保留 ${reserveBenchmarkSlotCount} 个基准槽位。`
+              : `动量标的不足 ${input.topN} 只，使用基准 ETF 兜底。`
           : `未满足 MA${effectiveTrendMaDays} 趋势过滤或缺少足够历史数据。`,
         dataSource: 'daily' as const,
       };
@@ -775,6 +905,27 @@ export async function runEtfMomentumBacktest(
     DEFAULT_TREND_MA_DAYS,
     5,
     120,
+  );
+  const bearRegimeMaxExposure =
+    input.bearRegimeMaxExposure != null && Number.isFinite(input.bearRegimeMaxExposure)
+      ? Math.max(0, Math.min(1, input.bearRegimeMaxExposure))
+      : BEAR_REGIME_MAX_EXPOSURE;
+  const weakRegimeMaxExposure =
+    input.weakRegimeMaxExposure === null
+      ? undefined
+      : input.weakRegimeMaxExposure != null && Number.isFinite(input.weakRegimeMaxExposure)
+      ? Math.max(0, Math.min(1, input.weakRegimeMaxExposure))
+      : WEAK_REGIME_MAX_EXPOSURE;
+  const bullBenchmarkSlotMomentumPct =
+    input.bullBenchmarkSlotMomentumPct != null
+    && Number.isFinite(input.bullBenchmarkSlotMomentumPct)
+      ? Math.max(0, input.bullBenchmarkSlotMomentumPct)
+      : BULL_BENCHMARK_SLOT_MOMENTUM_PCT;
+  const bullBenchmarkSlotCount = clampPositiveInt(
+    input.bullBenchmarkSlotCount,
+    BULL_BENCHMARK_SLOT_COUNT,
+    0,
+    topN,
   );
 
   const dateRange = resolveBacktestDateRange({
@@ -829,7 +980,10 @@ export async function runEtfMomentumBacktest(
     minVolExposure: MIN_VOL_EXPOSURE,
     maxVolExposure: MAX_VOL_EXPOSURE,
     stopCooldownDays: STOP_COOLDOWN_DAYS,
-    highVolRebalanceDays: HIGH_VOL_REBALANCE_DAYS,
+    bearRegimeMaxExposure,
+    weakRegimeMaxExposure,
+    bullBenchmarkSlotMomentumPct,
+    bullBenchmarkSlotCount,
   });
 
   const sortedTrades = trades.sort((a, b) => {
@@ -844,7 +998,7 @@ export async function runEtfMomentumBacktest(
     requestedDays: days,
     startDate: formatTradeDateKey(dateRange.startDate),
     endDate: formatTradeDateKey(dateRange.endDate),
-    holdDays: [rebalanceDays, HIGH_VOL_REBALANCE_DAYS],
+    holdDays: [rebalanceDays],
     symbols,
     trades: sortedTrades,
     metrics: summarizeTrades(sortedTrades),
@@ -878,6 +1032,8 @@ export async function runEtfMomentumBacktest(
       topN,
       momentumDays,
       trendMaDays,
+      bullBenchmarkSlotMomentumPct,
+      bullBenchmarkSlotCount,
     }),
     config: {
       topN,
@@ -893,20 +1049,29 @@ export async function runEtfMomentumBacktest(
       volTargetPct: TARGET_ANNUAL_VOL_PCT,
       minVolExposure: MIN_VOL_EXPOSURE,
       maxVolExposure: MAX_VOL_EXPOSURE,
+      bearRegimeMaxExposure,
+      weakRegimeMaxExposure,
+      bullBenchmarkSlotMomentumPct,
+      bullBenchmarkSlotCount,
       stopLossPct: POSITION_STOP_LOSS_PCT,
       stopCooldownDays: STOP_COOLDOWN_DAYS,
-      highVolRebalanceDays: HIGH_VOL_REBALANCE_DAYS,
-      highVolRebalanceTriggerPct: HIGH_VOL_REBALANCE_TRIGGER_PCT,
     },
     notes: [
-      `ETF 动量轮动：默认每 ${rebalanceDays} 个交易日调仓；当沪深300 ${VOL_LOOKBACK_DAYS} 日年化波动率不低于 ${HIGH_VOL_REBALANCE_TRIGGER_PCT}% 且大盘跌破 MA${MARKET_REGIME_MA_DAYS} 时，调仓周期延长至 ${HIGH_VOL_REBALANCE_DAYS} 日。`,
+      `ETF 动量轮动：默认每 ${rebalanceDays} 个交易日调仓。`,
       `选择 ${momentumDays} 日涨幅最高且站上 MA${trendMaDays} 的前 ${topN} 只 ETF 等权持有。`,
       `沪深300 站上 MA${MARKET_REGIME_MA_DAYS} 时，单只 ETF 趋势过滤放宽至 MA${BULL_RELAXED_TREND_MA_DAYS}，减少 V 型反弹踏空。`,
       `动量标的不足 ${topN} 只时，剩余仓位用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底，避免空仓错过大盘反弹。`,
-      `单个持仓从入场价下跌至 ${POSITION_STOP_LOSS_PCT}% 时按日线收盘止损；止损后 ${STOP_COOLDOWN_DAYS} 个交易日内不再买回同一 ETF，空位用基准兜底。`,
+      `单个持仓从入场价下跌至 ${POSITION_STOP_LOSS_PCT}% 时按日线收盘止损；止损后 ${STOP_COOLDOWN_DAYS} 个交易日内不再买回同一 ETF，冷却挡掉的槽位只用基准兜底，不后补弱势动量。`,
       `组合权益按每个交易日持仓市值 + 现金滚动计算，不再仅用调仓点近似。`,
       `交易成本：单边佣金 ${(COMMISSION_RATE * 100).toFixed(2)}%、滑点 ${(SLIPPAGE_RATE * 100).toFixed(2)}%；买卖均计入。`,
       `波动率目标：以沪深300 ${VOL_LOOKBACK_DAYS} 日年化波动率为参考，目标 ${TARGET_ANNUAL_VOL_PCT}%；仅当波动率高于目标时降仓，范围 ${MIN_VOL_EXPOSURE * 100}% ~ ${MAX_VOL_EXPOSURE * 100}%。`,
+      `大盘跌破 MA${MARKET_REGIME_MA_DAYS} 且 ${momentumDays} 日动量为负时，组合总仓位上限降至 ${bearRegimeMaxExposure * 100}%。`,
+      weakRegimeMaxExposure != null
+        ? `大盘跌破 MA${MARKET_REGIME_MA_DAYS} 或 ${momentumDays} 日动量为负时，组合总仓位上限预防性降至 ${weakRegimeMaxExposure * 100}%。`
+        : '默认仅在大盘跌破 MA20 且动量为负的确认熊市中强制降仓。',
+      bullBenchmarkSlotMomentumPct > 0
+        ? `大盘站上 MA${MARKET_REGIME_MA_DAYS} 且 ${momentumDays} 日动量不低于 ${bullBenchmarkSlotMomentumPct}% 时，保留 ${bullBenchmarkSlotCount} 个槽位给 ${BENCHMARK_SYMBOL}，其余槽位继续做 ETF 动量轮动。`
+        : '默认不强制保留宽基槽位；基准 ETF 只在动量标的不足或冷却替补时兜底。',
       '该策略不使用新闻过滤，避免历史新闻覆盖不足和标题情绪噪声影响回测。',
       '收益曲线为日线组合净值，基准为沪深300ETF同期买入持有收益。',
       usedLocalCsv

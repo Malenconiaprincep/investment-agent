@@ -17,6 +17,10 @@ type Variant = {
   momentumDays: number;
   rebalanceDays: number;
   trendMaDays: number;
+  bearRegimeMaxExposure?: number;
+  weakRegimeMaxExposure?: number | null;
+  bullBenchmarkSlotMomentumPct?: number;
+  bullBenchmarkSlotCount?: number;
 };
 
 type BenchmarkBar = {
@@ -109,7 +113,87 @@ const scenarios: Scenario[] = [
 
 const variants: Variant[] = [
   {
-    name: '最终策略 Top3/20日动量/10日调仓/风控增强v2',
+    name: '最终策略 Top4/20日动量/10日调仓/弱市70%+熊市25%+宽基8%',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+  },
+  {
+    name: '上一轮默认 Top4/20日动量/10日调仓/熊市50%',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.5,
+    bullBenchmarkSlotMomentumPct: 0,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/宽基6%保留一格',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.5,
+    bullBenchmarkSlotMomentumPct: 6,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/宽基8%保留一格',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.5,
+    bullBenchmarkSlotMomentumPct: 8,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/宽基10%保留一格',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.5,
+    bullBenchmarkSlotMomentumPct: 10,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/熊市35%仓位',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.35,
+    bullBenchmarkSlotMomentumPct: 0,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/熊市25%仓位',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.25,
+    bullBenchmarkSlotMomentumPct: 0,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/熊市0%仓位',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0,
+    bullBenchmarkSlotMomentumPct: 0,
+  },
+  {
+    name: '实验 Top4/20日动量/10日调仓/熊市35%+宽基8%',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    bearRegimeMaxExposure: 0.35,
+    bullBenchmarkSlotMomentumPct: 8,
+  },
+  {
+    name: '上一版 Top3/20日动量/10日调仓/MA20',
     topN: 3,
     momentumDays: 20,
     rebalanceDays: 10,
@@ -269,6 +353,10 @@ async function runScenario(scenario: Scenario, variant: Variant) {
     momentumDays: variant.momentumDays,
     rebalanceDays: variant.rebalanceDays,
     trendMaDays: variant.trendMaDays,
+    bearRegimeMaxExposure: variant.bearRegimeMaxExposure,
+    weakRegimeMaxExposure: variant.weakRegimeMaxExposure ?? null,
+    bullBenchmarkSlotMomentumPct: variant.bullBenchmarkSlotMomentumPct,
+    bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
   });
   const finalReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
   const benchmarkReturn = result.benchmark?.finalReturnPct ?? null;

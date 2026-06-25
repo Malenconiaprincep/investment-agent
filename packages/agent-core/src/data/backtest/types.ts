@@ -118,10 +118,12 @@ export type BacktestRunConfig = {
   volTargetPct?: number;
   minVolExposure?: number;
   maxVolExposure?: number;
+  bearRegimeMaxExposure?: number;
+  weakRegimeMaxExposure?: number;
+  bullBenchmarkSlotMomentumPct?: number;
+  bullBenchmarkSlotCount?: number;
   stopLossPct?: number;
   stopCooldownDays?: number;
-  highVolRebalanceDays?: number;
-  highVolRebalanceTriggerPct?: number;
 };
 
 export type BacktestRunResult = {
