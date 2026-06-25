@@ -62,6 +62,13 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(await runEtfPaperAutoPipeline({ force }));
   }
 
+  if (command === 'fix-etf-probe') {
+    const { rebalanceEtfToProbePosition } = await import(
+      '../data/paper/etf-paper-pipeline.js'
+    );
+    return JSON.stringify(await rebalanceEtfToProbePosition());
+  }
+
   if (command === 'trade') {
     const side = rest[0] as 'buy' | 'sell';
     const symbol = rest[1];
@@ -94,6 +101,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|status|auto-run|stock-auto-run|etf-auto-run|trade ...',
+    'Usage: account|trades|equity|status|auto-run|stock-auto-run|etf-auto-run|fix-etf-probe|trade ...',
   );
 }

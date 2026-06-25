@@ -352,7 +352,17 @@ export default function PaperTradingPage() {
                             )}
                           </td>
                           <td>{p.shares}</td>
-                          <td>{p.availableShares}</td>
+                          <td>
+                            {p.availableShares}
+                            {'settlementRule' in p && p.settlementRule === 't0' && (
+                              <span className="paper-settlement-tag">T+0</span>
+                            )}
+                            {'settlementRule' in p && p.settlementRule === 't1' && p.frozenShares > 0 && (
+                              <span className="paper-settlement-tag paper-settlement-tag--t1">
+                                冻 {p.frozenShares}
+                              </span>
+                            )}
+                          </td>
                           <td>{p.avgCost.toFixed(2)}</td>
                           <td>
                             {p.latestPrice?.toFixed(2) ?? '—'}
@@ -400,7 +410,7 @@ export default function PaperTradingPage() {
             <strong>股票仓：</strong>15:05 后 · 红钻 + Checklist ≥4 · 单票约 15% · 硬止损 -8% / MA20 / 移动止盈
           </li>
           <li>
-            <strong>T+1：</strong>当日买入冻结，下一交易日方可卖出
+            <strong>交收规则：</strong>ETF 仓 <strong>T+0</strong>（当日买入当日可卖）· 股票仓 <strong>T+1</strong>（当日买入次日可卖）
           </li>
         </ul>
         {view && (

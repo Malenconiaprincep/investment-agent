@@ -33,6 +33,20 @@ export function calcEtfBuySharesFromBudget(budget: number, price: number): numbe
   return roundToLot(Math.floor(budget / price));
 }
 
+export function calcEtfProbeTargetShares(input: {
+  totalEquity: number;
+  deployableScale: number;
+  price: number;
+}): number {
+  return calcEtfPaperBuyShares({
+    totalEquity: input.totalEquity,
+    deployableScale: input.deployableScale,
+    price: input.price,
+    slotCount: 1,
+    isProbeEntry: true,
+  });
+}
+
 export function calcEtfPaperBuyShares(input: {
   totalEquity: number;
   deployableScale: number;

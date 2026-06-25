@@ -14,6 +14,11 @@ import {
 } from './trading-calendar.js';
 import { resolvePaperMarkPrices } from './mark-price.js';
 import { calcStopLoss } from './momentum.js';
+import {
+  getPaperSettlementRule,
+  settlementRuleLabel,
+  usesT1Settlement,
+} from './settlement.js';
 
 export type PaperAccount = {
   id: string;
@@ -46,6 +51,7 @@ export type PaperPosition = {
   frozenShares: number;
   latestPrice: number | null;
   markPriceSource?: 'intraday' | 'daily' | null;
+  settlementRule?: 't0' | 't1';
   marketValue: number | null;
   pnlPct: number | null;
   stopLoss: number | null;
@@ -427,6 +433,13 @@ export async function getAvailableShares(
   tradeDate: string = formatTradeDate(),
   bucket: PaperBucket = 'stock',
 ): Promise<number> {
+  const pos = await getPosition(symbol, bucket);
+  if (!pos) return 0;
+
+  if (!usesT1Settlement(symbol)) {
+    return pos.shares;
+  }
+
   const db = await getDb();
   const result = await db.execute({
     sql: `SELECT COALESCE(SUM(remaining_shares), 0) AS total
@@ -442,15 +455,24 @@ async function deductLots(
   shares: number,
   tradeDate: string,
   bucket: PaperBucket = 'stock',
+  forceAllLots = false,
 ): Promise<void> {
   const db = await getDb();
   let remaining = shares;
-  const lots = await db.execute({
-    sql: `SELECT * FROM paper_lots
-          WHERE bucket = ? AND symbol = ? AND buy_date < ? AND remaining_shares > 0
-          ORDER BY buy_date ASC, created_at ASC`,
-    args: [bucket, symbol, tradeDate],
-  });
+  const allowTodayLots = forceAllLots || !usesT1Settlement(symbol);
+  const lots = allowTodayLots
+    ? await db.execute({
+        sql: `SELECT * FROM paper_lots
+              WHERE bucket = ? AND symbol = ? AND remaining_shares > 0
+              ORDER BY buy_date ASC, created_at ASC`,
+        args: [bucket, symbol],
+      })
+    : await db.execute({
+        sql: `SELECT * FROM paper_lots
+              WHERE bucket = ? AND symbol = ? AND buy_date < ? AND remaining_shares > 0
+              ORDER BY buy_date ASC, created_at ASC`,
+        args: [bucket, symbol, tradeDate],
+      });
 
   for (const row of lots.rows) {
     if (remaining <= 0) break;
@@ -465,7 +487,7 @@ async function deductLots(
   }
 
   if (remaining > 0) {
-    throw new Error('T+1 可卖数量不足');
+    throw new Error(`${settlementRuleLabel(symbol)} 可卖数量不足`);
   }
 }
 
@@ -592,6 +614,7 @@ export async function executePaperTrade(input: {
   note?: string;
   entryMemo?: string;
   skipSessionCheck?: boolean;
+  skipT1Check?: boolean;
   useOrderBookPrice?: boolean;
 }): Promise<{ trade: PaperTrade; account: PaperAccount & { bucket: PaperBucket } }> {
   const bucket = input.bucket ?? 'stock';
@@ -686,13 +709,17 @@ export async function executePaperTrade(input: {
       throw new Error('持仓不足，无法卖出');
     }
     const available = await getAvailableShares(input.symbol, tradeDate, bucket);
-    if (shares > available) {
+    if (!input.skipT1Check && shares > available) {
+      const rule = settlementRuleLabel(input.symbol);
+      const frozen = pos.shares - available;
       throw new Error(
-        `T+1 限制：今日可卖 ${available} 股（共 ${pos.shares} 股，${pos.shares - available} 股今日买入冻结）`,
+        rule === 'T+1'
+          ? `${rule} 限制：今日可卖 ${available} 股（共 ${pos.shares} 股，${frozen} 股当日买入冻结）`
+          : `${rule} 可卖数量不足：请求 ${shares} 股，当前可卖 ${available} 股`,
       );
     }
 
-    await deductLots(input.symbol, shares, tradeDate, bucket);
+    await deductLots(input.symbol, shares, tradeDate, bucket, input.skipT1Check === true);
 
     const newShares = pos.shares - shares;
     const newCash = Number((account.cash + amount).toFixed(2));
@@ -843,6 +870,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
       frozenShares: pos.shares - availableShares,
       latestPrice,
       markPriceSource: mark?.source ?? null,
+      settlementRule: getPaperSettlementRule(pos.symbol),
       marketValue: mv,
       pnlPct,
       stopLoss: meta?.stopLoss ?? calcStopLoss(pos.avgCost),

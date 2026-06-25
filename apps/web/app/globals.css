@@ -2137,6 +2137,16 @@ a:hover {
   vertical-align: middle;
 }
 
+.paper-settlement-tag {
+  margin-left: 0.25rem;
+  font-size: 0.625rem;
+  color: #8fd4a8;
+}
+
+.paper-settlement-tag--t1 {
+  color: #d4c48f;
+}
+
 .paper-equity-section {
   margin-bottom: 1.25rem;
 }

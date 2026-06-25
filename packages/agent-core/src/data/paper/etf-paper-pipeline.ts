@@ -7,9 +7,11 @@ import {
   ETF_MOMENTUM_REBALANCE_DAYS,
   ETF_MOMENTUM_STOP_COOLDOWN_DAYS,
   ETF_MOMENTUM_STOP_LOSS_PCT,
+  ETF_MOMENTUM_TOP_N,
 } from './bucket.js';
 import {
   calcEtfPaperBuyShares,
+  calcEtfProbeTargetShares,
   countEtfTargetSlots,
 } from './etf-paper-sizing.js';
 import {
@@ -302,6 +304,68 @@ export async function runEtfPaperAutoPipeline(options?: {
     result.error = error instanceof Error ? error.message : String(error);
     return result;
   }
+}
+
+/** 将 ETF 仓超仓持仓降至轻仓试探规模（管理修正，非正常交易） */
+export async function rebalanceEtfToProbePosition(): Promise<{
+  adjusted: Array<{
+    symbol: string;
+    name: string;
+    beforeShares: number;
+    targetShares: number;
+    soldShares: number;
+    price: number;
+  }>;
+  summary: Awaited<ReturnType<typeof getPaperAccountSummary>>;
+}> {
+  const summary = await getPaperAccountSummary('etf');
+  const adjusted: Array<{
+    symbol: string;
+    name: string;
+    beforeShares: number;
+    targetShares: number;
+    soldShares: number;
+    price: number;
+  }> = [];
+
+  for (const pos of summary.positions) {
+    const execution = await resolvePaperExecutionPrice(pos.symbol, 'sell');
+    const targetShares = calcEtfProbeTargetShares({
+      totalEquity: summary.totalValue,
+      deployableScale: 1,
+      price: execution.price,
+    });
+    const excess = roundToLot(pos.shares - targetShares);
+    if (excess < 100) continue;
+
+    await executePaperTrade({
+      bucket: 'etf',
+      symbol: pos.symbol,
+      name: pos.name,
+      side: 'sell',
+      shares: excess,
+      price: execution.price,
+      source: 'manual',
+      note: '仓位修正：超仓降至轻仓试探（约 25%）',
+      skipSessionCheck: true,
+      skipT1Check: true,
+      useOrderBookPrice: false,
+    });
+
+    adjusted.push({
+      symbol: pos.symbol,
+      name: pos.name,
+      beforeShares: pos.shares,
+      targetShares,
+      soldShares: excess,
+      price: execution.price,
+    });
+  }
+
+  return {
+    adjusted,
+    summary: await getPaperAccountSummary('etf'),
+  };
 }
 
 export async function getEtfPaperAutoStatus() {
