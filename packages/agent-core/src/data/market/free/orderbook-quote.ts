@@ -32,7 +32,7 @@ export async function fetchOrderBookQuote(symbol: string): Promise<OrderBookQuot
 
   try {
     const json = await freeFetchJson<StockGetResponse>(
-      `https://push2.eastmoney.com/api/qt/stock/get?secid=${toSecId(symbol)}&fields=f43,f58,f19,f20,f39,f40`,
+      `https://push2.eastmoney.com/api/qt/stock/get?secid=${toSecId(symbol)}&fltt=2&fields=f43,f58,f19,f20,f39,f40`,
     );
     const data = json.data;
     const lastPrice = readPrice(data?.f43);

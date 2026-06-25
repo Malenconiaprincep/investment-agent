@@ -10,7 +10,7 @@ function checkCronAuth(request: Request) {
   return request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-/** 北京时间 14:30 = UTC 06:30 */
+/** 外部 Cron 触发 ETF 模拟盘（单次）；常驻监听请用 agent:serve */
 export async function GET(request: Request) {
   if (!checkCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

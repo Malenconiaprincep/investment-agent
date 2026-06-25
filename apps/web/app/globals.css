@@ -1733,6 +1733,74 @@ a:hover {
   border-color: rgba(56, 189, 248, 0.25);
 }
 
+.etf-section-hint {
+  margin: 0 0 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.etf-section-hint--buy {
+  color: #8fd4a8;
+  background: rgba(92, 184, 122, 0.1);
+  border: 1px solid rgba(92, 184, 122, 0.25);
+}
+
+.etf-section-hint--wait {
+  color: #d4c48f;
+  background: rgba(212, 196, 143, 0.08);
+  border: 1px solid rgba(212, 196, 143, 0.22);
+}
+
+.etf-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.625rem;
+}
+
+.etf-verdict--buy {
+  background: rgba(92, 184, 122, 0.14);
+  border: 1px solid rgba(92, 184, 122, 0.35);
+}
+
+.etf-verdict--wait {
+  background: rgba(212, 196, 143, 0.1);
+  border: 1px solid rgba(212, 196, 143, 0.28);
+}
+
+.etf-verdict--avoid {
+  background: rgba(232, 120, 120, 0.1);
+  border: 1px solid rgba(232, 120, 120, 0.28);
+}
+
+.etf-verdict-title {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.etf-verdict--buy .etf-verdict-title {
+  color: #8fd4a8;
+}
+
+.etf-verdict--wait .etf-verdict-title {
+  color: #e6d89a;
+}
+
+.etf-verdict--avoid .etf-verdict-title {
+  color: #f0a0a0;
+}
+
+.etf-verdict-detail {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
 .etf-operation-plan {
   display: flex;
   flex-direction: column;
@@ -1777,6 +1845,36 @@ a:hover {
   color: #5cb87a;
   background: rgba(92, 184, 122, 0.16);
   border: 1px solid rgba(92, 184, 122, 0.35);
+}
+
+.etf-operation-tag--wait {
+  color: #d4c48f;
+  background: rgba(212, 196, 143, 0.12);
+  border: 1px solid rgba(212, 196, 143, 0.28);
+}
+
+.etf-operation-tag--avoid {
+  color: #e88888;
+  background: rgba(232, 120, 120, 0.12);
+  border: 1px solid rgba(232, 120, 120, 0.28);
+}
+
+.etf-operation-tag--verdict-buy {
+  color: #8fd4a8;
+  background: rgba(92, 184, 122, 0.16);
+  border: 1px solid rgba(92, 184, 122, 0.35);
+}
+
+.etf-operation-tag--verdict-wait {
+  color: #e6d89a;
+  background: rgba(212, 196, 143, 0.12);
+  border: 1px solid rgba(212, 196, 143, 0.28);
+}
+
+.etf-operation-tag--verdict-avoid {
+  color: #f0a0a0;
+  background: rgba(232, 120, 120, 0.12);
+  border: 1px solid rgba(232, 120, 120, 0.28);
 }
 
 .etf-operation-tag--active {

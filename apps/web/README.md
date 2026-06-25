@@ -28,7 +28,7 @@ pnpm web:dev
 | 时间（北京时间） | 任务 | 说明 |
 |------------------|------|------|
 | **14:00** 工作日 | ETF 尾盘推荐 | 19 只池 8 条规则 |
-| **14:30** 工作日 | `pnpm paper:etf-schedule` | ETF 动量调仓（下午盘内成交） |
+| **交易时段每 30 分钟** | ETF 模拟盘监听 | 条件满足即调仓/止损（`agent:serve` 内置） |
 | **15:05** 工作日 | `pnpm paper:stock-schedule` | 股票动量选股（收盘后） |
 
 **推荐**：保持 `pnpm agent:serve` 常驻，会自动跑以上三项（可用 `DAILY_TASKS_BACKGROUND_ENABLED=0` 关闭）。
@@ -37,7 +37,7 @@ pnpm web:dev
 
 ```cron
 0 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm etf:tail-schedule >> /tmp/etf-tail.log 2>&1
-30 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
+0,30 9-11,13-15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
 5 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:stock-schedule >> /tmp/paper-stock.log 2>&1
 ```
 

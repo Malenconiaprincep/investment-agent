@@ -29,7 +29,7 @@ CLI 模块名：`watchlist` · `paper` · `reports` · `screenings` · `feedback
 模拟盘与其它日更任务在本机用 `crontab` 触发（见仓库根目录 `scripts/crontab.example`）：
 
 ```bash
-pnpm paper:etf-schedule    # ETF 仓，建议 14:30
+pnpm paper:etf-schedule    # ETF 仓（交易时段监听；agent:serve 默认每 30 分钟）
 pnpm paper:stock-schedule  # 股票仓，建议 15:05
 pnpm watchlist:snapshot
 pnpm monitor:poll

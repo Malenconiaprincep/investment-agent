@@ -19,8 +19,9 @@ function resolveTarget(arg?: string): PaperScheduleTarget {
 }
 
 /** 本机 crontab 示例（系统时区请设为 Asia/Shanghai）：
- * 30 14 * * 1-5 cd /path/to/investment-agent && pnpm paper:etf-schedule
+ * 0,30 9-11,13-15 * * 1-5 cd /path/to/investment-agent && pnpm paper:etf-schedule
  * 5 15 * * 1-5 cd /path/to/investment-agent && pnpm paper:stock-schedule
+ * 推荐直接 pnpm agent:serve 常驻，内置每 30 分钟 ETF 监听。
  */
 async function main() {
   mkdirSync(DATA_DIR, { recursive: true });

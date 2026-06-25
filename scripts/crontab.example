@@ -7,8 +7,8 @@
 # ETF 尾盘推荐 — 19 只池 8 条规则，14:00
 0 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm etf:tail-schedule >> /tmp/etf-tail.log 2>&1
 
-# 模拟盘 — ETF 14:30 调仓
-30 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
+# 模拟盘 — ETF 交易时段每 30 分钟监听（9:30–11:30、13:00–15:00 内触发）
+0,30 9-11,13-15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
 
 # 模拟盘 — 股票 15:05 收盘后选股
 5 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:stock-schedule >> /tmp/paper-stock.log 2>&1

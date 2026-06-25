@@ -140,7 +140,7 @@ export async function runEtfPaperAutoPipeline(options?: {
     return {
       tradeDate,
       skipped: true,
-      reason: '非 ETF 调仓窗口（应在 14:30 后执行）',
+      reason: '非 A 股交易时段（9:30–11:30、13:00–15:00 北京时间）',
     };
   }
 
@@ -157,9 +157,24 @@ export async function runEtfPaperAutoPipeline(options?: {
       tradeDate,
       benchmarkDates,
     );
-    const isRebalanceDay =
+    let isRebalanceDay =
       bucketState.lastRebalanceDate == null
       || daysSinceRebalance >= ETF_MOMENTUM_REBALANCE_DAYS;
+
+    if (
+      !isRebalanceDay
+      && bucketState.lastRebalanceDate === tradeDate
+    ) {
+      const preSummary = await getPaperAccountSummary('etf');
+      const todayTrades = (await listPaperTrades(50, 'etf')).filter(
+        (trade) => trade.tradeDate === tradeDate,
+      );
+      if (preSummary.positions.length === 0 && todayTrades.length === 0) {
+        isRebalanceDay = true;
+        result.reason = '上次调仓未成交，今日重试';
+      }
+    }
+
     result.isRebalanceDay = isRebalanceDay;
 
     if (!isRebalanceDay) {
@@ -241,15 +256,27 @@ export async function runEtfPaperAutoPipeline(options?: {
         shares,
         price: execution.price,
       });
+      held.add(target.symbol);
     }
-
-    await savePaperBucketState({
-      bucket: 'etf',
-      lastRebalanceDate: tradeDate,
-    });
 
     result.sells = sells;
     result.buys = buys;
+
+    const refreshedAfter = await getPaperAccountSummary('etf');
+    const allTargetsHeld = plan.targets.every((target) =>
+      refreshedAfter.positions.some((pos) => pos.symbol === target.symbol),
+    );
+    const hadActivity = sells.length > 0 || buys.length > 0;
+
+    if (hadActivity || allTargetsHeld) {
+      await savePaperBucketState({
+        bucket: 'etf',
+        lastRebalanceDate: tradeDate,
+      });
+    } else {
+      result.reason =
+        '调仓日但未成交（盘口价异常、预算不足或无法凑足 100 股整手）';
+    }
     const equity = await saveEquitySnapshot(tradeDate, 'etf');
     result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
     return result;

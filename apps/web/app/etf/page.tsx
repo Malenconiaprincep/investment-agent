@@ -97,6 +97,67 @@ function canBuyNow(item: EtfCandidate) {
   return isInBuyZone(item.price, plan);
 }
 
+type EtfVerdictLevel = 'buy' | 'wait' | 'avoid';
+
+type EtfVerdict = {
+  level: EtfVerdictLevel;
+  title: string;
+  detail: string;
+};
+
+function resolveEtfVerdict(item: EtfCandidate): EtfVerdict {
+  const plan = item.operationPlan;
+  if (!plan) {
+    return { level: 'avoid', title: '暂无建议', detail: '缺少操作位数据，请刷新后重试。' };
+  }
+
+  if (item.status === 'near_pass' || plan.action === 'watch_only') {
+    return {
+      level: 'wait',
+      title: '仅观察，不建议买',
+      detail: plan.positionHint || '近通过不等于推荐，需补齐规则后再考虑。',
+    };
+  }
+
+  if (item.status === 'failed' || plan.action === 'avoid') {
+    return {
+      level: 'avoid',
+      title: '不建议买',
+      detail: plan.positionHint || '未通过严格筛选。',
+    };
+  }
+
+  if (plan.action === 'wait_pullback') {
+    return {
+      level: 'wait',
+      title: '等回踩再买',
+      detail: plan.positionHint || '当日涨幅偏高，不追高，回落到买入区再看。',
+    };
+  }
+
+  if (isInBuyZone(item.price, plan)) {
+    return {
+      level: 'buy',
+      title: '建议轻仓买入',
+      detail: `严格通过 8 条规则；现价 ${fmtPrice(item.price)} 在买入区 ${fmtPrice(plan.buyZoneLow)}–${fmtPrice(plan.buyZoneHigh)} 内。${plan.positionHint}`,
+    };
+  }
+
+  if (item.price > plan.buyZoneHigh) {
+    return {
+      level: 'wait',
+      title: '暂不建议追',
+      detail: `现价 ${fmtPrice(item.price)} 已高于买入区上沿 ${fmtPrice(plan.buyZoneHigh)}，等回落进区再考虑。`,
+    };
+  }
+
+  return {
+    level: 'wait',
+    title: '可以等',
+    detail: `现价 ${fmtPrice(item.price)} 低于买入区下沿 ${fmtPrice(plan.buyZoneLow)}，可等价格回到区间内再动手。`,
+  };
+}
+
 function runStatusLabel(status: EtfRun['status']) {
   if (status === 'success') return '有推荐';
   if (status === '0_PASS') return '0_PASS';
@@ -218,6 +279,15 @@ export default function EtfPage() {
           {strictPicks.length > 0 && (
             <section className="candidates-section">
               <h2>严格通过</h2>
+              {strictPicks.some((item) => resolveEtfVerdict(item).level === 'buy') ? (
+                <p className="etf-section-hint etf-section-hint--buy">
+                  以下标的已通过严格筛选，且现价落在买入区内，可按「建议轻仓买入」小仓位试探。
+                </p>
+              ) : (
+                <p className="etf-section-hint etf-section-hint--wait">
+                  今日有严格通过标的，但现价不在买入区或需等回踩，请先看卡片里的「投资建议」。
+                </p>
+              )}
               <div className="candidate-grid">
                 {strictPicks.map((item) => (
                   <EtfCard key={item.symbol} item={item} />
@@ -229,6 +299,9 @@ export default function EtfPage() {
           {nearPass.length > 0 && (
             <section className="candidates-section">
               <h2>近通过观察</h2>
+              <p className="etf-section-hint etf-section-hint--wait">
+                近通过仅作观察，默认<strong>不建议买</strong>，不能替代「严格通过」。
+              </p>
               <div className="candidate-grid">
                 {nearPass.map((item) => (
                   <EtfCard key={item.symbol} item={item} />
@@ -302,9 +375,11 @@ export default function EtfPage() {
 function EtfCard({ item }: { item: EtfCandidate }) {
   const failedRules = item.ruleChecks.filter((rule) => !rule.passed);
   const plan = item.operationPlan;
+  const verdict = resolveEtfVerdict(item);
 
   return (
     <article className="candidate-card candidate-card--etf">
+      <EtfVerdictBanner verdict={verdict} />
       <div className="candidate-card-head">
         <strong>{item.name}</strong>
         <span className="candidate-card-code">{item.exchangeCode}</span>
@@ -331,6 +406,15 @@ function EtfCard({ item }: { item: EtfCandidate }) {
   );
 }
 
+function EtfVerdictBanner({ verdict }: { verdict: EtfVerdict }) {
+  return (
+    <div className={`etf-verdict etf-verdict--${verdict.level}`}>
+      <strong className="etf-verdict-title">{verdict.title}</strong>
+      <p className="etf-verdict-detail">{verdict.detail}</p>
+    </div>
+  );
+}
+
 function EtfOperationPlanPanel({
   item,
   plan,
@@ -340,18 +424,23 @@ function EtfOperationPlanPanel({
 }) {
   const inZone = isInBuyZone(item.price, plan);
   const canBuy = canBuyNow(item);
+  const verdict = resolveEtfVerdict(item);
 
   return (
     <div className="etf-operation-plan">
       <div className="etf-operation-head">
         <span className="etf-operation-title">操作位</span>
         <div className="etf-operation-tags">
-          <span
-            className={`etf-operation-tag etf-operation-tag--${plan.action === 'buy_zone' ? 'active' : 'muted'}`}
-          >
-            {plan.actionLabel}
+          <span className={`etf-operation-tag etf-operation-tag--verdict-${verdict.level}`}>
+            {verdict.title}
           </span>
-          {canBuy && <span className="etf-operation-tag etf-operation-tag--buy">可以买</span>}
+          {canBuy && <span className="etf-operation-tag etf-operation-tag--buy">现价在区内</span>}
+          {!canBuy && verdict.level === 'wait' && (
+            <span className="etf-operation-tag etf-operation-tag--wait">先等等</span>
+          )}
+          {verdict.level === 'avoid' && (
+            <span className="etf-operation-tag etf-operation-tag--avoid">不买</span>
+          )}
         </div>
       </div>
       <div className="etf-operation-levels">
@@ -386,13 +475,15 @@ function EtfOperationCell({
   if (!plan) return <>—</>;
 
   const canBuy = canBuyNow(item);
+  const verdict = resolveEtfVerdict(item);
 
   if (compact) {
     return (
       <div className="etf-operation-cell">
         <div className="etf-operation-tags">
-          {canBuy && <span className="etf-operation-tag etf-operation-tag--buy">可以买</span>}
-          <span className="etf-operation-tag etf-operation-tag--muted">{plan.actionLabel}</span>
+          <span className={`etf-operation-tag etf-operation-tag--verdict-${verdict.level}`}>
+            {verdict.title}
+          </span>
         </div>
         <strong className="etf-operation-cell-zone">
           {fmtPrice(plan.buyZoneLow)}–{fmtPrice(plan.buyZoneHigh)}

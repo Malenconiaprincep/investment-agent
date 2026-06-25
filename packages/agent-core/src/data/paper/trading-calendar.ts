@@ -35,11 +35,21 @@ export function isTradingSession(date: Date = getBeijingNow()): boolean {
   return morning || afternoon;
 }
 
-/** ETF 动量调仓窗口：14:30 起（仍在下午盘，可按盘口成交） */
+/** ETF 模拟盘可执行窗口：A 股交易时段内（轮询监听，条件满足即调仓/止损） */
 export function isEtfAutoRunWindow(date: Date = getBeijingNow()): boolean {
-  if (!isWeekday(date)) return false;
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return minutes >= 14 * 60 + 30;
+  return isTradingSession(date);
+}
+
+export const ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT = 30;
+
+export function getEtfPaperMonitorIntervalMs(
+  envMinutes: string | undefined = process.env.ETF_PAPER_MONITOR_INTERVAL_MINUTES,
+): number {
+  const parsed = Number(envMinutes ?? ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT);
+  if (!Number.isFinite(parsed) || parsed < 5) {
+    return ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT * 60 * 1000;
+  }
+  return parsed * 60 * 1000;
 }
 
 /** 股票动量窗口：15:05 起（日 K 完整后再选股） */
@@ -71,7 +81,7 @@ export const TRADING_HOURS_LABEL =
   'A 股交易时段：9:30–11:30、13:00–15:00（北京时间）';
 
 export const ETF_AUTO_RUN_SCHEDULE_LABEL =
-  '每个交易日 14:30（北京时间，下午盘内）ETF 动量调仓';
+  `每个交易日交易时段内每 ${ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT} 分钟监听 ETF 动量（条件满足即调仓/止损）`;
 
 export const STOCK_AUTO_RUN_SCHEDULE_LABEL =
   '每个交易日 15:05（北京时间，收盘后）股票动量选股';
