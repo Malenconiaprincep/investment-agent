@@ -162,7 +162,7 @@ export default function EtfPage() {
       <PageHeader
         eyebrow="ETF 监控"
         title="ETF 尾盘推荐"
-        description="工作日 14:00 自动跑 19 只 ETF 池，严格执行 8 条筛选；0 只通过时也保留风险提示和近通过名单。"
+        description="工作日 14:00 自动跑 19 只 ETF 池（需保持 pnpm agent:serve 常驻，或配置本机 crontab）；严格执行 8 条筛选。"
       />
 
       <nav className="page-toolbar" aria-label="ETF 操作">

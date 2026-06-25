@@ -4,6 +4,9 @@
 # 前提：agent-core 已配置 .env；Web 开发时另开 pnpm agent:serve + pnpm web:dev
 # 定时任务直接调 CLI，不经过 Next.js
 
+# ETF 尾盘推荐 — 19 只池 8 条规则，14:00
+0 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm etf:tail-schedule >> /tmp/etf-tail.log 2>&1
+
 # 模拟盘 — ETF 14:30 调仓
 30 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
 
