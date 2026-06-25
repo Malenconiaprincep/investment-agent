@@ -189,15 +189,15 @@ export default function PaperTradingPage() {
       tradeDate: dual.combined.tradeDate,
       isTradingSession: dual.combined.isTradingSession,
       positions: [
-        ...dual.etf.positions.map((p) => ({ ...p, positionBucket: 'etf' as const })),
-        ...dual.stock.positions.map((p) => ({ ...p, positionBucket: 'stock' as const })),
+        ...(dual.etf.positions ?? []).map((p) => ({ ...p, positionBucket: 'etf' as const })),
+        ...(dual.stock.positions ?? []).map((p) => ({ ...p, positionBucket: 'stock' as const })),
       ],
     };
   }, [dual, activeBucket]);
 
   const returnAmount =
     view != null ? view.totalValue - view.account.initialCash : 0;
-  const positionCount = view?.positions.length ?? 0;
+  const positionCount = view?.positions?.length ?? 0;
 
   return (
     <main className="page page--list">
@@ -280,7 +280,7 @@ export default function PaperTradingPage() {
             <h3 className="pane-card-title">
               {activeBucket === 'combined' ? '全部持仓' : `${bucketLabel(activeBucket)}持仓`}
             </h3>
-            {view.positions.length === 0 ? (
+            {!(view.positions?.length) ? (
               <div className="empty-state">
                 {activeBucket === 'etf'
                   ? 'ETF 仓暂无持仓。14:30 后自动任务会按动量轮动调仓（下午盘内成交）。'
@@ -312,7 +312,7 @@ export default function PaperTradingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {view.positions.map((p) => (
+                    {(view.positions ?? []).map((p) => (
                         <tr key={`${'positionBucket' in p ? p.positionBucket : 'x'}-${p.symbol}`}>
                           {activeBucket === 'combined' && (
                             <td>
@@ -352,7 +352,7 @@ export default function PaperTradingPage() {
 
           <section className="pane-card paper-equity-section">
             <h3 className="pane-card-title">收益曲线</h3>
-            <EquityChart points={equity} />
+            <EquityChart points={equity ?? []} />
           </section>
         </>
       )}

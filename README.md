@@ -133,10 +133,22 @@ pnpm eval market-research-report   # Phase 2 验收
 
 ```bash
 pnpm desktop:pack:mac:unsigned   # macOS 无签名包
-pnpm desktop:pack:win            # Windows
+pnpm desktop:pack:win            # Windows（x64 + arm64 安装包 + x64 便携版）
+pnpm desktop:pack:win:x64        # 仅 64 位 Intel/AMD（常见台式机、笔记本）
+pnpm desktop:pack:win:arm64      # 仅 ARM（骁龙 / Surface Pro X 等）
 ```
 
-安装包输出在 `apps/desktop/release/`。启动后需先登录，账号与 Web 版相同：
+安装包输出在 `apps/desktop/release/`：
+
+| 文件 | 适用系统 |
+|------|----------|
+| `投研助手-Setup-*-x64.exe` | **64 位** Windows（Intel / AMD，最常见） |
+| `投研助手-Setup-*-arm64.exe` | **ARM 版** Windows（骁龙笔记本、Surface Pro X 等） |
+| `投研助手-Portable-*-x64.exe` | 64 位 Windows 免安装便携版（`pnpm desktop:pack:win:portable`） |
+
+若安装时提示「**需要 64 位 Windows 系统**」，说明当前系统是 **32 位 Windows**，本应用基于 Electron 35，**不支持 32 位系统**，需升级到 64 位 Windows 后再安装 `x64` 版本。若是 ARM 设备，请改用 `arm64` 安装包。
+
+启动后需先登录，账号与 Web 版相同：
 
 | 账号 | 密码 | 说明 |
 |------|------|------|

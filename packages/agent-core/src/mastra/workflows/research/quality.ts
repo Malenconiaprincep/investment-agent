@@ -4,6 +4,7 @@ export const REQUIRED_SECTIONS = [
   '财务指标',
   '数据来源',
   '风险提示',
+  '投资建议',
   '免责声明',
 ] as const;
 

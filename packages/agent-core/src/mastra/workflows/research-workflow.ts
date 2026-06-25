@@ -12,6 +12,10 @@ import {
   getFinancialReport,
   searchNews,
 } from '../../data/market/services.js';
+import {
+  buildCommitteeTradePlan,
+  formatTradePlansForPrompt,
+} from '../../data/screening/committee-trading-plan.js';
 import { checkReportQuality, extractSymbol } from './research/quality.js';
 
 const workflowInputSchema = z.object({
@@ -203,6 +207,19 @@ const preparePromptStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const newsMarkdown = formatNewsMarkdown(inputData.news);
+    let tradePlanMarkdown = '（K 线数据不足，请根据已有基本面与行情综合判断，动作优先选「等待信号」）';
+    try {
+      const tradePlan = await buildCommitteeTradePlan({
+        symbol: inputData.target.symbol,
+        name: inputData.target.name,
+      });
+      if (tradePlan) {
+        tradePlanMarkdown = formatTradePlansForPrompt([tradePlan]);
+      }
+    } catch {
+      // 单票 K 线计划失败不阻断研报
+    }
+
     const prompt = `请根据以下结构化数据撰写 A 股投研 Markdown 研报。
 
 标的：${inputData.target.name}（${inputData.target.symbol} / ${inputData.target.tsCode}）
@@ -236,6 +253,9 @@ ${inputData.iwencaiFallbacks.length > 0 ? '标注 dataSource=iwencai 的字段�
 
 === 笔记库检索 ===
 ${JSON.stringify(inputData.notes, null, 2)}
+
+=== K 线交易计划（「投资建议」章节须引用，不得编造价格） ===
+${tradePlanMarkdown}
 
 请严格按 instructions 中的章节模板输出，不要编造数据中不存在的数字。`;
 

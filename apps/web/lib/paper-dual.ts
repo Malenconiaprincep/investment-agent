@@ -45,6 +45,35 @@ function isDualPaperPayload(raw: Record<string, unknown>): raw is DualPaperPaylo
   );
 }
 
+function normalizePositions(
+  raw: unknown,
+): BucketSummary['positions'] {
+  if (!Array.isArray(raw)) return [];
+  return raw as BucketSummary['positions'];
+}
+
+function normalizeBucketSummary(
+  raw: Record<string, unknown>,
+  fallbackBucket: 'etf' | 'stock',
+): BucketSummary {
+  const accountRaw = raw.account;
+  const account =
+    accountRaw && typeof accountRaw === 'object'
+      ? (accountRaw as { cash: number; initialCash: number })
+      : { cash: 0, initialCash: fallbackBucket === 'etf' ? 50000 : 0 };
+
+  return {
+    bucket: raw.bucket === 'etf' ? 'etf' : 'stock',
+    account,
+    totalValue: Number(raw.totalValue ?? account.cash),
+    marketValue: Number(raw.marketValue ?? 0),
+    returnPct: Number(raw.returnPct ?? 0),
+    tradeDate: String(raw.tradeDate ?? ''),
+    isTradingSession: Boolean(raw.isTradingSession),
+    positions: normalizePositions(raw.positions),
+  };
+}
+
 /** 兼容旧版 agent-core 返回的单账户结构（整仓视为股票仓） */
 export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
   if (!raw || typeof raw !== 'object') {
@@ -53,26 +82,40 @@ export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
 
   const data = raw as Record<string, unknown>;
   if (isDualPaperPayload(data)) {
-    return data;
+    const etf = normalizeBucketSummary(
+      data.etf as Record<string, unknown>,
+      'etf',
+    );
+    const stock = normalizeBucketSummary(
+      data.stock as Record<string, unknown>,
+      'stock',
+    );
+    const combinedRaw = data.combined as Record<string, unknown>;
+    return {
+      etf,
+      stock,
+      combined: {
+        totalValue: Number(
+          combinedRaw.totalValue ?? etf.totalValue + stock.totalValue,
+        ),
+        initialCash: Number(
+          combinedRaw.initialCash ??
+            etf.account.initialCash + stock.account.initialCash,
+        ),
+        returnPct: Number(combinedRaw.returnPct ?? 0),
+        tradeDate: String(combinedRaw.tradeDate ?? etf.tradeDate),
+        isTradingSession: Boolean(
+          combinedRaw.isTradingSession ?? etf.isTradingSession,
+        ),
+      },
+    };
   }
 
   if (!data.account || typeof data.account !== 'object') {
     throw new Error('模拟账户数据格式异常，请重启 agent-core 服务');
   }
 
-  const account = data.account as { cash: number; initialCash: number };
-  const stock: BucketSummary = {
-    bucket: 'stock',
-    account,
-    totalValue: Number(data.totalValue ?? account.cash),
-    marketValue: Number(data.marketValue ?? 0),
-    returnPct: Number(data.returnPct ?? 0),
-    tradeDate: String(data.tradeDate ?? ''),
-    isTradingSession: Boolean(data.isTradingSession),
-    positions: Array.isArray(data.positions)
-      ? (data.positions as BucketSummary['positions'])
-      : [],
-  };
+  const stock = normalizeBucketSummary(data, 'stock');
 
   const etf: BucketSummary = {
     bucket: 'etf',

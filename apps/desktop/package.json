@@ -10,7 +10,10 @@
     "pack": "node scripts/prepare.mjs && electron-builder",
     "pack:mac": "node scripts/prepare.mjs && electron-builder --mac",
     "pack:mac:unsigned": "node scripts/prepare.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac -c.mac.identity=null",
-    "pack:win": "node scripts/prepare.mjs && electron-builder --win"
+    "pack:win": "node scripts/prepare.mjs && electron-builder --win",
+    "pack:win:x64": "node scripts/prepare.mjs && electron-builder --win --x64",
+    "pack:win:arm64": "node scripts/prepare.mjs && electron-builder --win --arm64",
+    "pack:win:portable": "node scripts/prepare.mjs && electron-builder --win --x64 --config.win.target=portable"
   },
   "devDependencies": {
     "electron": "^35.1.5",
@@ -51,15 +54,26 @@
         "zip"
       ]
     },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-x64.${ext}"
     }
   }
 }

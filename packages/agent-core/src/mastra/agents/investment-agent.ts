@@ -50,7 +50,7 @@ export const investmentAgent = new Agent({
 - 涉及公司基本面、行业逻辑、风险点时，优先调用 search-research-notes 检索笔记库
 - 每个 Tool 返回的数据须在「数据来源」小节标注 dataSource / asOf（如有）
 - 引用笔记库内容时，注明来源文件名（file 字段）
-- 不提供买卖建议，只做研究辅助与信息整理
+- 「投资建议」须给出明确动作（买入/持有观察/等待信号/卖出回避）及依据，并注明不构成投资建议
 - 对不确定的信息，列出「待人工核实」清单
 
 关注列表（Working Memory）：
@@ -91,6 +91,7 @@ ${hasIwencai ? IWENCAI_TOOL_GUIDE : ''}
 ## 数据来源与时效
 ## 风险提示
 ## 待人工核实
+## 投资建议（明确给出：建议买入 / 持有观察 / 等待信号 / 建议卖出/回避，并说明依据与风险）
 ## 免责声明（不构成投资建议）`,
   model: DEFAULT_MODEL,
   tools: {

@@ -57,7 +57,7 @@ export const evalCases: EvalCase[] = [
   {
     id: 'market-research-report',
     input: '分析贵州茅台 600519',
-    mustInclude: ['公司概况', '行情', '数据来源', '风险'],
+    mustInclude: ['公司概况', '行情', '数据来源', '风险', '投资建议'],
     description: '应输出结构化研报并调用多个行情 Tool',
   },
   {
