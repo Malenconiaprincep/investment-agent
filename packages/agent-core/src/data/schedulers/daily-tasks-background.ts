@@ -1,4 +1,11 @@
 import { runEtfTailPick } from '../etf/tail-picker.js';
+import {
+  notifyDailyTaskFailure,
+  notifyEtfPaperMonitor,
+  notifyEtfTailPick,
+  notifyStockPaper,
+} from '../notify/feishu-daily.js';
+import { isFeishuNotifyEnabled } from '../notify/feishu.js';
 import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import {
@@ -44,6 +51,9 @@ const DAILY_TASKS: DailyTaskDef[] = [
     minute: 0,
     run: async () => {
       const result = await runEtfTailPick();
+      if (result.status !== 'skipped') {
+        await notifyEtfTailPick(result);
+      }
       return { summary: result.summary, skipped: result.status === 'skipped' };
     },
   },
@@ -52,7 +62,13 @@ const DAILY_TASKS: DailyTaskDef[] = [
     label: '股票模拟盘选股',
     hour: 15,
     minute: 5,
-    run: async () => runStockPaperAutoPipeline(),
+    run: async () => {
+      const result = await runStockPaperAutoPipeline();
+      if (!result.skipped) {
+        await notifyStockPaper(result);
+      }
+      return result;
+    },
   },
 ];
 
@@ -71,6 +87,7 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
       console.log(`[daily-tasks] ${label} 跳过：${result.reason ?? '非执行窗口'}`);
       return;
     }
+    await notifyEtfPaperMonitor(result);
     const parts: string[] = [];
     if (result.isRebalanceDay) parts.push('调仓日');
     if (result.buys?.length) parts.push(`买入 ${result.buys.length} 笔`);
@@ -84,6 +101,7 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
     lastEtfPaperRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[daily-tasks] ETF 模拟盘监听 失败：${message}`);
+    await notifyDailyTaskFailure('ETF 模拟盘监听', message);
   }
 }
 
@@ -112,6 +130,7 @@ async function runDueTasks(now = getBeijingNow()) {
       completedKeys.delete(key);
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[daily-tasks] ${task.label} 失败：${message}`);
+      await notifyDailyTaskFailure(task.label, message);
     }
   }
 }
@@ -132,6 +151,9 @@ export function startDailyTasksBackgroundWorker() {
   ].join(' · ');
 
   console.log(`[daily-tasks] 已启动本机定时任务（北京时间）：${schedule}`);
+  if (isFeishuNotifyEnabled()) {
+    console.log('[daily-tasks] 飞书推送已启用');
+  }
 
   void runDueTasks();
   timer = setInterval(() => void runDueTasks(), 60_000);

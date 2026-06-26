@@ -35,6 +35,46 @@ pnpm watchlist:snapshot
 pnpm monitor:poll
 ```
 
+## 飞书机器人推送
+
+支持两种方式（**App 优先**；都配了时走 App）：
+
+### 方式 A：企业自建应用（推荐）
+
+1. [open.feishu.cn](https://open.feishu.cn) 创建企业自建应用
+2. 开通权限：`im:message:send_as_bot`、`im:chat:readonly`
+3. 发布应用，把机器人拉进目标群
+4. `.env` 配置：
+
+```bash
+FEISHU_APP_ID=cli_xxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxx
+FEISHU_CHAT_ID=oc_xxxxxxxx   # pnpm feishu:chats 查询
+```
+
+### 方式 B：群自定义机器人 Webhook
+
+```bash
+FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx
+FEISHU_WEBHOOK_SECRET=          # 可选
+```
+
+### 通用
+
+```bash
+FEISHU_NOTIFY_ENABLED=0         # 关闭推送
+FEISHU_NOTIFY_ETF_MONITOR=1     # ETF 每次监听都推（默认仅有成交/止损才推）
+```
+
+`agent:serve` 定时任务会自动推送：14:00 ETF 尾盘推荐、15:05 股票模拟盘、ETF 成交/止损。
+
+```bash
+pnpm feishu:status
+pnpm feishu:auth-test    # 仅 App 模式：验证 App ID/Secret
+pnpm feishu:chats        # 仅 App 模式：列出机器人所在群及 chat_id
+pnpm feishu:test
+```
+
 ## 部署到 Railway / VPS（可选）
 
 1. Root Directory：`packages/agent-core`

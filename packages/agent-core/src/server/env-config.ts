@@ -8,6 +8,11 @@ export const CONFIGURABLE_KEYS = [
   'LIBSQL_URL',
   'LIBSQL_AUTH_TOKEN',
   'AGENT_CORE_TOKEN',
+  'FEISHU_APP_ID',
+  'FEISHU_APP_SECRET',
+  'FEISHU_CHAT_ID',
+  'FEISHU_WEBHOOK_URL',
+  'FEISHU_WEBHOOK_SECRET',
 ] as const;
 
 export type ConfigurableKey = (typeof CONFIGURABLE_KEYS)[number];
@@ -66,6 +71,16 @@ function serializeEnvFile(values: Record<string, string>): string {
     {
       title: 'agent-core 鉴权（可选）',
       keys: ['AGENT_CORE_TOKEN'],
+    },
+    {
+      title: '飞书推送（可选，App 与 Webhook 二选一，App 优先）',
+      keys: [
+        'FEISHU_APP_ID',
+        'FEISHU_APP_SECRET',
+        'FEISHU_CHAT_ID',
+        'FEISHU_WEBHOOK_URL',
+        'FEISHU_WEBHOOK_SECRET',
+      ],
     },
   ];
 
