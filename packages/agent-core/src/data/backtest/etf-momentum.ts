@@ -1,5 +1,6 @@
 import { ETF_POOL_19 } from '../etf/pool.js';
 import { getDailyQuote } from '../market/services.js';
+import type { EtfRotationContext } from '../paper/etf-rotation-news.js';
 import {
   hasLocalEtfDailyCsv,
   LOCAL_ETF_LOAD_ALL_DAYS,
@@ -389,6 +390,7 @@ function resolveTargetSlots(input: {
   reserveBenchmarkSlotCount?: number;
   excludedSymbols?: Set<string>;
   allowBenchmarkFallback?: boolean;
+  rotationContext?: EtfRotationContext | null;
 }): Array<{
   history: EtfHistory;
   pick?: MomentumPick;
@@ -400,6 +402,10 @@ function resolveTargetSlots(input: {
     tradeDate: input.tradeDate,
     trendMaDays: input.trendMaDays,
   });
+  const rotation = input.rotationContext;
+  const boostedScore = (pick: MomentumPick) =>
+    pick.score + (rotation?.themeBoostBySymbol[pick.history.symbol] ?? 0);
+
   const picks = input.histories
     .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
     .map((history) =>
@@ -411,7 +417,11 @@ function resolveTargetSlots(input: {
       }),
     )
     .filter((pick): pick is MomentumPick => pick != null)
-    .sort((a, b) => b.score - a.score)
+    .filter(
+      (pick) =>
+        !rotation?.newsBlockedSymbols.has(pick.history.symbol),
+    )
+    .sort((a, b) => boostedScore(b) - boostedScore(a))
     .slice(0, input.topN);
   const excludedSymbols = input.excludedSymbols ?? new Set<string>();
 
@@ -950,6 +960,9 @@ export type EtfMomentumLiveTarget = {
   symbol: string;
   name: string;
   isBenchmarkFill: boolean;
+  matchedThemes?: string[];
+  themeBoost?: number;
+  newsLabel?: string;
 };
 
 export type EtfMomentumLivePlan = {
@@ -959,6 +972,8 @@ export type EtfMomentumLivePlan = {
   regimeExposureScale: number;
   weakRegime: boolean;
   bearRegime: boolean;
+  hotThemes?: string[];
+  rotationSummary?: string;
   targets: EtfMomentumLiveTarget[];
 };
 
@@ -987,6 +1002,7 @@ async function loadEtfMomentumHistories(days: number): Promise<{
 export async function buildEtfMomentumLivePlan(input?: {
   tradeDate?: string;
   excludedSymbols?: Set<string>;
+  rotationContext?: EtfRotationContext | null;
 }): Promise<EtfMomentumLivePlan> {
   const tradeDate = normalizeTradeDateKey(input?.tradeDate ?? formatTradeDateKey(todayDateKey()));
   const topN = DEFAULT_TOP_N;
@@ -1037,7 +1053,10 @@ export async function buildEtfMomentumLivePlan(input?: {
     reserveBenchmarkSlotCount,
     excludedSymbols: input?.excludedSymbols ?? new Set<string>(),
     allowBenchmarkFallback: true,
+    rotationContext: input?.rotationContext ?? null,
   });
+
+  const rotation = input?.rotationContext ?? null;
 
   return {
     tradeDate,
@@ -1046,10 +1065,15 @@ export async function buildEtfMomentumLivePlan(input?: {
     regimeExposureScale,
     weakRegime,
     bearRegime,
+    hotThemes: rotation?.hotThemes,
+    rotationSummary: rotation?.summary,
     targets: slots.map((slot) => ({
       symbol: slot.history.symbol,
       name: slot.history.name,
       isBenchmarkFill: slot.isBenchmarkFill,
+      matchedThemes: rotation?.matchedThemesBySymbol[slot.history.symbol],
+      themeBoost: rotation?.themeBoostBySymbol[slot.history.symbol],
+      newsLabel: rotation?.newsBySymbol[slot.history.symbol]?.label,
     })),
   };
 }

@@ -301,6 +301,10 @@ async function withTimeout<T>(
   }
 }
 
+export async function loadLiveEtfNews(limit = 80): Promise<HotNewsItem[]> {
+  return fetchFastLiveNews(limit);
+}
+
 async function fetchFastLiveNews(limit: number): Promise<HotNewsItem[]> {
   const results = await Promise.allSettled([
     fetchEastMoneyFastNews(limit),

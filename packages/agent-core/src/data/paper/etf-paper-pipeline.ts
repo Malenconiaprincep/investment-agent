@@ -10,6 +10,10 @@ import {
   ETF_MOMENTUM_TOP_N,
 } from './bucket.js';
 import {
+  formatEtfTargetRotationNote,
+  loadEtfRotationContext,
+} from './etf-rotation-news.js';
+import {
   calcEtfPaperBuyShares,
   calcEtfProbeTargetShares,
   countEtfTargetSlots,
@@ -40,7 +44,16 @@ export type EtfPaperPipelineResult = {
   stopLosses?: Array<{ symbol: string; name: string; shares: number; price: number }>;
   sells?: Array<{ symbol: string; name: string; shares: number; price: number }>;
   buys?: Array<{ symbol: string; name: string; shares: number; price: number }>;
-  targets?: Array<{ symbol: string; name: string; isBenchmarkFill: boolean }>;
+  targets?: Array<{
+    symbol: string;
+    name: string;
+    isBenchmarkFill: boolean;
+    matchedThemes?: string[];
+    themeBoost?: number;
+    newsLabel?: string;
+  }>;
+  hotThemes?: string[];
+  rotationSummary?: string;
   equity?: { totalValue: number; returnPct: number };
   error?: string;
 };
@@ -193,7 +206,14 @@ export async function runEtfPaperAutoPipeline(options?: {
       tradeDate,
       benchmarkDates,
     );
-    const plan = await buildEtfMomentumLivePlan({ tradeDate, excludedSymbols });
+    const rotationContext = await loadEtfRotationContext(tradeDate).catch(() => null);
+    const plan = await buildEtfMomentumLivePlan({
+      tradeDate,
+      excludedSymbols,
+      rotationContext,
+    });
+    result.hotThemes = plan.hotThemes;
+    result.rotationSummary = plan.rotationSummary;
     result.targets = plan.targets;
 
     const summary = await getPaperAccountSummary('etf');
@@ -252,6 +272,19 @@ export async function runEtfPaperAutoPipeline(options?: {
       if (shares < 100) continue;
       if (execution.price * shares > refreshed.account.cash) continue;
 
+      const rotationNote = formatEtfTargetRotationNote({
+        matchedThemes: target.matchedThemes,
+        themeBoost: target.themeBoost,
+        newsLabel: target.newsLabel,
+      });
+      const baseNote = isProbeEntry
+        ? target.isBenchmarkFill
+          ? 'ETF 动量首笔轻仓（宽基槽位）'
+          : 'ETF 动量首笔轻仓'
+        : target.isBenchmarkFill
+          ? 'ETF 动量调仓加仓（宽基槽位）'
+          : 'ETF 动量调仓加仓';
+
       await executePaperTrade({
         bucket: 'etf',
         symbol: target.symbol,
@@ -261,13 +294,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         price: execution.price,
         tradeDate,
         source: 'auto',
-        note: isProbeEntry
-          ? target.isBenchmarkFill
-            ? 'ETF 动量首笔轻仓（宽基槽位）'
-            : 'ETF 动量首笔轻仓'
-          : target.isBenchmarkFill
-            ? 'ETF 动量调仓加仓（宽基槽位）'
-            : 'ETF 动量调仓加仓',
+        note: `${baseNote}${rotationNote}`,
         skipSessionCheck: true,
         useOrderBookPrice: false,
       });
