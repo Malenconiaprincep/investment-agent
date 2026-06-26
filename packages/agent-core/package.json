@@ -44,6 +44,7 @@
     "feishu:auth-test": "tsx src/cli/feishu-notify.ts auth-test",
     "feishu:chats": "tsx src/cli/feishu-notify.ts chats",
     "feishu:test": "tsx src/cli/feishu-notify.ts test",
+    "stock:intraday-scan": "tsx src/cli/stock-intraday-scan.ts",
     "research:batch": "tsx src/cli/batch-research-json.ts",
     "setup:iwencai": "test -f vendor/iwencai-mcp/server.py || git clone --depth 1 https://github.com/lorek666/iwencai-mcp.git vendor/iwencai-mcp",
     "test:iwencai-mcp": "tsx src/scripts/test-iwencai-mcp.ts",

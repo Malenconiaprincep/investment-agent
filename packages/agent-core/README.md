@@ -62,11 +62,24 @@ FEISHU_WEBHOOK_SECRET=          # 可选
 ### 通用
 
 ```bash
-FEISHU_NOTIFY_ENABLED=0         # 关闭推送
-FEISHU_NOTIFY_ETF_MONITOR=1     # ETF 每次监听都推（默认仅有成交/止损才推）
+FEISHU_NOTIFY_ENABLED=0              # 关闭全部飞书推送
+FEISHU_NOTIFY_STOCK_INTRADAY=0         # 关闭交易时段股票动量扫描推送
+FEISHU_NOTIFY_MONITOR=0              # 关闭消息雷达实时推送
+FEISHU_NOTIFY_ETF_MONITOR=1          # ETF 每次监听都推（默认仅有成交/止损才推）
+STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES=15   # 股票扫描间隔（交易时段，默认 15 分钟）
+MONITOR_BACKGROUND_INTERVAL_MS=300000        # 消息雷达间隔（默认 5 分钟）
 ```
 
-`agent:serve` 定时任务会自动推送：14:00 ETF 尾盘推荐、15:05 股票模拟盘、ETF 成交/止损。
+`agent:serve` 定时任务会自动推送：
+
+| 时段 | 内容 |
+|------|------|
+| 交易时段每 15 分钟 | **股票实时信号**（自选/选股池 · 红钻+动量达标） |
+| 交易时段每 5 分钟 | **消息雷达**（新闻催化、自动买入候选、模拟盘成交） |
+| 14:00 | ETF 尾盘推荐 |
+| 15:05 | 股票模拟盘收盘后选股 |
+
+同一标的**每天只推一次**，避免刷屏。
 
 ```bash
 pnpm feishu:status

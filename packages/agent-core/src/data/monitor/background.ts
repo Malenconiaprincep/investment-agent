@@ -1,3 +1,4 @@
+import { notifyMonitorRealtime } from '../notify/feishu-realtime.js';
 import {
   formatTradeDate,
   getBeijingNow,
@@ -68,6 +69,13 @@ async function tick(intervalMs: number) {
     console.log(
       `[monitor-bg] ${result.summary}；推荐 ${result.recommendations.length} 条，自动交易 ${result.paperActions.length} 条`,
     );
+    const pushed = await notifyMonitorRealtime({
+      tradeDate,
+      result,
+    });
+    if (pushed > 0) {
+      console.log(`[monitor-bg] 飞书实时推送 ${pushed} 条`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[monitor-bg] 扫描失败：${message}`);

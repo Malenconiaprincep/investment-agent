@@ -26,6 +26,21 @@ export function isWeekday(date: Date = getBeijingNow()): boolean {
   return day >= 1 && day <= 5;
 }
 
+export const STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT = 15;
+
+export function getStockIntradayMonitorIntervalMs(
+  envMinutes: string | undefined = process.env.STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES,
+): number {
+  const parsed = Number(envMinutes ?? STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT);
+  if (!Number.isFinite(parsed) || parsed < 5) {
+    return STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT * 60 * 1000;
+  }
+  return parsed * 60 * 1000;
+}
+
+export const STOCK_INTRADAY_MONITOR_SCHEDULE_LABEL =
+  `每个交易日交易时段内每 ${STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT} 分钟扫描股票买入信号（飞书推送）`;
+
 /** 9:30–11:30、13:00–15:00 */
 export function isTradingSession(date: Date = getBeijingNow()): boolean {
   if (!isWeekday(date)) return false;

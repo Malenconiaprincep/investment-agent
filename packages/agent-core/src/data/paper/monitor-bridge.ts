@@ -223,7 +223,7 @@ export function isMonitorWatchlistBuyNote(note: string | null): boolean {
   return note?.startsWith('monitor-watchlist:') ?? false;
 }
 
-async function checkMomentumBuyReady(symbol: string, name: string) {
+export async function checkMomentumBuyReady(symbol: string, name: string) {
   const kline = await getDailyQuote(symbol, 60);
   const signal = await scanDiamondSignal(symbol, name, 60);
   const momentum = analyzeMomentum(symbol, name, kline.quotes, signal);
