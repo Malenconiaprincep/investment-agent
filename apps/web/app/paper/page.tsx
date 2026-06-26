@@ -9,6 +9,7 @@ import {
   normalizeDualPaperPayload,
   type DualPaperPayload,
 } from '@/lib/paper-dual';
+import { formatPaperTradeDisplayTime } from '@/lib/paper-trade-time';
 
 type PaperBucket = 'combined' | 'etf' | 'stock';
 
@@ -26,10 +27,6 @@ type Trade = {
   source: 'manual' | 'auto';
   note: string | null;
 };
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-}
 
 function fmtMoney(v: number) {
   return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
@@ -477,7 +474,7 @@ export default function PaperTradingPage() {
                 <tbody>
                   {trades.map((t) => (
                     <tr key={t.id}>
-                      <td className="paper-trade-time">{fmtTime(t.tradedAt)}</td>
+                      <td className="paper-trade-time">{formatPaperTradeDisplayTime(t)}</td>
                       {activeBucket === 'combined' && (
                         <td>{t.bucket === 'etf' ? 'ETF' : '股票'}</td>
                       )}

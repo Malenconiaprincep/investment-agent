@@ -8,6 +8,7 @@ import {
   scanDiamondSignalHistory,
 } from '../market/diamond-signal.js';
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
+import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import { isRetailTradableStock } from '../market/asset-type.js';
 import { isLikelyLimitUp } from '../market/price-limit.js';
 import { getDailyQuote } from '../market/services.js';
@@ -17,6 +18,7 @@ import {
   evaluateMomentumExit,
   MOMENTUM_MIN_CHECKLIST,
 } from './momentum.js';
+import { isTradingSession } from './trading-calendar.js';
 import {
   calcAutoBuyShares,
   executePaperTrade,
@@ -719,6 +721,18 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
       });
       if (!exit) continue;
 
+      if (!isTradingSession()) {
+        actions.push({
+          kind: 'sell',
+          status: 'skipped',
+          symbol: pos.symbol,
+          name: pos.name,
+          price: close,
+          reason: `触发${exit.reason}，但当前非交易时段，等待盘中执行`,
+        });
+        continue;
+      }
+
       const summary = await getPaperAccountSummary('stock');
       const held = summary.positions.find((p) => p.symbol === pos.symbol);
       const available = held?.availableShares ?? 0;
@@ -734,6 +748,7 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
         continue;
       }
 
+      const execution = await resolvePaperExecutionPrice(pos.symbol, 'sell');
       const shares = Math.floor(available / 100) * 100;
       const result = await executePaperTrade({
         bucket: 'stock',
@@ -741,11 +756,12 @@ async function autoSellExitsFromMonitor(tradeDate: string): Promise<MonitorPaper
         name: pos.name,
         side: 'sell',
         shares,
-        price: close,
+        price: execution.price,
         tradeDate,
         source: 'auto',
-        note: `monitor-exit:${exit.reason}`,
+        note: `monitor-exit:${exit.reason} · 成交价=${execution.priceSource}`,
         skipSessionCheck: true,
+        useOrderBookPrice: false,
       });
       actions.push({
         kind: 'sell',

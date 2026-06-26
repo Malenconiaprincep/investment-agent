@@ -99,11 +99,15 @@ async function autoSellExits(tradeDate: string) {
       });
       if (!exit) continue;
 
+      const { isTradingSession } = await import('./trading-calendar.js');
+      if (!isTradingSession()) continue;
+
       const summary = await getPaperAccountSummary('stock');
       const held = summary.positions.find((p) => p.symbol === pos.symbol);
       const available = held?.availableShares ?? 0;
       if (available < 100) continue;
 
+      const execution = await resolvePaperExecutionPrice(pos.symbol, 'sell');
       const shares = Math.floor(available / 100) * 100;
       await executePaperTrade({
         bucket: 'stock',
@@ -111,18 +115,19 @@ async function autoSellExits(tradeDate: string) {
         name: pos.name,
         side: 'sell',
         shares,
-        price: close,
+        price: execution.price,
         tradeDate,
         source: 'auto',
-        note: `动量出场：${exit.reason}`,
+        note: `动量出场：${exit.reason} · 成交价=${execution.priceSource}`,
         skipSessionCheck: true,
+        useOrderBookPrice: false,
       });
 
       sells.push({
         symbol: pos.symbol,
         name: pos.name,
         shares,
-        price: close,
+        price: execution.price,
         reason: exit.reason,
       });
     } catch {

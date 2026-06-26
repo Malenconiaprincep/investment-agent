@@ -10,6 +10,7 @@ import {
 } from './bucket.js';
 import {
   formatTradeDate,
+  resolvePaperTradedAt,
   roundToLot,
 } from './trading-calendar.js';
 import { resolvePaperMarkPrices } from './mark-price.js';
@@ -744,7 +745,7 @@ export async function executePaperTrade(input: {
   }
 
   const tradeId = crypto.randomUUID();
-  const tradedAt = new Date().toISOString();
+  const tradedAt = resolvePaperTradedAt({ tradeDate, source, side: input.side });
   await db.execute({
     sql: `INSERT INTO paper_trades (id, bucket, symbol, name, side, shares, price, amount, traded_at, trade_date, source, note)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -80,6 +80,69 @@ export function assertTradingSession(force = false): void {
   }
 }
 
+/** 将北京时间（tradeDate + 时分秒）转为 UTC ISO 字符串 */
+export function beijingTimeToUtcIso(
+  tradeDate: string,
+  hour: number,
+  minute: number,
+  second = 0,
+): string {
+  const [y, m, d] = tradeDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, hour - 8, minute, second)).toISOString();
+}
+
+/** 非交易时段的自动成交：按交易日 + 默认盘中时刻落库，避免凌晨/深夜时间戳 */
+export function resolvePaperTradedAt(input: {
+  tradeDate: string;
+  source: 'manual' | 'auto';
+  side: 'buy' | 'sell';
+}): string {
+  if (input.source === 'manual' || isTradingSession()) {
+    return new Date().toISOString();
+  }
+  return beijingTimeToUtcIso(
+    input.tradeDate,
+    input.side === 'buy' ? 14 : 15,
+    input.side === 'buy' ? 30 : 0,
+  );
+}
+
+export function isBeijingTradingSessionFromIso(iso: string): boolean {
+  const date = new Date(iso);
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    weekday: 'short',
+  }).format(date);
+  if (weekday === 'Sat' || weekday === 'Sun') return false;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  const minutes = hour * 60 + minute;
+  const morning = minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30;
+  const afternoon = minutes >= 13 * 60 && minutes <= 15 * 60;
+  return morning || afternoon;
+}
+
+export function formatPaperTradeDisplayTime(input: {
+  tradeDate: string;
+  tradedAt: string;
+  source: 'manual' | 'auto';
+  side: 'buy' | 'sell';
+}): string {
+  if (input.source === 'manual' || isBeijingTradingSessionFromIso(input.tradedAt)) {
+    return new Date(input.tradedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+  }
+  const [y, m, d] = input.tradeDate.split('-');
+  const time = input.side === 'buy' ? '14:30:00' : '15:00:00';
+  return `${Number(y)}/${Number(m)}/${Number(d)} ${time}`;
+}
+
 export function assertPostMarketWindow(force = false): void {
   if (!force && !isPostMarketWindow()) {
     throw new Error('自动任务应在收盘后执行（15:05 后北京时间）');
