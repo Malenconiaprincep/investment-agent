@@ -15,11 +15,7 @@ export const PERMISSION_OPTIONS: Array<{
   { value: 'admin', label: '后台管理', description: '用户权限与密码管理' },
 ];
 
-export const PLAN_OPTIONS = [
-  { value: 'free', label: 'Free' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'enterprise', label: 'Enterprise' },
-] as const;
+export { PLAN_OPTIONS } from '@/lib/plan-permissions';
 
 export function permissionLabel(value: AppPermission): string {
   return PERMISSION_OPTIONS.find((item) => item.value === value)?.label ?? value;

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import type { AppPermission, AppRole } from './permissions';
+import { permissionsForPlan } from './plan-permissions';
 import { isValidUsername } from './auth-session';
 import {
   createDesktopUser,
@@ -57,14 +58,16 @@ function normalizePermissions(values: string[] | null | undefined): AppPermissio
 }
 
 function mapRow(row: Omit<MarketUserRow, 'password_hash'>): MarketUser {
+  const role = row.role;
+  const plan = row.plan;
   return {
     id: row.id,
     username: row.username,
     label: row.label,
-    role: row.role,
-    permissions: normalizePermissions(row.permissions),
+    role,
+    permissions: permissionsForPlan(plan, role),
     presetTokens: row.preset_tokens,
-    plan: row.plan,
+    plan,
     email: row.email,
     isActive: row.is_active,
   };
@@ -132,6 +135,8 @@ export async function createMarketUser(input: {
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const supabase = getSupabaseAdmin();
+  const role = 'member' as const;
+  const plan = 'free' as const;
 
   const { data, error } = await supabase
     .from('market_users')
@@ -140,10 +145,10 @@ export async function createMarketUser(input: {
       password_hash: passwordHash,
       label: input.label?.trim() || input.username,
       email: input.email?.trim() || null,
-      role: 'member',
-      permissions: [],
+      role,
+      permissions: permissionsForPlan(plan, role),
       preset_tokens: false,
-      plan: 'free',
+      plan,
       is_active: true,
     })
     .select(
@@ -270,7 +275,6 @@ export async function updateMarketUser(
     label?: string;
     role?: AppRole;
     plan?: MarketUser['plan'];
-    permissions?: AppPermission[];
     isActive?: boolean;
   },
 ): Promise<MarketUserAdminView> {
@@ -279,13 +283,20 @@ export async function updateMarketUser(
   }
   assertSupabaseAuthReady();
 
-  const payload: Record<string, unknown> = {};
+  const current = await findMarketUserByUsername(username);
+  if (!current) {
+    throw new Error('用户不存在');
+  }
+
+  const nextRole = updates.role ?? current.role;
+  const nextPlan = updates.plan ?? current.plan;
+
+  const payload: Record<string, unknown> = {
+    permissions: permissionsForPlan(nextPlan, nextRole),
+  };
   if (updates.label !== undefined) payload.label = updates.label.trim();
   if (updates.role !== undefined) payload.role = updates.role;
   if (updates.plan !== undefined) payload.plan = updates.plan;
-  if (updates.permissions !== undefined) {
-    payload.permissions = updates.permissions;
-  }
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
 
   const supabase = getSupabaseAdmin();

@@ -1,11 +1,11 @@
-import type { AppPermission, AppRole } from '@/lib/permissions';
+import type { AppRole } from '@/lib/permissions';
 
 export type AdminUser = {
   id: string;
   username: string;
   label: string;
   role: AppRole;
-  permissions: AppPermission[];
+  permissions: import('@/lib/permissions').AppPermission[];
   presetTokens: boolean;
   plan: 'free' | 'pro' | 'enterprise';
   email: string | null;
@@ -18,7 +18,6 @@ export type EditDraft = {
   label: string;
   role: AppRole;
   plan: AdminUser['plan'];
-  permissions: AppPermission[];
   isActive: boolean;
   newPassword: string;
 };
@@ -36,7 +35,6 @@ export function emptyDraft(user: AdminUser): EditDraft {
     label: user.label,
     role: user.role,
     plan: user.plan,
-    permissions: [...user.permissions],
     isActive: user.isActive,
     newPassword: '',
   };

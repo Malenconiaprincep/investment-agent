@@ -9,20 +9,6 @@ const patchSchema = z.object({
   label: z.string().trim().min(1).max(64).optional(),
   role: z.enum(['member', 'admin']).optional(),
   plan: z.enum(['free', 'pro', 'enterprise']).optional(),
-  permissions: z
-    .array(
-      z.enum([
-        'backtest',
-        'admin',
-        'screen',
-        'research',
-        'committee',
-        'signals',
-        'etf_pick',
-        'monitor',
-      ]),
-    )
-    .optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -51,15 +37,6 @@ export async function PATCH(request: Request, context: RouteContext) {
           { status: 400 },
         );
       }
-      if (
-        parsed.data.permissions &&
-        !parsed.data.permissions.includes('admin')
-      ) {
-        return NextResponse.json(
-          { error: '不能移除自己的后台管理权限' },
-          { status: 400 },
-        );
-      }
       if (parsed.data.role === 'member') {
         return NextResponse.json(
           { error: '不能将自己的角色降为 member' },
@@ -77,6 +54,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       : message.includes('无权')
         ? 403
         : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: status });
   }
 }

@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const session = await createLocalSessionCookie({
     username: user.username,
     role: user.role,
-    permissions: user.permissions,
+    plan: user.plan,
   });
   response.cookies.set(session.name, session.value, session.options);
   return response;

@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import type { AppPermission, AppRole } from './permissions';
+import { permissionsForPlan } from './plan-permissions';
 import { isValidUsername } from './auth-session';
 
 export type DesktopMarketUser = {
@@ -62,7 +63,7 @@ const DEFAULT_USERS: Omit<DesktopUserRow, 'id' | 'created_at' | 'last_login_at'>
       '$2b$12$ZRXr4cZQOwFId5BJRCz9MuXh6qDF0oTCkEiEdKbRWtIVWgXsS0u36',
     label: '管理员',
     role: 'admin',
-    permissions: ['backtest', 'admin'],
+    permissions: permissionsForPlan('pro', 'admin'),
     preset_tokens: true,
     plan: 'pro',
     email: null,
@@ -74,7 +75,7 @@ const DEFAULT_USERS: Omit<DesktopUserRow, 'id' | 'created_at' | 'last_login_at'>
       '$2b$12$/KhN.Tgh.Y.zWrAAe./lQOgSbGZzOQesOLEG3YDEX4Q.7gQGtz5LK',
     label: '测试账号',
     role: 'member',
-    permissions: [],
+    permissions: permissionsForPlan('free', 'member'),
     preset_tokens: false,
     plan: 'free',
     email: null,
@@ -90,14 +91,16 @@ function resolveStorePath(): string {
 }
 
 function mapRow(row: DesktopUserRow): DesktopMarketUser {
+  const role = row.role;
+  const plan = row.plan;
   return {
     id: row.id,
     username: row.username,
     label: row.label,
-    role: row.role,
-    permissions: row.permissions,
+    role,
+    permissions: permissionsForPlan(plan, role),
     presetTokens: row.preset_tokens,
-    plan: row.plan,
+    plan,
     email: row.email,
     isActive: row.is_active,
   };
@@ -206,16 +209,18 @@ export async function createDesktopUser(input: {
     throw new Error('该账号已被注册');
   }
 
+  const role = 'member' as const;
+  const plan = 'free' as const;
   const row: DesktopUserRow = {
     id: randomUUID(),
     username: input.username,
     password_hash: await bcrypt.hash(input.password, 12),
     label: input.label?.trim() || input.username,
     email: input.email?.trim() || null,
-    role: 'member',
-    permissions: [],
+    role,
+    permissions: permissionsForPlan(plan, role),
     preset_tokens: false,
-    plan: 'free',
+    plan,
     is_active: true,
     created_at: new Date().toISOString(),
     last_login_at: null,
@@ -259,7 +264,6 @@ export async function updateDesktopUser(
     label?: string;
     role?: AppRole;
     plan?: DesktopMarketUser['plan'];
-    permissions?: AppPermission[];
     isActive?: boolean;
   },
 ): Promise<DesktopMarketUserAdminView> {
@@ -272,8 +276,9 @@ export async function updateDesktopUser(
   if (updates.label !== undefined) row.label = updates.label.trim();
   if (updates.role !== undefined) row.role = updates.role;
   if (updates.plan !== undefined) row.plan = updates.plan;
-  if (updates.permissions !== undefined) row.permissions = updates.permissions;
   if (updates.isActive !== undefined) row.is_active = updates.isActive;
+
+  row.permissions = permissionsForPlan(row.plan, row.role);
 
   writeStore(store);
   return mapListRow(row);

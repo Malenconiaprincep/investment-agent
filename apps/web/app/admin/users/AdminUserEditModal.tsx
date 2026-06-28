@@ -1,10 +1,7 @@
 'use client';
 
-import type { AppPermission, AppRole } from '@/lib/permissions';
-import {
-  PERMISSION_OPTIONS,
-  PLAN_OPTIONS,
-} from '@/lib/permission-labels';
+import type { AppRole } from '@/lib/permissions';
+import { PLAN_OPTIONS, planDescription } from '@/lib/plan-permissions';
 import type { AdminUser, EditDraft } from './types';
 
 type AdminUserEditModalProps = {
@@ -15,7 +12,6 @@ type AdminUserEditModalProps = {
   resetting: boolean;
   onClose: () => void;
   onDraftChange: (draft: EditDraft) => void;
-  onTogglePermission: (permission: AppPermission) => void;
   onSave: () => void;
   onResetPassword: () => void;
 };
@@ -28,7 +24,6 @@ export function AdminUserEditModal({
   resetting,
   onClose,
   onDraftChange,
-  onTogglePermission,
   onSave,
   onResetPassword,
 }: AdminUserEditModalProps) {
@@ -108,25 +103,10 @@ export function AdminUserEditModal({
             </label>
           </div>
 
-          <fieldset className="admin-permissions-fieldset">
-            <legend>功能权限</legend>
-            <div className="admin-permission-grid">
-              {PERMISSION_OPTIONS.map((option) => (
-                <label key={option.value} className="admin-permission-item">
-                  <input
-                    type="checkbox"
-                    checked={draft.permissions.includes(option.value)}
-                    disabled={isSelf && option.value === 'admin'}
-                    onChange={() => onTogglePermission(option.value)}
-                  />
-                  <span>
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <p className="admin-plan-summary muted">
+            {planDescription(draft.plan)}
+            {draft.role === 'admin' ? '；管理员额外拥有后台管理权限。' : null}
+          </p>
 
           <label className="admin-toggle">
             <input
@@ -147,7 +127,7 @@ export function AdminUserEditModal({
               disabled={saving}
               onClick={onSave}
             >
-              {saving ? '保存中…' : '保存权限'}
+              {saving ? '保存中…' : '保存'}
             </button>
           </div>
 

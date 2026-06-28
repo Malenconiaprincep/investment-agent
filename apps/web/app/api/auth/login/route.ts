@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     session = await createLocalSessionCookie({
       username: user.username,
       role: user.role,
-      permissions: user.permissions,
+      plan: user.plan,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '创建登录会话失败';

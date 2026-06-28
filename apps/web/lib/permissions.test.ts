@@ -7,12 +7,15 @@ import {
 
 describe('permissions', () => {
   it('checks permissions on user profile', () => {
-    const admin = { permissions: ['backtest', 'admin'] as const };
-    const member = { permissions: [] as const };
+    const admin = { role: 'admin' as const, plan: 'pro' as const };
+    const member = { role: 'member' as const, plan: 'free' as const };
+    const proMember = { role: 'member' as const, plan: 'pro' as const };
 
+    expect(hasPermissionForUser(proMember, 'backtest')).toBe(true);
     expect(hasPermissionForUser(admin, 'backtest')).toBe(true);
     expect(hasPermissionForUser(admin, 'admin')).toBe(true);
     expect(hasPermissionForUser(member, 'backtest')).toBe(false);
+    expect(hasPermissionForUser(member, 'monitor')).toBe(false);
   });
 
   it('maps admin routes to admin permission', () => {

@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuthUser } from '@/hooks/useAuthUser';
-import type { AppPermission } from '@/lib/permissions';
-import { permissionLabel } from '@/lib/permission-labels';
+import { planDescription } from '@/lib/plan-permissions';
 import { AdminUserEditModal } from './AdminUserEditModal';
 import {
   emptyDraft,
@@ -78,19 +77,6 @@ export default function AdminUsersPage() {
     setDraft(null);
   }
 
-  function togglePermission(permission: AppPermission) {
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const has = prev.permissions.includes(permission);
-      return {
-        ...prev,
-        permissions: has
-          ? prev.permissions.filter((item) => item !== permission)
-          : [...prev.permissions, permission],
-      };
-    });
-  }
-
   async function saveUser(username: string) {
     if (!draft) return;
     setSaving(true);
@@ -104,7 +90,6 @@ export default function AdminUsersPage() {
           label: draft.label,
           role: draft.role,
           plan: draft.plan,
-          permissions: draft.permissions,
           isActive: draft.isActive,
         }),
       });
@@ -114,7 +99,7 @@ export default function AdminUsersPage() {
       setUsers((prev) =>
         prev.map((item) => (item.username === username ? data.user! : item)),
       );
-      setMessage(`已更新 ${username} 的权限与套餐`);
+      setMessage(`已更新 ${username} 的套餐与信息`);
       closeEdit();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -187,7 +172,7 @@ export default function AdminUsersPage() {
       <PageHeader
         eyebrow="Admin"
         title="用户管理"
-        description="为注册用户升级功能权限、调整套餐，或重置登录密码。权限变更后，用户需重新登录生效。"
+        description="为注册用户调整套餐、角色，或重置登录密码。套餐变更后，用户需重新登录生效。"
       />
 
       {currentUser ? (
@@ -238,7 +223,7 @@ export default function AdminUsersPage() {
               <th>套餐</th>
               <th>角色</th>
               <th>状态</th>
-              <th>权限</th>
+              <th>套餐能力</th>
               <th>最近登录</th>
               <th>注册时间</th>
               <th>操作</th>
@@ -283,17 +268,9 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td>
-                      <div className="admin-table-perms">
-                        {user.permissions.length > 0 ? (
-                          user.permissions.map((permission) => (
-                            <span key={permission} className="admin-tag">
-                              {permissionLabel(permission)}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </div>
+                      <p className="admin-table-plan muted">
+                        {planDescription(user.plan)}
+                      </p>
                     </td>
                     <td className="admin-table-time">{formatTime(user.lastLoginAt)}</td>
                     <td className="admin-table-time">{formatTime(user.createdAt)}</td>
@@ -347,7 +324,6 @@ export default function AdminUsersPage() {
           resetting={resetting}
           onClose={closeEdit}
           onDraftChange={setDraft}
-          onTogglePermission={togglePermission}
           onSave={() => void saveUser(editingUser.username)}
           onResetPassword={() => void resetPassword(editingUser.username)}
         />

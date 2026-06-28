@@ -1,3 +1,5 @@
+import { permissionsForPlan, type AppPlan } from './plan-permissions';
+
 /** 功能权限（可扩展为商业化套餐能力点） */
 export type AppPermission =
   | 'backtest'
@@ -11,17 +13,20 @@ export type AppPermission =
 
 export type AppRole = 'member' | 'admin';
 
+export type { AppPlan };
+
 export function hasPermissionForUser(
-  user: { permissions: AppPermission[] },
+  user: { role: AppRole; plan: AppPlan },
   permission: AppPermission,
 ): boolean {
-  return user.permissions.includes(permission);
+  if (user.role === 'admin') return true;
+  return permissionsForPlan(user.plan, user.role).includes(permission);
 }
 
 export function hasPermission(
   userId: string,
   permission: AppPermission,
-  user?: { permissions: AppPermission[] },
+  user?: { role: AppRole; plan: AppPlan },
 ): boolean {
   if (user) {
     return hasPermissionForUser(user, permission);
@@ -34,9 +39,10 @@ export function getUserRole(user: { role: AppRole }): AppRole {
 }
 
 export function getUserPermissions(user: {
-  permissions: AppPermission[];
+  role: AppRole;
+  plan: AppPlan;
 }): AppPermission[] {
-  return user.permissions;
+  return permissionsForPlan(user.plan, user.role);
 }
 
 /** 路由 → 所需权限；未列出则登录即可访问 */

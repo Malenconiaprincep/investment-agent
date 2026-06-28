@@ -14,7 +14,7 @@ describe('auth session', () => {
     const session = await createLocalSessionCookie({
       username: 'demo_user',
       role: 'member',
-      permissions: [],
+      plan: 'free',
     });
 
     expect(session.name).toBe(LOCAL_AUTH_COOKIE);
@@ -22,13 +22,27 @@ describe('auth session', () => {
     expect(await parseSessionUsername(session.value)).toBe('demo_user');
     expect(await isValidLocalSession(session.value)).toBe(true);
     expect(await isValidLocalSession(undefined)).toBe(false);
+
+    const parsed = await parseAuthSession(session.value);
+    expect(parsed?.plan).toBe('free');
+    expect(parsed?.permissions).toEqual([]);
+  });
+
+  it('derives pro permissions from plan in session', async () => {
+    const session = await createLocalSessionCookie({
+      username: 'pro_user',
+      role: 'member',
+      plan: 'pro',
+    });
+    const parsed = await parseAuthSession(session.value);
+    expect(parsed?.permissions).toEqual(['monitor', 'screen', 'backtest']);
   });
 
   it('rejects tampered session payloads', async () => {
     const token = await encodeAuthSession({
       username: 'demo_user',
       role: 'member',
-      permissions: ['backtest'],
+      plan: 'free',
     });
     const tampered = `${token}x`;
     expect(await parseAuthSession(tampered)).toBeNull();

@@ -5,7 +5,7 @@ import {
   type AuthSession,
 } from '@/lib/local-auth';
 import type { AppPermission } from '@/lib/permissions';
-import { hasPermissionForUser } from '@/lib/permissions';
+import { getUserPermissions } from '@/lib/permissions';
 import {
   findMarketUserByUsername,
   type MarketUser,
@@ -49,7 +49,11 @@ export async function requirePermission(
     throw new Error('请先登录');
   }
 
-  if (!hasPermissionForUser(user, permission)) {
+  if (user.role === 'admin') {
+    return username;
+  }
+
+  if (!getUserPermissions(user).includes(permission)) {
     throw new Error('无权访问此功能');
   }
 

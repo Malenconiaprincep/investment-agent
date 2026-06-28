@@ -1,4 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose';
+import {
+  permissionsForPlan,
+  type AppPlan,
+} from './plan-permissions';
 import type { AppPermission, AppRole } from './permissions';
 
 export const LOCAL_AUTH_COOKIE = 'investment_agent_local_session';
@@ -8,6 +12,7 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 export type AuthSession = {
   username: string;
   role: AppRole;
+  plan: AppPlan;
   permissions: AppPermission[];
   exp: number;
 };
@@ -32,31 +37,20 @@ function getSessionSecretKey(): Uint8Array {
   return new TextEncoder().encode('dev-insecure-auth-session-secret');
 }
 
-function normalizePermissions(value: unknown): AppPermission[] {
-  if (!Array.isArray(value)) return [];
-  const allowed = new Set<AppPermission>([
-    'backtest',
-    'admin',
-    'screen',
-    'research',
-    'committee',
-    'signals',
-    'etf_pick',
-    'monitor',
-  ]);
-  return value.filter(
-    (item): item is AppPermission =>
-      typeof item === 'string' && allowed.has(item as AppPermission),
-  );
+function normalizePlan(value: unknown): AppPlan {
+  if (value === 'pro' || value === 'enterprise') return value;
+  return 'free';
 }
 
-export async function encodeAuthSession(
-  input: Omit<AuthSession, 'exp'>,
-): Promise<string> {
+export async function encodeAuthSession(input: {
+  username: string;
+  role: AppRole;
+  plan: AppPlan;
+}): Promise<string> {
   return new SignJWT({
     username: input.username,
     role: input.role,
-    permissions: input.permissions,
+    plan: input.plan,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -76,6 +70,7 @@ export async function parseAuthSession(
 
     const username = typeof payload.username === 'string' ? payload.username : '';
     const role = payload.role;
+    const plan = normalizePlan(payload.plan);
     const exp = typeof payload.exp === 'number' ? payload.exp : 0;
 
     if (
@@ -89,7 +84,8 @@ export async function parseAuthSession(
     return {
       username,
       role,
-      permissions: normalizePermissions(payload.permissions),
+      plan,
+      permissions: permissionsForPlan(plan, role),
       exp,
     };
   } catch {
@@ -109,9 +105,11 @@ export async function parseSessionUsername(
   return (await parseAuthSession(value))?.username ?? null;
 }
 
-export async function createLocalSessionCookie(
-  session: Omit<AuthSession, 'exp'>,
-) {
+export async function createLocalSessionCookie(session: {
+  username: string;
+  role: AppRole;
+  plan: AppPlan;
+}) {
   return {
     name: LOCAL_AUTH_COOKIE,
     value: await encodeAuthSession(session),
