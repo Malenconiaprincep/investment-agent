@@ -135,6 +135,13 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
     writeStored({ enabled, tabs, activeTabId });
   }, [enabled, tabs, activeTabId, hydrated]);
 
+  useEffect(() => {
+    document.body.classList.toggle('tab-mode', enabled);
+    return () => {
+      document.body.classList.remove('tab-mode');
+    };
+  }, [enabled]);
+
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
     [tabs, activeTabId],

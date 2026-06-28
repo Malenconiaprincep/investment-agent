@@ -37,7 +37,6 @@ export function SiteNav() {
     toggleTabMode,
     openOrSwitchTab,
     openNewTab,
-    activeTab,
   } = useWorkspaceTabs();
 
   if (isAuthPath(pathname)) {
@@ -47,8 +46,6 @@ export function SiteNav() {
   const visibleNav = NAV_ITEMS.filter(
     (item) => !item.permission || can(item.permission),
   );
-
-  const focusedPath = tabMode ? (activeTab?.path ?? pathname) : pathname;
 
   function handleNavClick(
     event: React.MouseEvent,
@@ -88,15 +85,15 @@ export function SiteNav() {
 
         <nav className="site-nav" aria-label="主导航">
           {visibleNav.map((item) => {
-            const active = item.isActive(focusedPath);
+            const active = !tabMode && item.isActive(pathname);
             if (tabMode) {
               return (
                 <button
                   key={item.href}
                   type="button"
-                  className={`site-nav-link site-nav-link--panel${active ? ' site-nav-link--active' : ''}`}
+                  className="site-nav-link site-nav-link--panel site-nav-link--tabAction"
                   onClick={(event) => handleNavClick(event, item.href)}
-                  title="⌘/Ctrl + 点击可新开 Tab"
+                  title="打开或切换 Tab；⌘/Ctrl + 点击新开"
                 >
                   {item.label}
                 </button>

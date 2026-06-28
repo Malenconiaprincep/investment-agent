@@ -9,64 +9,56 @@ function embedSrc(path: string) {
 }
 
 export function WorkspaceTabBar() {
-  const {
-    enabled,
-    tabs,
-    activeTabId,
-    activateTab,
-    closeTab,
-    openNewTab,
-    toggleTabMode,
-  } = useWorkspaceTabs();
+  const { enabled, tabs, activeTabId, activateTab, closeTab, openNewTab } =
+    useWorkspaceTabs();
 
   if (!enabled) return null;
 
   return (
-    <div className={styles.bar}>
-      <div className={styles.tabList} role="tablist" aria-label="工作区 Tab">
-        {tabs.map((tab) => {
-          const active = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              className={`${styles.tab}${active ? ` ${styles.tabActive}` : ''}`}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={styles.tabButton}
-                onClick={() => activateTab(tab.id)}
-                title={tab.path}
+    <div className={`${styles.bar} workspace-tab-bar-host`}>
+      <div className={styles.barInner}>
+        <div className={styles.tabList} role="tablist" aria-label="工作区 Tab">
+          {tabs.map((tab) => {
+            const active = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                className={`${styles.tab}${active ? ` ${styles.tabActive}` : ''}`}
               >
-                {navLabelForPath(tab.path)}
-              </button>
-              {tabs.length > 1 ? (
                 <button
                   type="button"
-                  className={styles.tabClose}
-                  aria-label={`关闭 ${navLabelForPath(tab.path)}`}
-                  onClick={() => closeTab(tab.id)}
+                  role="tab"
+                  aria-selected={active}
+                  className={styles.tabButton}
+                  onClick={() => activateTab(tab.id)}
+                  title={tab.path}
                 >
-                  ×
+                  {navLabelForPath(tab.path)}
                 </button>
-              ) : null}
-            </div>
-          );
-        })}
-        <button
-          type="button"
-          className={styles.tabAdd}
-          aria-label="新建 Tab"
-          title="新建 Tab（雷达）"
-          onClick={() => openNewTab('/monitor')}
-        >
-          +
-        </button>
+                {tabs.length > 1 ? (
+                  <button
+                    type="button"
+                    className={styles.tabClose}
+                    aria-label={`关闭 ${navLabelForPath(tab.path)}`}
+                    onClick={() => closeTab(tab.id)}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className={styles.tabAdd}
+            aria-label="新建 Tab"
+            title="新建 Tab（雷达）"
+            onClick={() => openNewTab('/monitor')}
+          >
+            +
+          </button>
+        </div>
       </div>
-      <button type="button" className={styles.exitButton} onClick={toggleTabMode}>
-        退出 Tab
-      </button>
     </div>
   );
 }

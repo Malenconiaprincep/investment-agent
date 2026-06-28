@@ -16,8 +16,81 @@ body.embed-mode .app-shell-main {
   max-width: none;
 }
 
+body.embed-mode .page {
+  max-width: var(--page-max-wide);
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2.5rem;
+}
+
+body.embed-mode .page--list,
+body.embed-mode .page--workspace {
+  max-width: var(--page-max-wide);
+}
+
+body.embed-mode {
+  scrollbar-color: var(--border-strong) var(--bg);
+}
+
+body.embed-mode ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body.embed-mode ::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+body.embed-mode ::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+body.tab-mode {
+  --tab-bar-h: 2.5rem;
+  overflow: hidden;
+  scrollbar-color: var(--border-strong) var(--bg);
+}
+
+body.tab-mode ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body.tab-mode ::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+body.tab-mode ::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+body.tab-mode .site-header {
+  border-bottom: none;
+}
+
+body.tab-mode .app-shell {
+  min-height: calc(100vh - var(--header-h) - var(--tab-bar-h));
+  overflow: hidden;
+}
+
+body.tab-mode .watchlist-panel-tab {
+  top: calc(50% + var(--tab-bar-h) / 2);
+}
+
 .site-nav-button--active {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-muted);
+}
+
+.site-nav-link--tabAction {
+  color: var(--muted);
+}
+
+.site-nav-link--tabAction:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
 }
