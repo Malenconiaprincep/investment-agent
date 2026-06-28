@@ -30,27 +30,48 @@ export async function POST(request: Request) {
     return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
   }
 
+  const isDesktop = process.env.INVESTMENT_AGENT_DESKTOP === '1';
+
   try {
     await activateUserEnv(user.username, user.presetTokens);
     await touchMarketUserLogin(user.username);
   } catch (error) {
-    const message = error instanceof Error ? error.message : '激活配置失败';
-    const url = new URL('/login', request.url);
-    url.searchParams.set('error', '2');
-    url.searchParams.set('msg', message);
-    return NextResponse.redirect(url, 303);
+    if (!isDesktop) {
+      const message = error instanceof Error ? error.message : '激活配置失败';
+      const url = new URL('/login', request.url);
+      url.searchParams.set('error', '2');
+      url.searchParams.set('msg', message);
+      return NextResponse.redirect(url, 303);
+    }
+    console.warn('[desktop] Token 同步失败，仍允许登录:', error);
+    try {
+      await touchMarketUserLogin(user.username);
+    } catch {
+      // ignore
+    }
   }
 
   const next =
     String(form.get('next') ?? '').trim() ||
     new URL(request.url).searchParams.get('next') ||
     '/monitor';
+
+  let session;
+  try {
+    session = await createLocalSessionCookie({
+      username: user.username,
+      role: user.role,
+      permissions: user.permissions,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '创建登录会话失败';
+    const url = new URL('/login', request.url);
+    url.searchParams.set('error', '3');
+    url.searchParams.set('msg', message);
+    return NextResponse.redirect(url, 303);
+  }
+
   const response = NextResponse.redirect(new URL(next, request.url), 303);
-  const session = await createLocalSessionCookie({
-    username: user.username,
-    role: user.role,
-    permissions: user.permissions,
-  });
   response.cookies.set(session.name, session.value, session.options);
   return response;
 }

@@ -23,6 +23,9 @@ function getSessionSecretKey(): Uint8Array {
   if (secret) {
     return new TextEncoder().encode(secret);
   }
+  if (process.env.INVESTMENT_AGENT_DESKTOP === '1') {
+    return new TextEncoder().encode('desktop-local-auth-session-secret');
+  }
   if (process.env.NODE_ENV === 'production') {
     throw new Error('生产环境必须配置 AUTH_SESSION_SECRET');
   }

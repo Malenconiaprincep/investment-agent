@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, Menu, shell } from 'electron';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import {
   existsSync,
@@ -40,6 +41,105 @@ function ensureActiveEnvFile(dataDir) {
     writeFileSync(activeEnvPath, '# 登录后按账号同步 Token\n', 'utf-8');
   }
   return activeEnvPath;
+}
+
+function ensureSessionSecret(dataDir) {
+  mkdirSync(dataDir, { recursive: true });
+  const secretPath = path.join(dataDir, 'auth-session.secret');
+  if (existsSync(secretPath)) {
+    return readFileSync(secretPath, 'utf-8').trim();
+  }
+  const secret = randomBytes(32).toString('base64');
+  writeFileSync(secretPath, secret, { mode: 0o600 });
+  return secret;
+}
+
+function shouldOpenDevTools() {
+  return (
+    isDev ||
+    process.env.INVESTMENT_AGENT_DEVTOOLS === '1' ||
+    process.env.ELECTRON_OPEN_DEVTOOLS === '1'
+  );
+}
+
+function toggleDevTools() {
+  const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
+  if (!window) return;
+  if (window.webContents.isDevToolsOpened()) {
+    window.webContents.closeDevTools();
+  } else {
+    window.webContents.openDevTools({ mode: 'detach' });
+  }
+}
+
+function setupApplicationMenu() {
+  const devToolsItem = {
+    label: '开发者工具',
+    accelerator: process.platform === 'darwin' ? 'Cmd+Shift+I' : 'Ctrl+Shift+I',
+    click: () => toggleDevTools(),
+  };
+
+  const editMenu = {
+    label: '编辑',
+    submenu: [
+      { role: 'undo' },
+      { role: 'redo' },
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { role: 'pasteAndMatchStyle' },
+      { role: 'delete' },
+      { role: 'selectAll' },
+    ],
+  };
+
+  const template = [
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          },
+        ]
+      : []),
+    editMenu,
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        devToolsItem,
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function registerDevToolsShortcuts() {
+  const accelerators =
+    process.platform === 'darwin'
+      ? ['Command+Shift+I', 'Command+Alt+I', 'F12']
+      : ['Control+Shift+I', 'F12'];
+
+  for (const accelerator of accelerators) {
+    if (globalShortcut.isRegistered(accelerator)) continue;
+    globalShortcut.register(accelerator, toggleDevTools);
+  }
+}
+
+function unregisterDevToolsShortcuts() {
+  globalShortcut.unregisterAll();
 }
 
 function getFreePort(preferred) {
@@ -103,6 +203,7 @@ async function startServices() {
   const userData = app.getPath('userData');
   const dataDir = path.join(userData, 'data');
   const activeEnvPath = ensureActiveEnvFile(dataDir);
+  const sessionSecret = ensureSessionSecret(dataDir);
   const resourcesPath = resolveResourcesPath();
 
   agentPort = await getFreePort(4010);
@@ -174,6 +275,7 @@ async function startServices() {
     PORT: String(webPort),
     AGENT_CORE_URL: `http://127.0.0.1:${agentPort}`,
     INVESTMENT_AGENT_DESKTOP: '1',
+    AUTH_SESSION_SECRET: sessionSecret,
   };
 
   webChild = spawnService(
@@ -212,11 +314,15 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: true,
     },
   });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    if (shouldOpenDevTools()) {
+      mainWindow?.webContents.openDevTools({ mode: 'detach' });
+    }
   });
 
   mainWindow.loadURL(`http://127.0.0.1:${webPort}/login`);
@@ -258,7 +364,13 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    setupApplicationMenu();
+    registerDevToolsShortcuts();
     void boot();
+  });
+
+  app.on('will-quit', () => {
+    unregisterDevToolsShortcuts();
   });
 
   app.on('before-quit', () => {
