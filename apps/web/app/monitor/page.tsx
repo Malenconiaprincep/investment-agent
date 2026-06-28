@@ -711,50 +711,42 @@ function ThemeNewsFeed({ alerts }: { alerts: MonitorAlert[] }) {
   );
 }
 
-function recommendationLabel(level: MonitorPaperRecommendation['level']) {
-  if (level === 'auto_buy') return '潜伏买入';
-  if (level === 'watch') return '自动跟踪';
-  return '消息记录';
-}
-
-function statusLabel(status: MonitorPaperRecommendation['status']) {
+function radarStockStatusLabel(status: RadarStockStatus) {
+  if (status === 'attention') return '待看';
   if (status === 'bought') return '已买入';
+  if (status === 'sold') return '已卖出';
   if (status === 'tracked') return '跟踪中';
-  if (status === 'skipped') return '已跳过';
   if (status === 'error') return '执行失败';
-  return '处理中';
+  return '观察';
 }
 
-function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
+function RadarStockCard({ item }: { item: RadarStockItem }) {
   const { setOpen } = useWatchlistPanel();
-  const statusNote = item.error ?? item.skipReason ?? item.reason;
 
   return (
-    <article className={`monitor-stock-card monitor-stock-card--compact monitor-recommendation monitor-recommendation--${item.level}`}>
+    <article className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${item.status}`}>
       <div className="monitor-stock-card-head">
-        <span className={`monitor-type monitor-recommendation-type--${item.level}`}>
-          {recommendationLabel(item.level)}
+        <span className={`monitor-type monitor-status-type--${item.status}`}>
+          {radarStockStatusLabel(item.status)}
         </span>
-        <span className="history-card-time">{statusLabel(item.status)}</span>
+        {item.time ? (
+          <span className="history-card-time">{fmtTime(item.time)}</span>
+        ) : null}
       </div>
 
-      {item.symbol ? (
-        <MonitorStockInsight
-          symbol={item.symbol}
-          fallbackName={item.name}
-          theme={item.theme}
-          pctChg={item.pctChg}
-          ret20dPct={item.ret20dPct}
-          eventPoints={item.eventPoints ?? []}
-          compact
-        />
-      ) : (
-        <strong>{item.name ?? '未识别标的'}</strong>
-      )}
+      <MonitorStockInsight
+        symbol={item.symbol}
+        fallbackName={item.name}
+        theme={item.theme}
+        pctChg={item.pctChg}
+        ret20dPct={item.ret20dPct}
+        eventPoints={item.eventPoints}
+        compact
+      />
 
-      {statusNote ? (
+      {item.reason ? (
         <p className="monitor-summary monitor-summary--compact monitor-summary--status">
-          {statusNote}
+          {item.reason}
         </p>
       ) : null}
 
@@ -766,12 +758,12 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
       )}
 
       <div className="monitor-card-actions monitor-card-actions--compact">
-        {item.status === 'bought' && (
+        {item.actionTarget === 'paper' && (
           <Link href="/paper" className="saved-link">
             查看模拟盘
           </Link>
         )}
-        {item.status === 'tracked' && (
+        {item.actionTarget === 'watchlist' && (
           <button
             type="button"
             className="saved-link"
@@ -780,7 +772,7 @@ function RecommendationCard({ item }: { item: MonitorPaperRecommendation }) {
             查看跟踪池
           </button>
         )}
-        {item.symbol && (
+        {item.actionTarget === 'research' && (
           <Link href={`/research?symbol=${item.symbol}`} className="saved-link">
             生成研报
           </Link>
@@ -797,86 +789,4 @@ function paperActionLabel(item: MonitorPaperAction) {
   if (item.status === 'tracked') return '跟踪中';
   if (item.status === 'skipped') return '跳过';
   return '失败';
-}
-
-function paperActionKindLabel(item: MonitorPaperAction) {
-  if (item.kind === 'sell') return '卖出';
-  if (item.kind === 'buy') return '买入';
-  return '跟踪';
-}
-
-function PaperActionCard({ item }: { item: MonitorPaperAction }) {
-  return (
-    <article className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${item.status === 'error' ? 'urgent' : item.kind === 'sell' ? 'pre_move' : 'watch'}`}>
-      <div className="monitor-stock-card-head">
-        <span className={`monitor-type monitor-recommendation-type--${item.kind === 'sell' ? 'info' : 'auto_buy'}`}>
-          {paperActionLabel(item)}
-        </span>
-        <span className="history-card-time">{paperActionKindLabel(item)}</span>
-      </div>
-
-      <MonitorStockInsight
-        symbol={item.symbol}
-        fallbackName={item.name}
-        eventPoints={[item.kind === 'buy' ? '自动买入' : '自动卖出']}
-        compact
-      />
-
-      <p className="monitor-summary monitor-summary--compact">{item.error ?? item.reason}</p>
-      <div className="history-card-meta">
-        {item.shares ? <span>股数 {item.shares}</span> : null}
-        {item.price ? <span>价格 {item.price.toFixed(2)}</span> : null}
-        <Link href="/paper" className="saved-link">
-          交易流水
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-function AlertCard({ alert }: { alert: MonitorAlert }) {
-  const typeLabel = ALERT_LABEL[alert.alertType] ?? alert.alertType;
-
-  return (
-    <article
-      className={`monitor-stock-card monitor-stock-card--compact monitor-card monitor-card--${alert.severity}${alert.acknowledged ? ' monitor-card--read' : ''}`}
-    >
-      <div className="monitor-stock-card-head">
-        <span className={`monitor-type monitor-type--${alert.alertType}`}>
-          {typeLabel}
-        </span>
-        <span className="history-card-time">{fmtTime(alert.createdAt)}</span>
-      </div>
-
-      {alert.symbol ? (
-        <MonitorStockInsight
-          symbol={alert.symbol}
-          fallbackName={alert.name}
-          theme={alert.theme}
-          pctChg={alert.pctChg}
-          ret20dPct={alert.ret20dPct}
-          eventPoints={buildAlertEventPoints(alert)}
-          compact
-        />
-      ) : (
-        <strong>{alert.title}</strong>
-      )}
-
-      {!alert.symbol && (
-        <p className="monitor-summary monitor-summary--compact">{alert.summary}</p>
-      )}
-
-      {alert.newsTitle && (
-        <p className="monitor-news">
-          {alert.newsUrl ? (
-            <a href={alert.newsUrl} target="_blank" rel="noopener noreferrer">
-              {alert.newsTitle}
-            </a>
-          ) : (
-            alert.newsTitle
-          )}
-        </p>
-      )}
-    </article>
-  );
 }

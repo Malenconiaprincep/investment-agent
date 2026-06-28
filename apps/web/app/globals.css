@@ -3476,8 +3476,9 @@ a:hover {
 }
 
 .monitor-summary--status {
-  padding-left: 0.5rem;
-  border-left: 2px solid var(--border-strong);
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .monitor-card-actions--compact {
@@ -3491,36 +3492,31 @@ a:hover {
   font-size: 0.8125rem;
 }
 
-.monitor-card--urgent {
+.monitor-card--attention {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 
+.monitor-card--bought,
+.monitor-card--sold,
+.monitor-card--tracked,
 .monitor-card--watch {
   border-color: color-mix(in srgb, var(--link) 45%, var(--border));
   background: color-mix(in srgb, var(--link) 4%, var(--surface));
 }
 
-.monitor-card--info {
+.monitor-card--error {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+
+.monitor-card--watch {
   border-color: var(--border-strong);
+  background: var(--surface);
 }
 
 .monitor-card--read {
   opacity: 0.72;
-}
-
-.monitor-recommendation--auto_buy {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-}
-
-.monitor-recommendation--watch {
-  border-color: color-mix(in srgb, var(--link) 45%, var(--border));
-  background: color-mix(in srgb, var(--link) 4%, var(--surface));
-}
-
-.monitor-recommendation--info {
-  border-color: var(--border-strong);
 }
 
 .monitor-type {
@@ -3535,24 +3531,26 @@ a:hover {
   color: var(--muted);
 }
 
-.monitor-type--pre_move {
+.monitor-status-type--attention {
   background: rgba(201, 146, 74, 0.2);
   color: var(--accent);
 }
 
-.monitor-recommendation-type--auto_buy {
-  background: rgba(201, 146, 74, 0.2);
-  color: var(--accent);
-}
-
-.monitor-recommendation-type--watch {
+.monitor-status-type--bought,
+.monitor-status-type--sold,
+.monitor-status-type--tracked {
   background: rgba(126, 184, 218, 0.15);
   color: var(--link);
 }
 
-.monitor-recommendation-type--info {
+.monitor-status-type--watch {
   background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
+}
+
+.monitor-status-type--error {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
 }
 
 .monitor-card-actions {
