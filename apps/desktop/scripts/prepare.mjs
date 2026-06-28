@@ -30,9 +30,19 @@ function run(command, options = {}) {
   });
 }
 
-function copyDir(from, to) {
+function copyDir(from, to, options = {}) {
+  const skipGit = options.skipGit ?? false;
   mkdirSync(path.dirname(to), { recursive: true });
-  cpSync(from, to, { recursive: true });
+  cpSync(from, to, {
+    recursive: true,
+    ...(skipGit
+      ? {
+          filter: (src) =>
+            !src.split(path.sep).includes('.git') &&
+            !src.endsWith(`${path.sep}.git`),
+        }
+      : {}),
+  });
 }
 
 /** pnpm deploy 会保留指回 monorepo 的 workspace 符号链接，打进 .app 后路径失效。 */
@@ -139,7 +149,7 @@ run(
 const vendorSrc = path.join(repoRoot, 'packages/agent-core/vendor');
 if (existsSync(vendorSrc)) {
   console.log('复制问财 MCP vendor…');
-  copyDir(vendorSrc, path.join(agentPack, 'vendor'));
+  copyDir(vendorSrc, path.join(agentPack, 'vendor'), { skipGit: true });
 }
 
 pruneMonorepoSymlinks(agentPack);

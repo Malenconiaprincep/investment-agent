@@ -25,6 +25,8 @@
   "build": {
     "appId": "com.investment-agent.desktop",
     "productName": "投研助手",
+    "electronDist": "node_modules/electron/dist",
+    "electronVersion": "35.7.5",
     "npmRebuild": false,
     "directories": {
       "output": "release",
