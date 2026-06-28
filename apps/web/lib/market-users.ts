@@ -1,6 +1,16 @@
 import bcrypt from 'bcryptjs';
 import type { AppPermission, AppRole } from './permissions';
 import { isValidUsername } from './auth-session';
+import {
+  createDesktopUser,
+  findDesktopUserByUsername,
+  isDesktopAuthMode,
+  listDesktopUsersPaginated as listDesktopUsersPaginatedImpl,
+  resetDesktopUserPassword as resetDesktopUserPasswordImpl,
+  touchDesktopUserLogin as touchDesktopUserLoginImpl,
+  updateDesktopUser as updateDesktopUserImpl,
+  verifyDesktopUserPassword,
+} from './desktop-users';
 import { getSupabaseAdmin, isSupabaseConfigured } from './supabase-admin';
 
 export type MarketUser = {
@@ -60,6 +70,7 @@ function mapRow(row: Omit<MarketUserRow, 'password_hash'>): MarketUser {
 }
 
 export function assertSupabaseAuthReady(): void {
+  if (isDesktopAuthMode()) return;
   if (!isSupabaseConfigured()) {
     throw new Error('未配置 Supabase，无法注册或登录');
   }
@@ -68,6 +79,9 @@ export function assertSupabaseAuthReady(): void {
 export async function findMarketUserByUsername(
   username: string,
 ): Promise<(MarketUser & { passwordHash: string }) | null> {
+  if (isDesktopAuthMode()) {
+    return findDesktopUserByUsername(username);
+  }
   assertSupabaseAuthReady();
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -102,6 +116,9 @@ export async function createMarketUser(input: {
   label?: string;
   email?: string | null;
 }): Promise<MarketUser> {
+  if (isDesktopAuthMode()) {
+    return createDesktopUser(input);
+  }
   assertSupabaseAuthReady();
 
   if (!isValidUsername(input.username)) {
@@ -152,6 +169,9 @@ export async function verifyMarketUserPassword(
   username: string,
   password: string,
 ): Promise<MarketUser | null> {
+  if (isDesktopAuthMode()) {
+    return verifyDesktopUserPassword(username, password);
+  }
   const user = await findMarketUserByUsername(username);
   if (!user || !user.isActive) return null;
 
@@ -163,6 +183,9 @@ export async function verifyMarketUserPassword(
 }
 
 export async function touchMarketUserLogin(username: string): Promise<void> {
+  if (isDesktopAuthMode()) {
+    return touchDesktopUserLoginImpl(username);
+  }
   const supabase = getSupabaseAdmin();
   await supabase
     .from('market_users')
@@ -205,6 +228,9 @@ export async function listMarketUsersPaginated(input: {
   page: number;
   pageSize: number;
 }): Promise<MarketUsersPageResult> {
+  if (isDesktopAuthMode()) {
+    return listDesktopUsersPaginatedImpl(input);
+  }
   assertSupabaseAuthReady();
   const page = Math.max(1, input.page);
   const pageSize = Math.min(100, Math.max(1, input.pageSize));
@@ -247,6 +273,9 @@ export async function updateMarketUser(
     isActive?: boolean;
   },
 ): Promise<MarketUserAdminView> {
+  if (isDesktopAuthMode()) {
+    return updateDesktopUserImpl(username, updates);
+  }
   assertSupabaseAuthReady();
 
   const payload: Record<string, unknown> = {};
@@ -279,6 +308,9 @@ export async function resetMarketUserPassword(
   username: string,
   newPassword: string,
 ): Promise<void> {
+  if (isDesktopAuthMode()) {
+    return resetDesktopUserPasswordImpl(username, newPassword);
+  }
   assertSupabaseAuthReady();
 
   if (newPassword.length < 8) {
