@@ -9,6 +9,7 @@ import { ReportMarkdown } from '@/components/ReportMarkdown';
 import { FeedbackButtons } from '@/components/ui/FeedbackButtons';
 import { AddToWatchlistButton } from '@/components/ui/AddToWatchlistButton';
 import { QualityBadge } from '@/components/ui/QualityBadge';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import { resolveTailEntryDisplay } from '@/lib/tail-entry-display';
 
 type FeedbackSummary = {
@@ -136,6 +137,7 @@ function formatPct(value: number | null) {
 
 export default function ScreeningHistoryDetailPage() {
   const params = useParams<{ id: string }>();
+  const { can } = useAuthUser();
   const [session, setSession] = useState<ScreeningDetail | null>(null);
   const [backtest, setBacktest] = useState<BacktestResult | null>(null);
   const [holdPeriod, setHoldPeriod] = useState<string>('auto');
@@ -328,6 +330,7 @@ export default function ScreeningHistoryDetailPage() {
             </section>
           )}
 
+          {can('backtest') && (
           <section className="section">
             <div className="section-toolbar">
               <h2 className="section-title">入选后表现</h2>
@@ -395,6 +398,7 @@ export default function ScreeningHistoryDetailPage() {
               </>
             )}
           </section>
+          )}
 
           {resolvedTailEntry.run && (
             <TailEntryOutlookPanel

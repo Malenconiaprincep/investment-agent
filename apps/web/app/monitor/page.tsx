@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MonitorStockInsight } from '@/components/monitor/MonitorStockInsight';
 import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton';
@@ -226,6 +227,21 @@ function fmtTime(iso: string) {
   }
 }
 
+const FORBIDDEN_MESSAGES: Record<string, string> = {
+  backtest: '回测为高级功能，当前账号暂无权限。如需开通请联系管理员。',
+};
+
+function ForbiddenNotice() {
+  const searchParams = useSearchParams();
+  const message = FORBIDDEN_MESSAGES[searchParams.get('forbidden') ?? ''] ?? null;
+  if (!message) return null;
+  return (
+    <div className="notice notice--warn" role="status">
+      {message}
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const [status, setStatus] = useState<MonitorStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -335,6 +351,10 @@ export default function MonitorPage() {
         description="后台自动扫描资讯与行情：识别标的会加入自选跟踪，潜伏机会或动量达标后自动写入模拟盘。"
       />
 
+      <Suspense fallback={null}>
+        <ForbiddenNotice />
+      </Suspense>
+
       <div className="list-stack">
         <div className="list-stack-head">
           <div className="monitor-status-bar">
@@ -383,9 +403,6 @@ export default function MonitorPage() {
             </OpenWatchlistPanelButton>
             <Link href="/monitor/settings" className="button button-secondary">
               雷达设置
-            </Link>
-            <Link href="/settings" className="button button-secondary">
-              Token 设置
             </Link>
             <Link href="/screen" className="button button-secondary">
               智能选股

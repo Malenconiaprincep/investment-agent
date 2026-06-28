@@ -1,31 +1,31 @@
-export type AppUserId = 'adminwb' | 'test';
+import type { AppPermission, AppRole } from './permissions';
+
+/** 登录账号（username） */
+export type AppUserId = string;
 
 export type AppUser = {
   id: AppUserId;
-  password: string;
-  presetTokens: boolean;
   label: string;
+  role: AppRole;
+  permissions: AppPermission[];
+  presetTokens: boolean;
+  plan: 'free' | 'pro' | 'enterprise';
 };
 
-export const APP_USERS: Record<AppUserId, AppUser> = {
-  adminwb: {
-    id: 'adminwb',
-    password: 'Wb@Invest2026!xK9',
-    presetTokens: true,
-    label: '管理员',
-  },
-  test: {
-    id: 'test',
-    password: 'test123456',
-    presetTokens: false,
-    label: '测试账号',
-  },
-};
-
-export function isAppUserId(value: string): value is AppUserId {
-  return value in APP_USERS;
-}
-
-export function getAppUser(id: AppUserId): AppUser {
-  return APP_USERS[id];
+export function toAppUser(profile: {
+  username: string;
+  label: string;
+  role: AppRole;
+  permissions: AppPermission[];
+  presetTokens: boolean;
+  plan: 'free' | 'pro' | 'enterprise';
+}): AppUser {
+  return {
+    id: profile.username,
+    label: profile.label,
+    role: profile.role,
+    permissions: profile.permissions,
+    presetTokens: profile.presetTokens,
+    plan: profile.plan,
+  };
 }

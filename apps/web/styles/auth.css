@@ -1,0 +1,43 @@
+.auth-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.auth-header-inner {
+  display: flex;
+  align-items: center;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0.875rem 1.25rem;
+}
+
+.auth-header-brand {
+  text-decoration: none;
+}
+
+.app-shell--auth {
+  min-height: calc(100dvh - 3.5rem);
+}
+
+.app-shell--auth .app-shell-main {
+  display: flex;
+}
+
+.login-page {
+  flex: 1;
+  width: 100%;
+  min-height: calc(100dvh - 3.5rem);
+}
+
+.login-hints a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.login-hints a:hover {
+  text-decoration: underline;
+}

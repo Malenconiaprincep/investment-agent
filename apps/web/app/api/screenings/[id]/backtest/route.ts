@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runAgentCoreScreeningsJson } from '@/lib/agent-core';
+import { requirePermission } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,7 @@ type RouteContext = {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
+    await requirePermission('backtest');
     const { id } = await context.params;
 
     if (!id) {
@@ -31,6 +33,7 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: '选股记录不存在' }, { status: 404 });
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message === '无权访问此功能' ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

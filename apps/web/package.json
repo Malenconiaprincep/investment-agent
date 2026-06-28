@@ -10,18 +10,23 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "@uiw/react-markdown-preview": "^5.2.1",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.2.2",
+    "jose": "^6.2.3",
     "lightweight-charts": "^5.2.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "zod": "^4.4.3",
-    "dotenv": "^17.2.2"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^26.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "pg": "^8.22.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

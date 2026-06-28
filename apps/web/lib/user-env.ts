@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
+import { isValidUsername } from './auth-session';
 import { patchAgentCoreEnvKeys } from './agent-core';
-import type { AppUserId } from './users';
-import { getAppUser, isAppUserId } from './users';
 
 export const TOKEN_KEYS = [
   'DEEPSEEK_API_KEY',
@@ -17,7 +16,7 @@ export const TOKEN_KEYS = [
 export type TokenKey = (typeof TOKEN_KEYS)[number];
 
 export type TokenConfigStatus = {
-  username: AppUserId;
+  username: string;
   userLabel: string;
   presetTokens: boolean;
   envPath: string;
@@ -31,7 +30,7 @@ function resolveDataDir(): string {
   return path.join(process.cwd(), '.data');
 }
 
-export function getUserEnvPath(username: AppUserId): string {
+export function getUserEnvPath(username: string): string {
   return path.join(resolveDataDir(), 'users', username, '.env');
 }
 
@@ -105,23 +104,21 @@ function loadAdminDefaultTokens(): Record<string, string> {
   return {};
 }
 
-export function ensureUserEnvSeeded(username: AppUserId): Record<string, string> {
+export function ensureUserEnvSeeded(
+  username: string,
+  presetTokens: boolean,
+): Record<string, string> {
   const userPath = getUserEnvPath(username);
   if (existsSync(userPath)) {
     return parseEnvFile(userPath);
   }
 
-  const user = getAppUser(username);
-  const initial = user.presetTokens ? loadAdminDefaultTokens() : {};
+  const initial = presetTokens ? loadAdminDefaultTokens() : {};
   writeEnvFile(userPath, initial);
   return initial;
 }
 
-function readUserEnv(username: AppUserId): Record<string, string> {
-  return parseEnvFile(getUserEnvPath(username));
-}
-
-function writeUserEnv(username: AppUserId, values: Record<string, string>) {
+function writeUserEnv(username: string, values: Record<string, string>) {
   writeEnvFile(getUserEnvPath(username), values);
 }
 
@@ -137,15 +134,21 @@ async function syncTokensToAgentCore(values: Record<string, string>) {
   await patchAgentCoreEnvKeys(updates);
 }
 
-export async function activateUserEnv(username: AppUserId): Promise<void> {
-  const values = ensureUserEnvSeeded(username);
+export async function activateUserEnv(
+  username: string,
+  presetTokens: boolean,
+): Promise<void> {
+  const values = ensureUserEnvSeeded(username, presetTokens);
   writeActiveEnv(values);
   await syncTokensToAgentCore(values);
 }
 
-export function getTokenConfigStatus(username: AppUserId): TokenConfigStatus {
-  const user = getAppUser(username);
-  const values = ensureUserEnvSeeded(username);
+export function getTokenConfigStatus(input: {
+  username: string;
+  userLabel: string;
+  presetTokens: boolean;
+}): TokenConfigStatus {
+  const values = ensureUserEnvSeeded(input.username, input.presetTokens);
   const keys = {} as TokenConfigStatus['keys'];
 
   for (const key of TOKEN_KEYS) {
@@ -156,20 +159,22 @@ export function getTokenConfigStatus(username: AppUserId): TokenConfigStatus {
   }
 
   return {
-    username,
-    userLabel: user.label,
-    presetTokens: user.presetTokens,
-    envPath: getUserEnvPath(username),
+    username: input.username,
+    userLabel: input.userLabel,
+    presetTokens: input.presetTokens,
+    envPath: getUserEnvPath(input.username),
     keys,
     restartRequired: false,
   };
 }
 
 export async function updateUserTokenConfig(
-  username: AppUserId,
+  username: string,
+  presetTokens: boolean,
+  userLabel: string,
   updates: Partial<Record<TokenKey, string | null>>,
 ): Promise<TokenConfigStatus> {
-  const current = ensureUserEnvSeeded(username);
+  const current = ensureUserEnvSeeded(username, presetTokens);
 
   for (const key of TOKEN_KEYS) {
     if (!(key in updates)) continue;
@@ -185,14 +190,15 @@ export async function updateUserTokenConfig(
   writeActiveEnv(current);
   await syncTokensToAgentCore(current);
 
-  return {
-    ...getTokenConfigStatus(username),
-    restartRequired: false,
-  };
+  return getTokenConfigStatus({
+    username,
+    userLabel,
+    presetTokens,
+  });
 }
 
-export function assertAppUser(username: string): AppUserId {
-  if (!isAppUserId(username)) {
+export function assertAppUser(username: string): string {
+  if (!isValidUsername(username)) {
     throw new Error('无效的用户');
   }
   return username;

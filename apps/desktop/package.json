@@ -25,6 +25,7 @@
   "build": {
     "appId": "com.investment-agent.desktop",
     "productName": "投研助手",
+    "npmRebuild": false,
     "directories": {
       "output": "release",
       "buildResources": "assets"

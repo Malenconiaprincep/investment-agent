@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSessionUsername } from '@/lib/session';
+import { requireSessionUsername, getMarketUserProfile } from '@/lib/session';
 import {
   getTokenConfigStatus,
   updateUserTokenConfig,
@@ -10,8 +10,17 @@ export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const username = await requireSessionUsername();
-    const status = getTokenConfigStatus(username);
+    await requireSessionUsername();
+    const profile = await getMarketUserProfile();
+    if (!profile) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 });
+    }
+
+    const status = getTokenConfigStatus({
+      username: profile.username,
+      userLabel: profile.label,
+      presetTokens: profile.presetTokens,
+    });
     return NextResponse.json(status);
   } catch (error) {
     const message = error instanceof Error ? error.message : '加载失败';
@@ -22,9 +31,19 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const username = await requireSessionUsername();
+    await requireSessionUsername();
+    const profile = await getMarketUserProfile();
+    if (!profile) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 });
+    }
+
     const body = (await request.json()) as Partial<Record<TokenKey, string | null>>;
-    const status = await updateUserTokenConfig(username, body);
+    const status = await updateUserTokenConfig(
+      profile.username,
+      profile.presetTokens,
+      profile.label,
+      body,
+    );
     return NextResponse.json(status);
   } catch (error) {
     const message = error instanceof Error ? error.message : '保存失败';

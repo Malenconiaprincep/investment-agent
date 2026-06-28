@@ -2,11 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { AuthHeader } from '@/components/AuthHeader';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
+import { UserMenu } from '@/components/UserMenu';
+import { useAuthUser } from '@/hooks/useAuthUser';
+import { isAuthPath } from '@/lib/auth-paths';
+import type { AppPermission } from '@/lib/permissions';
 
 type NavItem = {
   href: string;
   label: string;
+  permission?: AppPermission;
   isActive: (pathname: string) => boolean;
 };
 
@@ -40,6 +46,7 @@ const NAV: NavItem[] = [
   {
     href: '/backtest',
     label: '回测',
+    permission: 'backtest',
     isActive: (pathname) =>
       pathname === '/backtest' || pathname.startsWith('/backtest/'),
   },
@@ -77,10 +84,15 @@ function WatchlistIcon() {
 export function SiteNav() {
   const pathname = usePathname();
   const { toggle, open, itemCount } = useWatchlistPanel();
+  const { user, can } = useAuthUser();
 
-  if (pathname === '/login') {
-    return null;
+  if (isAuthPath(pathname)) {
+    return <AuthHeader />;
   }
+
+  const visibleNav = NAV.filter(
+    (item) => !item.permission || can(item.permission),
+  );
 
   return (
     <header className="site-header">
@@ -93,7 +105,7 @@ export function SiteNav() {
         </Link>
 
         <nav className="site-nav" aria-label="主导航">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = item.isActive(pathname);
             return (
               <Link
@@ -126,14 +138,7 @@ export function SiteNav() {
             ) : null}
           </button>
 
-          <Link href="/settings" className="site-nav-button site-nav-button--link">
-            Token
-          </Link>
-          <form action="/api/auth/logout" method="post">
-            <button className="site-nav-button" type="submit">
-              退出
-            </button>
-          </form>
+          <UserMenu user={user} />
         </div>
       </div>
     </header>
