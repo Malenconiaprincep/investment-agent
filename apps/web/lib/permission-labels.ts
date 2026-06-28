@@ -5,6 +5,7 @@ export const PERMISSION_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
+  { value: 'monitor', label: '消息雷达', description: '实时消息雷达与信号扫描' },
   { value: 'backtest', label: '策略回测', description: '回测页与选股事后表现' },
   { value: 'screen', label: '智能选股', description: 'AI 板块选股流程' },
   { value: 'research', label: '单股分析', description: '五步 Research 工作流' },

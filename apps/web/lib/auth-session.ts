@@ -42,6 +42,7 @@ function normalizePermissions(value: unknown): AppPermission[] {
     'committee',
     'signals',
     'etf_pick',
+    'monitor',
   ]);
   return value.filter(
     (item): item is AppPermission =>

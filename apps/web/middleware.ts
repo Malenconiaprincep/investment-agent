@@ -4,6 +4,7 @@ import {
   parseAuthSession,
 } from '@/lib/local-auth';
 import { isAuthPath } from '@/lib/auth-paths';
+import { defaultNavPath } from '@/lib/nav-items';
 import { canAccessPathWithPermissions, permissionForPath } from '@/lib/permissions';
 
 const PUBLIC_PATH_PREFIXES = [
@@ -46,14 +47,14 @@ export async function middleware(request: NextRequest) {
 
   if (
     permissionForPath(pathname) &&
-    !canAccessPathWithPermissions(session.permissions, pathname)
+    !canAccessPathWithPermissions(session.permissions, pathname, session.role)
   ) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: '无权访问此功能' }, { status: 403 });
     }
 
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/monitor';
+    redirectUrl.pathname = defaultNavPath(session.permissions, session.role);
     redirectUrl.searchParams.set('forbidden', permissionForPath(pathname)!);
     return NextResponse.redirect(redirectUrl);
   }

@@ -19,6 +19,7 @@ const patchSchema = z.object({
         'committee',
         'signals',
         'etf_pick',
+        'monitor',
       ]),
     )
     .optional(),

@@ -1,10 +1,6 @@
 .bar {
-  position: sticky;
-  top: var(--header-h);
-  z-index: 49;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  backdrop-filter: blur(10px);
 }
 
 .barInner {

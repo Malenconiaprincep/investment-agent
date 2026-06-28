@@ -1,6 +1,7 @@
 'use client';
 
-import { navLabelForPath } from '@/lib/nav-items';
+import { navLabelForPath, defaultNavPath } from '@/lib/nav-items';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import styles from './workspace-tabs.module.css';
 
@@ -11,6 +12,10 @@ function embedSrc(path: string) {
 export function WorkspaceTabBar() {
   const { enabled, tabs, activeTabId, activateTab, closeTab, openNewTab } =
     useWorkspaceTabs();
+  const { user } = useAuthUser();
+  const newTabPath = user
+    ? defaultNavPath(user.permissions, user.role)
+    : '/research';
 
   if (!enabled) return null;
 
@@ -52,8 +57,8 @@ export function WorkspaceTabBar() {
             type="button"
             className={styles.tabAdd}
             aria-label="新建 Tab"
-            title="新建 Tab（雷达）"
-            onClick={() => openNewTab('/monitor')}
+            title={`新建 Tab（${navLabelForPath(newTabPath)}）`}
+            onClick={() => openNewTab(newTabPath)}
           >
             +
           </button>

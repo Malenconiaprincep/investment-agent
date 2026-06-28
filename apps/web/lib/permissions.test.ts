@@ -24,7 +24,9 @@ describe('permissions', () => {
     expect(permissionForPath('/backtest')).toBe('backtest');
     expect(permissionForPath('/api/backtest')).toBe('backtest');
     expect(permissionForPath('/api/screenings/abc/backtest')).toBe('backtest');
-    expect(permissionForPath('/monitor')).toBeNull();
+    expect(permissionForPath('/monitor')).toBe('monitor');
+    expect(permissionForPath('/monitor/settings')).toBe('monitor');
+    expect(permissionForPath('/api/monitor')).toBe('monitor');
   });
 
   it('maps screen routes to screen permission', () => {
@@ -36,13 +38,16 @@ describe('permissions', () => {
   });
 
   it('checks path access by permissions', () => {
-    const pro = ['backtest', 'screen'] as const;
+    const pro = ['backtest', 'screen', 'monitor'] as const;
     const free = [] as const;
 
     expect(canAccessPathWithPermissions([...pro], '/backtest')).toBe(true);
     expect(canAccessPathWithPermissions([...free], '/backtest')).toBe(false);
     expect(canAccessPathWithPermissions([...pro], '/screen')).toBe(true);
     expect(canAccessPathWithPermissions([...free], '/screen')).toBe(false);
-    expect(canAccessPathWithPermissions([...free], '/monitor')).toBe(true);
+    expect(canAccessPathWithPermissions([...free], '/monitor')).toBe(false);
+    expect(canAccessPathWithPermissions([...pro], '/monitor')).toBe(true);
+    expect(canAccessPathWithPermissions([...free], '/research')).toBe(true);
+    expect(canAccessPathWithPermissions([], '/monitor', 'admin')).toBe(true);
   });
 });

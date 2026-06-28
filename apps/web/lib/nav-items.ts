@@ -1,4 +1,4 @@
-import type { AppPermission } from '@/lib/permissions';
+import type { AppPermission, AppRole } from '@/lib/permissions';
 
 export type NavItem = {
   href: string;
@@ -11,39 +11,9 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/monitor',
     label: '雷达',
+    permission: 'monitor',
     isActive: (pathname) =>
       pathname === '/monitor' || pathname.startsWith('/monitor/'),
-  },
-  {
-    href: '/screen',
-    label: '智能选股',
-    permission: 'screen',
-    isActive: (pathname) =>
-      pathname === '/screen' || pathname.startsWith('/screen/'),
-  },
-  {
-    href: '/paper',
-    label: '模拟盘',
-    isActive: (pathname) =>
-      pathname === '/paper' || pathname.startsWith('/paper/'),
-  },
-  {
-    href: '/watchlist',
-    label: '跟踪池',
-    isActive: (pathname) =>
-      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
-  },
-  {
-    href: '/etf',
-    label: 'ETF',
-    isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
-  },
-  {
-    href: '/backtest',
-    label: '回测',
-    permission: 'backtest',
-    isActive: (pathname) =>
-      pathname === '/backtest' || pathname.startsWith('/backtest/'),
   },
   {
     href: '/research',
@@ -56,7 +26,55 @@ export const NAV_ITEMS: NavItem[] = [
       pathname === '/reviews' ||
       pathname.startsWith('/reviews/'),
   },
+  {
+    href: '/etf',
+    label: 'ETF',
+    isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
+  },
+  {
+    href: '/watchlist',
+    label: '跟踪池',
+    isActive: (pathname) =>
+      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
+  },
+  {
+    href: '/paper',
+    label: '模拟盘',
+    isActive: (pathname) =>
+      pathname === '/paper' || pathname.startsWith('/paper/'),
+  },
+  {
+    href: '/screen',
+    label: '智能选股',
+    permission: 'screen',
+    isActive: (pathname) =>
+      pathname === '/screen' || pathname.startsWith('/screen/'),
+  },
+  {
+    href: '/backtest',
+    label: '回测',
+    permission: 'backtest',
+    isActive: (pathname) =>
+      pathname === '/backtest' || pathname.startsWith('/backtest/'),
+  },
 ];
+
+export function filterNavItems(
+  permissions: AppPermission[],
+  role?: AppRole,
+): NavItem[] {
+  if (role === 'admin') return NAV_ITEMS;
+  return NAV_ITEMS.filter(
+    (item) => !item.permission || permissions.includes(item.permission),
+  );
+}
+
+export function defaultNavPath(
+  permissions: AppPermission[],
+  role?: AppRole,
+): string {
+  return filterNavItems(permissions, role)[0]?.href ?? '/research';
+}
 
 export function navLabelForPath(pathname: string): string {
   const match = NAV_ITEMS.find((item) => item.isActive(pathname));

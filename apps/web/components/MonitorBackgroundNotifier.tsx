@@ -9,6 +9,7 @@ import {
   showBrowserNotification,
 } from '@/lib/browser-notify';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
+import { useAuthUser } from '@/hooks/useAuthUser';
 
 type MonitorAlert = {
   id: string;
@@ -109,11 +110,14 @@ function seedAndCollectNewKeys(
 export function MonitorBackgroundNotifier() {
   const pathname = usePathname();
   const { refresh } = useWatchlistPanel();
+  const { user, loading } = useAuthUser();
+  const canMonitor =
+    user?.role === 'admin' || (user?.permissions.includes('monitor') ?? false);
   const seededRef = useRef(false);
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (pathname === '/login') return;
+    if (pathname === '/login' || loading || !canMonitor) return;
 
     seenRef.current = loadSeenMonitorKeys();
 
@@ -159,7 +163,7 @@ export function MonitorBackgroundNotifier() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pathname, refresh]);
+  }, [pathname, refresh, canMonitor, loading]);
 
   return null;
 }

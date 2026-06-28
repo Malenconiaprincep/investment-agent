@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthHeader } from '@/components/AuthHeader';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
+import { WorkspaceTabBar } from '@/components/WorkspaceTabView';
 import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import { UserMenu } from '@/components/UserMenu';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { isAuthPath } from '@/lib/auth-paths';
-import { NAV_ITEMS } from '@/lib/nav-items';
+import { defaultNavPath, filterNavItems } from '@/lib/nav-items';
 
 function WatchlistIcon() {
   return (
@@ -31,7 +32,7 @@ function WatchlistIcon() {
 export function SiteNav() {
   const pathname = usePathname();
   const { toggle, open, itemCount } = useWatchlistPanel();
-  const { user, can } = useAuthUser();
+  const { user } = useAuthUser();
   const {
     enabled: tabMode,
     toggleTabMode,
@@ -43,9 +44,10 @@ export function SiteNav() {
     return <AuthHeader />;
   }
 
-  const visibleNav = NAV_ITEMS.filter(
-    (item) => !item.permission || can(item.permission),
-  );
+  const visibleNav = filterNavItems(user?.permissions ?? [], user?.role);
+  const homeHref = user
+    ? defaultNavPath(user.permissions, user.role)
+    : '/research';
 
   function handleNavClick(
     event: React.MouseEvent,
@@ -67,7 +69,7 @@ export function SiteNav() {
           <button
             type="button"
             className="site-brand"
-            onClick={() => openOrSwitchTab('/monitor')}
+            onClick={() => openOrSwitchTab(homeHref)}
           >
             <span className="site-brand-mark" aria-hidden>
               IA
@@ -75,7 +77,7 @@ export function SiteNav() {
             <span className="site-brand-text">投研助手</span>
           </button>
         ) : (
-          <Link href="/monitor" className="site-brand">
+          <Link href={homeHref} className="site-brand">
             <span className="site-brand-mark" aria-hidden>
               IA
             </span>
@@ -143,6 +145,7 @@ export function SiteNav() {
           <UserMenu user={user} />
         </div>
       </div>
+      <WorkspaceTabBar />
     </header>
   );
 }

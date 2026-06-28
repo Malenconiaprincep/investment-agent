@@ -37,6 +37,7 @@ export function useAuthUser() {
   }, []);
 
   function can(permission: AppPermission): boolean {
+    if (user?.role === 'admin') return true;
     return user?.permissions.includes(permission) ?? false;
   }
 

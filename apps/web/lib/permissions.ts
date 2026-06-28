@@ -6,7 +6,8 @@ export type AppPermission =
   | 'research'
   | 'committee'
   | 'signals'
-  | 'etf_pick';
+  | 'etf_pick'
+  | 'monitor';
 
 export type AppRole = 'member' | 'admin';
 
@@ -64,13 +65,21 @@ export function permissionForPath(pathname: string): AppPermission | null {
   if (pathname === '/api/screenings' || pathname.startsWith('/api/screenings/')) {
     return 'screen';
   }
+  if (pathname === '/monitor' || pathname.startsWith('/monitor/')) {
+    return 'monitor';
+  }
+  if (pathname === '/api/monitor' || pathname.startsWith('/api/monitor/')) {
+    return 'monitor';
+  }
   return null;
 }
 
 export function canAccessPathWithPermissions(
   permissions: AppPermission[],
   pathname: string,
+  role?: AppRole,
 ): boolean {
+  if (role === 'admin') return true;
   const required = permissionForPath(pathname);
   if (!required) return true;
   return permissions.includes(required);

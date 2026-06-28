@@ -53,7 +53,7 @@ function createTabId() {
 }
 
 export function normalizeTabPath(path: string): string {
-  return path.split('?')[0] || '/monitor';
+  return path.split('?')[0] || '/research';
 }
 
 function createTab(path: string): WorkspaceTab {
@@ -106,7 +106,7 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [enabled, setEnabled] = useState(false);
-  const [tabs, setTabs] = useState<WorkspaceTab[]>([createTab('/monitor')]);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([createTab('/research')]);
   const [activeTabId, setActiveTabId] = useState('');
   const [hydrated, setHydrated] = useState(false);
 

@@ -7,6 +7,8 @@ import {
   verifyMarketUserPassword,
 } from '@/lib/market-users';
 import { activateUserEnv } from '@/lib/user-env';
+import { defaultNavPath } from '@/lib/nav-items';
+import { canAccessPathWithPermissions } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 
@@ -51,10 +53,19 @@ export async function POST(request: Request) {
     }
   }
 
-  const next =
+  const requestedNext =
     String(form.get('next') ?? '').trim() ||
     new URL(request.url).searchParams.get('next') ||
-    '/monitor';
+    '';
+  const next =
+    requestedNext &&
+    canAccessPathWithPermissions(
+      user.permissions,
+      requestedNext.split('?')[0] ?? requestedNext,
+      user.role,
+    )
+      ? requestedNext
+      : defaultNavPath(user.permissions, user.role);
 
   let session;
   try {

@@ -5,10 +5,7 @@ import { Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { WatchlistPanel } from '@/components/WatchlistPanel';
 import { MonitorBackgroundNotifier } from '@/components/MonitorBackgroundNotifier';
-import {
-  WorkspaceTabBar,
-  WorkspaceTabPanels,
-} from '@/components/WorkspaceTabView';
+import { WorkspaceTabPanels } from '@/components/WorkspaceTabView';
 import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import { isAuthPath } from '@/lib/auth-paths';
 
@@ -24,7 +21,6 @@ function EmbedAwareChrome({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <WorkspaceTabBar />
       <TabMain>{children}</TabMain>
       <WatchlistPanel />
       <MonitorBackgroundNotifier />

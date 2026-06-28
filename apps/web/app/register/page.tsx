@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { isValidLocalSession, LOCAL_AUTH_COOKIE } from '@/lib/local-auth';
+import { LOCAL_AUTH_COOKIE, parseAuthSession } from '@/lib/local-auth';
+import { defaultNavPath } from '@/lib/nav-items';
 
 type RegisterPageProps = {
   searchParams?: Promise<{
@@ -12,9 +13,9 @@ type RegisterPageProps = {
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const cookieStore = await cookies();
-  const session = cookieStore.get(LOCAL_AUTH_COOKIE)?.value;
-  if (await isValidLocalSession(session)) {
-    redirect('/monitor');
+  const session = await parseAuthSession(cookieStore.get(LOCAL_AUTH_COOKIE)?.value);
+  if (session) {
+    redirect(defaultNavPath(session.permissions, session.role));
   }
 
   const params = await searchParams;
@@ -29,7 +30,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         <div className="login-copy">
           <h1 id="register-title">注册</h1>
           <p>
-            创建免费账号即可使用雷达、跟踪池等基础功能。高级能力（如回测）需管理员开通权限。
+            创建免费账号即可使用单股分析、跟踪池等基础功能。消息雷达、回测等高级能力需管理员开通权限。
           </p>
         </div>
 

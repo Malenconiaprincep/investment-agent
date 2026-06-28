@@ -46,6 +46,7 @@ const VALID_PERMISSIONS = new Set<AppPermission>([
   'committee',
   'signals',
   'etf_pick',
+  'monitor',
 ]);
 
 function normalizePermissions(values: string[] | null | undefined): AppPermission[] {

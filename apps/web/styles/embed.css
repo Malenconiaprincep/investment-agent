@@ -94,3 +94,12 @@ body.tab-mode .watchlist-panel-tab {
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
 }
+
+button.site-brand {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}

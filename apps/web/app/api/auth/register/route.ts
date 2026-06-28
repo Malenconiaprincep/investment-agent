@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createLocalSessionCookie } from '@/lib/local-auth';
 import { createMarketUser } from '@/lib/market-users';
 import { activateUserEnv } from '@/lib/user-env';
+import { defaultNavPath } from '@/lib/nav-items';
 
 export const runtime = 'nodejs';
 
@@ -46,7 +47,10 @@ export async function POST(request: Request) {
     return NextResponse.redirect(url, 303);
   }
 
-  const response = NextResponse.redirect(new URL('/monitor', request.url), 303);
+  const response = NextResponse.redirect(
+    new URL(defaultNavPath(user.permissions, user.role), request.url),
+    303,
+  );
   const session = await createLocalSessionCookie({
     username: user.username,
     role: user.role,
