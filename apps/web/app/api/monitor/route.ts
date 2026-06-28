@@ -26,8 +26,11 @@ export async function POST(request: Request) {
       return NextResponse.json(JSON.parse(stdout));
     }
 
-    const force = json.action === 'force';
-    const stdout = await runAgentCoreMonitorJson(['poll', ...(force ? ['--force'] : [])]);
+    const force = json.action === 'force' || json.action === 'poll';
+    const stdout = await runAgentCoreMonitorJson([
+      'poll',
+      ...(force ? ['--force'] : []),
+    ]);
     return NextResponse.json(JSON.parse(stdout));
   } catch (error) {
     const message = error instanceof Error ? error.message : '监控扫描失败';

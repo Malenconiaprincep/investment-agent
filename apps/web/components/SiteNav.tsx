@@ -21,10 +21,13 @@ const NAV: NavItem[] = [
     href: '/monitor',
     label: '雷达',
     isActive: (pathname) =>
-      pathname === '/monitor' ||
-      pathname.startsWith('/monitor/') ||
-      pathname === '/screen' ||
-      pathname.startsWith('/screen/'),
+      pathname === '/monitor' || pathname.startsWith('/monitor/'),
+  },
+  {
+    href: '/screen',
+    label: '智能选股',
+    isActive: (pathname) =>
+      pathname === '/screen' || pathname.startsWith('/screen/'),
   },
   {
     href: '/paper',
