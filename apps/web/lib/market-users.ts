@@ -169,3 +169,130 @@ export async function touchMarketUserLogin(username: string): Promise<void> {
     .update({ last_login_at: new Date().toISOString() })
     .eq('username', username);
 }
+
+export type MarketUserAdminView = MarketUser & {
+  createdAt: string | null;
+  lastLoginAt: string | null;
+};
+
+type MarketUserListRow = Omit<MarketUserRow, 'password_hash'> & {
+  created_at: string | null;
+  last_login_at: string | null;
+};
+
+function mapListRow(row: MarketUserListRow): MarketUserAdminView {
+  return {
+    ...mapRow(row),
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+  };
+}
+
+export async function listMarketUsers(): Promise<MarketUserAdminView[]> {
+  const result = await listMarketUsersPaginated({ page: 1, pageSize: 1000 });
+  return result.users;
+}
+
+export type MarketUsersPageResult = {
+  users: MarketUserAdminView[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export async function listMarketUsersPaginated(input: {
+  page: number;
+  pageSize: number;
+}): Promise<MarketUsersPageResult> {
+  assertSupabaseAuthReady();
+  const page = Math.max(1, input.page);
+  const pageSize = Math.min(100, Math.max(1, input.pageSize));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error, count } = await supabase
+    .from('market_users')
+    .select(
+      'id, username, label, role, permissions, preset_tokens, plan, email, is_active, created_at, last_login_at',
+      { count: 'exact' },
+    )
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return {
+    users: (data as MarketUserListRow[]).map(mapListRow),
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
+export async function updateMarketUser(
+  username: string,
+  updates: {
+    label?: string;
+    role?: AppRole;
+    plan?: MarketUser['plan'];
+    permissions?: AppPermission[];
+    isActive?: boolean;
+  },
+): Promise<MarketUserAdminView> {
+  assertSupabaseAuthReady();
+
+  const payload: Record<string, unknown> = {};
+  if (updates.label !== undefined) payload.label = updates.label.trim();
+  if (updates.role !== undefined) payload.role = updates.role;
+  if (updates.plan !== undefined) payload.plan = updates.plan;
+  if (updates.permissions !== undefined) {
+    payload.permissions = updates.permissions;
+  }
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('market_users')
+    .update(payload)
+    .eq('username', username)
+    .select(
+      'id, username, label, role, permissions, preset_tokens, plan, email, is_active, created_at, last_login_at',
+    )
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapListRow(data as MarketUserListRow);
+}
+
+export async function resetMarketUserPassword(
+  username: string,
+  newPassword: string,
+): Promise<void> {
+  assertSupabaseAuthReady();
+
+  if (newPassword.length < 8) {
+    throw new Error('新密码至少 8 位');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('market_users')
+    .update({ password_hash: passwordHash })
+    .eq('username', username);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

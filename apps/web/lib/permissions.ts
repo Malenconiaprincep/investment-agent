@@ -40,6 +40,12 @@ export function getUserPermissions(user: {
 
 /** 路由 → 所需权限；未列出则登录即可访问 */
 export function permissionForPath(pathname: string): AppPermission | null {
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    return 'admin';
+  }
+  if (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) {
+    return 'admin';
+  }
   if (pathname === '/backtest' || pathname.startsWith('/backtest/')) {
     return 'backtest';
   }

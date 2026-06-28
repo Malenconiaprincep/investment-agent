@@ -229,6 +229,7 @@ function fmtTime(iso: string) {
 
 const FORBIDDEN_MESSAGES: Record<string, string> = {
   backtest: '回测为高级功能，当前账号暂无权限。如需开通请联系管理员。',
+  admin: '后台管理仅管理员可访问。如需开通请联系管理员。',
 };
 
 function ForbiddenNotice() {

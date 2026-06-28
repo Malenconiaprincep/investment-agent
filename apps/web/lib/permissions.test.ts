@@ -15,6 +15,11 @@ describe('permissions', () => {
     expect(hasPermissionForUser(member, 'backtest')).toBe(false);
   });
 
+  it('maps admin routes to admin permission', () => {
+    expect(permissionForPath('/admin/users')).toBe('admin');
+    expect(permissionForPath('/api/admin/users')).toBe('admin');
+  });
+
   it('maps backtest routes to backtest permission', () => {
     expect(permissionForPath('/backtest')).toBe('backtest');
     expect(permissionForPath('/api/backtest')).toBe('backtest');

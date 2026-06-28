@@ -54,6 +54,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
   const initial = avatarInitial(user.label, user.username);
   const isAdmin = user.role === 'admin';
+  const canManageUsers = user.permissions.includes('admin');
 
   return (
     <div className="user-menu" ref={rootRef}>
@@ -95,6 +96,16 @@ export function UserMenu({ user }: UserMenuProps) {
           >
             Token 设置
           </Link>
+          {canManageUsers ? (
+            <Link
+              href="/admin/users"
+              className="user-menu__item"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+            >
+              用户管理
+            </Link>
+          ) : null}
           <form action="/api/auth/logout" method="post" role="none">
             <button type="submit" className="user-menu__item user-menu__item--danger" role="menuitem">
               退出登录

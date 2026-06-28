@@ -73,12 +73,14 @@ pnpm agent:serve
 pnpm web:dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，使用以下账号登录：
+打开 [http://localhost:3000](http://localhost:3000)，使用以下账号登录（需先在 Supabase 执行 `supabase/migrations/` 迁移，或运行 `node scripts/seed-market-users.mjs`）：
 
 | 账号 | 密码 | Token |
 |------|------|-------|
 | `adminwb` | `Wb@Invest2026!xK9` | 已预置（从 `packages/agent-core/.env` 同步） |
 | `test` | `test123456` | 需登录后在「Token 设置」自行配置 |
+
+也可在 `/register` 自助注册新账号（默认 Free 权限）。
 
 登录后可在 **Token 设置**（`/settings`）查看或修改 API Key。每个账号的 Token 独立保存在本地数据目录。
 
