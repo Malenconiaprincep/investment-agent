@@ -1,0 +1,23 @@
+body.embed-mode .site-header,
+body.embed-mode .workspace-tab-bar-host {
+  display: none !important;
+}
+
+body.embed-mode .watchlist-panel-tab,
+body.embed-mode .watchlist-panel {
+  display: none !important;
+}
+
+body.embed-mode .app-shell {
+  min-height: 100vh;
+}
+
+body.embed-mode .app-shell-main {
+  max-width: none;
+}
+
+.site-nav-button--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-muted);
+}

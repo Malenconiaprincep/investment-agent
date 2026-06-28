@@ -4,68 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthHeader } from '@/components/AuthHeader';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
+import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import { UserMenu } from '@/components/UserMenu';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { isAuthPath } from '@/lib/auth-paths';
-import type { AppPermission } from '@/lib/permissions';
-
-type NavItem = {
-  href: string;
-  label: string;
-  permission?: AppPermission;
-  isActive: (pathname: string) => boolean;
-};
-
-const NAV: NavItem[] = [
-  {
-    href: '/monitor',
-    label: '雷达',
-    isActive: (pathname) =>
-      pathname === '/monitor' || pathname.startsWith('/monitor/'),
-  },
-  {
-    href: '/screen',
-    label: '智能选股',
-    permission: 'screen',
-    isActive: (pathname) =>
-      pathname === '/screen' || pathname.startsWith('/screen/'),
-  },
-  {
-    href: '/paper',
-    label: '模拟盘',
-    isActive: (pathname) =>
-      pathname === '/paper' || pathname.startsWith('/paper/'),
-  },
-  {
-    href: '/watchlist',
-    label: '跟踪池',
-    isActive: (pathname) =>
-      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
-  },
-  {
-    href: '/etf',
-    label: 'ETF',
-    isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
-  },
-  {
-    href: '/backtest',
-    label: '回测',
-    permission: 'backtest',
-    isActive: (pathname) =>
-      pathname === '/backtest' || pathname.startsWith('/backtest/'),
-  },
-  {
-    href: '/research',
-    label: '单股分析',
-    isActive: (pathname) =>
-      pathname === '/research' ||
-      pathname.startsWith('/research/') ||
-      pathname === '/history' ||
-      pathname.startsWith('/history/') ||
-      pathname === '/reviews' ||
-      pathname.startsWith('/reviews/'),
-  },
-];
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 function WatchlistIcon() {
   return (
@@ -89,28 +32,76 @@ export function SiteNav() {
   const pathname = usePathname();
   const { toggle, open, itemCount } = useWatchlistPanel();
   const { user, can } = useAuthUser();
+  const {
+    enabled: tabMode,
+    toggleTabMode,
+    openOrSwitchTab,
+    openNewTab,
+    activeTab,
+  } = useWorkspaceTabs();
 
   if (isAuthPath(pathname)) {
     return <AuthHeader />;
   }
 
-  const visibleNav = NAV.filter(
+  const visibleNav = NAV_ITEMS.filter(
     (item) => !item.permission || can(item.permission),
   );
+
+  const focusedPath = tabMode ? (activeTab?.path ?? pathname) : pathname;
+
+  function handleNavClick(
+    event: React.MouseEvent,
+    href: string,
+  ) {
+    if (!tabMode) return;
+    event.preventDefault();
+    if (event.metaKey || event.ctrlKey) {
+      openNewTab(href);
+      return;
+    }
+    openOrSwitchTab(href);
+  }
 
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link href="/monitor" className="site-brand">
-          <span className="site-brand-mark" aria-hidden>
-            IA
-          </span>
-          <span className="site-brand-text">投研助手</span>
-        </Link>
+        {tabMode ? (
+          <button
+            type="button"
+            className="site-brand"
+            onClick={() => openOrSwitchTab('/monitor')}
+          >
+            <span className="site-brand-mark" aria-hidden>
+              IA
+            </span>
+            <span className="site-brand-text">投研助手</span>
+          </button>
+        ) : (
+          <Link href="/monitor" className="site-brand">
+            <span className="site-brand-mark" aria-hidden>
+              IA
+            </span>
+            <span className="site-brand-text">投研助手</span>
+          </Link>
+        )}
 
         <nav className="site-nav" aria-label="主导航">
           {visibleNav.map((item) => {
-            const active = item.isActive(pathname);
+            const active = item.isActive(focusedPath);
+            if (tabMode) {
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  className={`site-nav-link site-nav-link--panel${active ? ' site-nav-link--active' : ''}`}
+                  onClick={(event) => handleNavClick(event, item.href)}
+                  title="⌘/Ctrl + 点击可新开 Tab"
+                >
+                  {item.label}
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.href}
@@ -125,6 +116,16 @@ export function SiteNav() {
         </nav>
 
         <div className="site-header-actions">
+          <button
+            type="button"
+            className={`site-nav-button${tabMode ? ' site-nav-button--active' : ''}`}
+            onClick={toggleTabMode}
+            aria-pressed={tabMode}
+            title="多 Tab 切换，保留各页面状态"
+          >
+            {tabMode ? '单页' : 'Tab'}
+          </button>
+
           <button
             type="button"
             className={`site-nav-icon-button${open ? ' site-nav-icon-button--active' : ''}`}

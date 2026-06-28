@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans, Noto_Serif_SC } from 'next/font/google';
 import { AppShell } from '@/components/AppShell';
+import { EmbedMode } from '@/components/EmbedMode';
 import { SiteNav } from '@/components/SiteNav';
 import { WatchlistPanelProvider } from '@/components/WatchlistPanelContext';
+import { WorkspaceTabsProvider } from '@/components/WorkspaceTabsContext';
 import './globals.css';
+import '../styles/embed.css';
 
 const sans = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -33,8 +36,11 @@ export default function RootLayout({
     <html lang="zh-CN" className={`${sans.variable} ${serif.variable}`}>
       <body>
         <WatchlistPanelProvider>
-          <SiteNav />
-          <AppShell>{children}</AppShell>
+          <WorkspaceTabsProvider>
+            <EmbedMode />
+            <SiteNav />
+            <AppShell>{children}</AppShell>
+          </WorkspaceTabsProvider>
         </WatchlistPanelProvider>
       </body>
     </html>
