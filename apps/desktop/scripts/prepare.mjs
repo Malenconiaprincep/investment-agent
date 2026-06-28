@@ -162,12 +162,20 @@ if (existsSync(mastraDir)) {
 
 console.log('\n[4/4] 生成管理员默认 Token…');
 const adminTokenKeys = [
+  'AI_MODEL',
   'DEEPSEEK_API_KEY',
+  'DASHSCOPE_API_KEY',
+  'MOONSHOT_API_KEY',
+  'ZHIPU_API_KEY',
+  'MINIMAX_API_KEY',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'GOOGLE_API_KEY',
+  'OPENROUTER_API_KEY',
+  'XAI_API_KEY',
+  'MISTRAL_API_KEY',
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
-  'LIBSQL_URL',
-  'LIBSQL_AUTH_TOKEN',
-  'AGENT_CORE_TOKEN',
 ];
 const agentEnvPath = path.join(repoRoot, 'packages/agent-core/.env');
 const adminDefaultsPath = path.join(desktopRoot, 'templates/admin-defaults.env');

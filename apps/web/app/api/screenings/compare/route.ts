@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import { runAgentCoreScreeningsJson } from '@/lib/agent-core';
+import { requirePermission } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const base = searchParams.get('base');
-  const target = searchParams.get('target');
-
-  if (!base || !target) {
-    return NextResponse.json(
-      { error: '请提供 base 与 target 选股记录 ID' },
-      { status: 400 },
-    );
-  }
-
   try {
+    await requirePermission('screen');
+    const { searchParams } = new URL(request.url);
+    const base = searchParams.get('base');
+    const target = searchParams.get('target');
+
+    if (!base || !target) {
+      return NextResponse.json(
+        { error: '请提供 base 与 target 选股记录 ID' },
+        { status: 400 },
+      );
+    }
+
     const stdout = await runAgentCoreScreeningsJson(['compare', base, target]);
     const compare = JSON.parse(stdout);
     return NextResponse.json(compare);

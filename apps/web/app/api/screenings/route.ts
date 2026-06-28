@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runAgentCoreScreeningsJson } from '@/lib/agent-core';
+import { requirePermission } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,7 @@ export type ScreeningSummary = {
 
 export async function GET() {
   try {
+    await requirePermission('screen');
     const stdout = await runAgentCoreScreeningsJson(['list']);
     const sessions = JSON.parse(stdout) as ScreeningSummary[];
     return NextResponse.json({ sessions });

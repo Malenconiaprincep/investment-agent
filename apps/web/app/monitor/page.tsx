@@ -370,6 +370,7 @@ function fmtDuration(ms: number | undefined) {
 const FORBIDDEN_MESSAGES: Record<string, string> = {
   backtest: '回测为高级功能，当前账号暂无权限。如需开通请联系管理员。',
   admin: '后台管理仅管理员可访问。如需开通请联系管理员。',
+  screen: '智能选股为高级功能，当前账号暂无权限。如需开通请联系管理员。',
 };
 
 function ForbiddenNotice() {
@@ -524,7 +525,7 @@ export default function MonitorPage() {
       <div className="list-stack">
         <div className="list-stack-head">
           <section className="monitor-console" aria-label="雷达控制台">
-            <div className="monitor-console-main">
+            <div className="monitor-console-head">
               <div className="monitor-status-bar">
                 <span
                   className={`monitor-pill${status?.marketOpen ? ' monitor-pill--live' : ''}`}
@@ -541,10 +542,41 @@ export default function MonitorPage() {
                 </span>
               </div>
 
+              <div className="monitor-console-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={polling}
+                  onClick={() => void runPoll()}
+                >
+                  {polling ? '扫描中…' : '立即扫描'}
+                </button>
+                <Link href="/monitor/settings" className="button button-secondary">
+                  雷达设置
+                </Link>
+              </div>
+            </div>
+
+            <div className="monitor-console-main">
               <div className="monitor-verdict">
                 <span className="monitor-verdict-label">当前结论</span>
                 <h2>{verdictTitle}</h2>
                 <p>{verdictDetail}</p>
+              </div>
+
+              <div className="monitor-side-metrics" aria-label="关键计数">
+                <span>
+                  <strong>{radarStocks.length}</strong>
+                  股票
+                </span>
+                <span>
+                  <strong>{attentionCount}</strong>
+                  待看
+                </span>
+                <span>
+                  <strong>{boughtActions.length + soldActions.length}</strong>
+                  交易
+                </span>
               </div>
 
               <dl className="monitor-scope-list" aria-label="扫描范围与结果">
@@ -582,34 +614,6 @@ export default function MonitorPage() {
                   {fmtDuration(status.lastRun.elapsedMs)} · {status.lastRun.summary}
                 </p>
               )}
-            </div>
-
-            <div className="monitor-console-side">
-              <button
-                type="button"
-                className="button"
-                disabled={polling}
-                onClick={() => void runPoll()}
-              >
-                {polling ? '扫描中…' : '立即扫描'}
-              </button>
-              <Link href="/monitor/settings" className="button button-secondary">
-                雷达设置
-              </Link>
-              <div className="monitor-side-metrics" aria-label="关键计数">
-                <span>
-                  <strong>{radarStocks.length}</strong>
-                  股票
-                </span>
-                <span>
-                  <strong>{attentionCount}</strong>
-                  待看
-                </span>
-                <span>
-                  <strong>{boughtActions.length + soldActions.length}</strong>
-                  交易
-                </span>
-              </div>
             </div>
           </section>
 

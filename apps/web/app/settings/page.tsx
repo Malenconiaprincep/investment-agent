@@ -1,21 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import styles from './settings-ai.module.css';
+import {
+  AI_MODEL_ENV,
+  DEFAULT_MODEL_ID,
+  getProviderById,
+  getProviderForModel,
+  getProvidersByRegion,
+  isKnownModelId,
+  MODEL_PROVIDERS,
+  PROVIDER_REGIONS,
+  type ProviderRegion,
+} from '@/lib/model-providers';
 
-type EnvKeyStatus = { configured: boolean; masked?: string };
+type EnvKeyStatus = { configured: boolean; masked?: string; value?: string };
 
 type TokenConfigStatus = {
   username: string;
   userLabel: string;
   presetTokens: boolean;
   envPath: string | null;
+  aiModel: string;
+  requiredApiKeyEnv: string;
   keys: Record<string, EnvKeyStatus>;
   restartRequired?: boolean;
 };
 
-type KeyField = {
+type OtherKeyField = {
   key: string;
   label: string;
   required?: boolean;
@@ -23,14 +37,7 @@ type KeyField = {
   hint?: string;
 };
 
-const KEY_FIELDS: KeyField[] = [
-  {
-    key: 'DEEPSEEK_API_KEY',
-    label: 'DeepSeek API Key',
-    required: true,
-    placeholder: 'sk-...',
-    hint: '必填，用于 AI 分析与投委会。申请：https://platform.deepseek.com/api_keys',
-  },
+const OTHER_KEY_FIELDS: OtherKeyField[] = [
   {
     key: 'IWENCAI_API_KEY',
     label: '问财 API Key',
@@ -44,24 +51,6 @@ const KEY_FIELDS: KeyField[] = [
     placeholder: 'https://openapi.iwencai.com',
     hint: '一般保持默认即可',
   },
-  {
-    key: 'LIBSQL_URL',
-    label: 'Turso 数据库 URL',
-    placeholder: 'libsql://your-db.turso.io',
-    hint: '可选，不填则使用本地 SQLite',
-  },
-  {
-    key: 'LIBSQL_AUTH_TOKEN',
-    label: 'Turso Auth Token',
-    placeholder: 'eyJ...',
-    hint: '与 Turso URL 配套使用',
-  },
-  {
-    key: 'AGENT_CORE_TOKEN',
-    label: 'Agent Core Token',
-    placeholder: '可选共享密钥',
-    hint: '远程部署 agent-core 时使用，本地一般留空',
-  },
 ];
 
 export default function SettingsPage() {
@@ -71,6 +60,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [useCustomModel, setUseCustomModel] = useState(false);
+  const [showOtherKeys, setShowOtherKeys] = useState(false);
+  const [region, setRegion] = useState<ProviderRegion>('cn');
+  const [providerId, setProviderId] = useState('deepseek');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +74,18 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error ?? '加载失败');
       setStatus(data);
       setDraft({});
+
+      const model = data.aiModel?.trim() || DEFAULT_MODEL_ID;
+      const provider = getProviderForModel(model);
+      if (provider && isKnownModelId(model)) {
+        setUseCustomModel(false);
+        setRegion(provider.region);
+        setProviderId(provider.id);
+      } else {
+        setUseCustomModel(true);
+        setRegion(provider?.region ?? 'cn');
+        setProviderId(provider?.id ?? 'deepseek');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
@@ -92,17 +97,61 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
+  const activeModel = useMemo(() => {
+    if (AI_MODEL_ENV in draft) {
+      return draft[AI_MODEL_ENV]?.trim() || DEFAULT_MODEL_ID;
+    }
+    return status?.aiModel?.trim() || DEFAULT_MODEL_ID;
+  }, [draft, status?.aiModel]);
+
+  const activeProvider = useMemo(() => {
+    if (useCustomModel) {
+      return getProviderForModel(activeModel) ?? getProviderById(providerId);
+    }
+    return getProviderById(providerId) ?? getProviderForModel(activeModel);
+  }, [useCustomModel, activeModel, providerId]);
+
+  const providersInRegion = useMemo(() => getProvidersByRegion(region), [region]);
+
   function fieldValue(key: string): string {
     if (key in draft) return draft[key] ?? '';
+    if (key === AI_MODEL_ENV) return status?.keys[AI_MODEL_ENV]?.value ?? '';
     return '';
   }
 
-  function fieldPlaceholder(field: KeyField): string {
-    const current = status?.keys[field.key];
+  function secretPlaceholder(key: string, fallback: string): string {
+    const current = status?.keys[key];
     if (current?.configured && current.masked) {
       return `已配置 ${current.masked}（留空不修改）`;
     }
-    return field.placeholder;
+    return fallback;
+  }
+
+  function selectProvider(nextProviderId: string) {
+    const provider = getProviderById(nextProviderId);
+    if (!provider) return;
+    setProviderId(nextProviderId);
+    setUseCustomModel(false);
+    setDraft((prev) => ({
+      ...prev,
+      [AI_MODEL_ENV]: provider.models[0]?.id ?? DEFAULT_MODEL_ID,
+    }));
+  }
+
+  function selectRegion(nextRegion: ProviderRegion) {
+    setRegion(nextRegion);
+    const first = getProvidersByRegion(nextRegion)[0];
+    if (first) selectProvider(first.id);
+  }
+
+  function selectModel(modelId: string) {
+    setUseCustomModel(false);
+    setDraft((prev) => ({ ...prev, [AI_MODEL_ENV]: modelId }));
+    const provider = getProviderForModel(modelId);
+    if (provider) {
+      setProviderId(provider.id);
+      setRegion(provider.region);
+    }
   }
 
   async function handleSave(event: React.FormEvent) {
@@ -111,11 +160,17 @@ export default function SettingsPage() {
     setError(null);
     setSaved(false);
 
+    const allKeys = [
+      AI_MODEL_ENV,
+      ...MODEL_PROVIDERS.map((p) => p.apiKeyEnv),
+      ...OTHER_KEY_FIELDS.map((f) => f.key),
+    ];
+
     const updates: Record<string, string | null> = {};
-    for (const field of KEY_FIELDS) {
-      if (!(field.key in draft)) continue;
-      const value = draft[field.key]?.trim() ?? '';
-      updates[field.key] = value || null;
+    for (const key of allKeys) {
+      if (!(key in draft)) continue;
+      const value = draft[key]?.trim() ?? '';
+      updates[key] = value || null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -142,17 +197,26 @@ export default function SettingsPage() {
     }
   }
 
-  const missingRequired =
-    status &&
-    KEY_FIELDS.some(
-      (field) => field.required && !status.keys[field.key]?.configured,
-    );
+  const requiredApiKeyEnv = activeProvider?.apiKeyEnv ?? status?.requiredApiKeyEnv;
+  const missingAiKey =
+    status && requiredApiKeyEnv && !status.keys[requiredApiKeyEnv]?.configured;
+  const missingIwencai =
+    status && !status.keys.IWENCAI_API_KEY?.configured;
+  const missingRequired = missingAiKey || missingIwencai;
+
+  const otherProviders = MODEL_PROVIDERS.filter(
+    (p) => p.apiKeyEnv !== activeProvider?.apiKeyEnv,
+  );
+
+  const configuredOtherCount = otherProviders.filter(
+    (p) => status?.keys[p.apiKeyEnv]?.configured,
+  ).length;
 
   return (
     <main className="page page--list">
       <PageHeader
         title="Token 设置"
-        description="按当前登录账号独立保存 API Key。保存后立即同步到 agent-core，无需重启。"
+        description="选择 AI 提供商并填写对应 Key。保存后立即同步；切换模型后建议重启应用。"
       />
 
       <div className="list-stack">
@@ -180,24 +244,216 @@ export default function SettingsPage() {
             {missingRequired && (
               <div className="error">
                 仍有必填 Token 未配置，请先补全后再使用智能选股 / AI 分析。
+                {missingAiKey && activeProvider && (
+                  <>
+                    {' '}
+                    当前模型需要 <strong>{activeProvider.label}</strong> API Key。
+                  </>
+                )}
               </div>
-            )}
-
-            {status.envPath && (
-              <section className="pane-card monitor-settings-section">
-                <h2 className="section-title">配置文件位置</h2>
-                <p className="muted monitor-settings-hint">
-                  <code>{status.envPath}</code>
-                </p>
-              </section>
             )}
 
             <form onSubmit={(e) => void handleSave(e)}>
               <section className="pane-card monitor-settings-section">
-                <h2 className="section-title">API Token</h2>
+                <h2 className="section-title">AI 模型</h2>
+
+                <div className={styles.aiLayout}>
+                  <div className={styles.regionTabs} role="tablist">
+                    {PROVIDER_REGIONS.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={region === item.id}
+                        className={`${styles.regionTab}${region === item.id ? ` ${styles.regionTabActive}` : ''}`}
+                        onClick={() => selectRegion(item.id)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className={styles.providerGrid}>
+                    {providersInRegion.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        className={`${styles.providerChip}${
+                          !useCustomModel && providerId === provider.id
+                            ? ` ${styles.providerChipActive}`
+                            : ''
+                        }`}
+                        onClick={() => selectProvider(provider.id)}
+                      >
+                        {provider.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {!useCustomModel && activeProvider && (
+                    <label className="settings-env-field">
+                      <span className="settings-env-label">具体模型</span>
+                      <select
+                        className="input"
+                        value={
+                          isKnownModelId(activeModel) &&
+                          activeProvider.models.some((m) => m.id === activeModel)
+                            ? activeModel
+                            : activeProvider.models[0]?.id ?? DEFAULT_MODEL_ID
+                        }
+                        onChange={(e) => selectModel(e.target.value)}
+                      >
+                        {activeProvider.models.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {useCustomModel && (
+                    <label className="settings-env-field">
+                      <span className="settings-env-label">自定义模型 ID</span>
+                      <input
+                        type="text"
+                        className="input"
+                        autoComplete="off"
+                        placeholder="provider/model-name，如 zhipuai/glm-4.7"
+                        value={fieldValue(AI_MODEL_ENV) || activeModel}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            [AI_MODEL_ENV]: e.target.value,
+                          }))
+                        }
+                      />
+                      <span className="muted settings-env-hint">
+                        格式为 provider/model-name，与 Mastra 文档一致。
+                      </span>
+                    </label>
+                  )}
+
+                  <button
+                    type="button"
+                    className={styles.textToggle}
+                    onClick={() => {
+                      setUseCustomModel((prev) => !prev);
+                      if (!useCustomModel) {
+                        setDraft((d) => ({
+                          ...d,
+                          [AI_MODEL_ENV]: isKnownModelId(activeModel)
+                            ? ''
+                            : activeModel,
+                        }));
+                      }
+                    }}
+                  >
+                    {useCustomModel ? '← 返回预设模型' : '使用自定义模型 ID…'}
+                  </button>
+
+                  {activeProvider && (
+                    <label className={`settings-env-field ${styles.keyField}`}>
+                      <span className="settings-env-label">
+                        {activeProvider.label} API Key *
+                        {requiredApiKeyEnv &&
+                          status.keys[requiredApiKeyEnv]?.configured && (
+                            <span className="settings-env-badge">已配置</span>
+                          )}
+                      </span>
+                      <input
+                        type="password"
+                        className="input"
+                        autoComplete="off"
+                        placeholder={secretPlaceholder(
+                          activeProvider.apiKeyEnv,
+                          'sk-...',
+                        )}
+                        value={fieldValue(activeProvider.apiKeyEnv)}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            [activeProvider.apiKeyEnv]: e.target.value,
+                          }))
+                        }
+                      />
+                      <span className="muted settings-env-hint">
+                        申请：
+                        <a
+                          href={activeProvider.applyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {activeProvider.applyUrl}
+                        </a>
+                      </span>
+                    </label>
+                  )}
+
+                  <p className={`muted settings-env-hint ${styles.summary}`}>
+                    当前模型：<code>{activeModel}</code>
+                  </p>
+                </div>
+              </section>
+
+              <section className="pane-card monitor-settings-section">
+                <button
+                  type="button"
+                  className={styles.textToggle}
+                  aria-expanded={showOtherKeys}
+                  onClick={() => setShowOtherKeys((prev) => !prev)}
+                >
+                  预配置其他提供商 Key（可选）
+                  {configuredOtherCount > 0 && (
+                    <span className="settings-env-badge">
+                      已配置 {configuredOtherCount} 个
+                    </span>
+                  )}
+                  <span className={styles.chevron}>
+                    {showOtherKeys ? '▾' : '▸'}
+                  </span>
+                </button>
+
+                {showOtherKeys && (
+                  <div className={`settings-env-grid ${styles.otherKeysPanel}`}>
+                    {otherProviders.map((provider) => (
+                      <label
+                        key={provider.apiKeyEnv}
+                        className="settings-env-field"
+                      >
+                        <span className="settings-env-label">
+                          {provider.label}
+                          {status.keys[provider.apiKeyEnv]?.configured && (
+                            <span className="settings-env-badge">已配置</span>
+                          )}
+                        </span>
+                        <input
+                          type="password"
+                          className="input"
+                          autoComplete="off"
+                          placeholder={secretPlaceholder(
+                            provider.apiKeyEnv,
+                            'sk-...',
+                          )}
+                          value={fieldValue(provider.apiKeyEnv)}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              [provider.apiKeyEnv]: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="pane-card monitor-settings-section">
+                <h2 className="section-title">问财 MCP</h2>
 
                 <div className="settings-env-grid">
-                  {KEY_FIELDS.map((field) => (
+                  {OTHER_KEY_FIELDS.map((field) => (
                     <label key={field.key} className="settings-env-field">
                       <span className="settings-env-label">
                         {field.label}
@@ -210,7 +466,10 @@ export default function SettingsPage() {
                         type="password"
                         className="input"
                         autoComplete="off"
-                        placeholder={fieldPlaceholder(field)}
+                        placeholder={secretPlaceholder(
+                          field.key,
+                          field.placeholder,
+                        )}
                         value={fieldValue(field.key)}
                         onChange={(e) =>
                           setDraft((prev) => ({
@@ -220,7 +479,9 @@ export default function SettingsPage() {
                         }
                       />
                       {field.hint && (
-                        <span className="muted settings-env-hint">{field.hint}</span>
+                        <span className="muted settings-env-hint">
+                          {field.hint}
+                        </span>
                       )}
                     </label>
                   ))}
@@ -238,7 +499,7 @@ export default function SettingsPage() {
 
                 {saved && (
                   <p className="monitor-settings-saved">
-                    已保存并同步到 agent-core，可直接使用。
+                    已保存并同步到 agent-core。若更改了 AI 模型，请重启应用后生效。
                   </p>
                 )}
               </section>

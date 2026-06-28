@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   {
     href: '/screen',
     label: '智能选股',
+    permission: 'screen',
     isActive: (pathname) =>
       pathname === '/screen' || pathname.startsWith('/screen/'),
   },

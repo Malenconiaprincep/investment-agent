@@ -301,6 +301,35 @@ function stopServices() {
   agentChild = null;
 }
 
+function isLocalAppUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname;
+    return (
+      parsed.protocol === 'http:' &&
+      (host === '127.0.0.1' || host === 'localhost') &&
+      parsed.port === String(webPort)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function openExternalIfSafe(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (
+      parsed.protocol === 'http:' ||
+      parsed.protocol === 'https:' ||
+      parsed.protocol === 'mailto:'
+    ) {
+      void shell.openExternal(rawUrl);
+    }
+  } catch {
+    // ignore invalid URLs
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -328,8 +357,18 @@ function createWindow() {
   mainWindow.loadURL(`http://127.0.0.1:${webPort}/login`);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isLocalAppUrl(url)) {
+      mainWindow?.loadURL(url);
+    } else {
+      openExternalIfSafe(url);
+    }
     return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isLocalAppUrl(url)) return;
+    event.preventDefault();
+    openExternalIfSafe(url);
   });
 
   mainWindow.on('closed', () => {

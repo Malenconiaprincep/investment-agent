@@ -3,24 +3,36 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 import { isValidUsername } from './auth-session';
 import { patchAgentCoreEnvKeys } from './agent-core';
+import {
+  AI_API_KEY_ENVS,
+  AI_MODEL_ENV,
+  DEFAULT_MODEL_ID,
+  getApiKeyEnvForModel,
+} from './model-providers';
 
 export const TOKEN_KEYS = [
-  'DEEPSEEK_API_KEY',
+  AI_MODEL_ENV,
+  ...AI_API_KEY_ENVS,
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
-  'LIBSQL_URL',
-  'LIBSQL_AUTH_TOKEN',
-  'AGENT_CORE_TOKEN',
 ] as const;
 
 export type TokenKey = (typeof TOKEN_KEYS)[number];
+
+export type TokenKeyStatus = {
+  configured: boolean;
+  masked?: string;
+  value?: string;
+};
 
 export type TokenConfigStatus = {
   username: string;
   userLabel: string;
   presetTokens: boolean;
   envPath: string;
-  keys: Record<TokenKey, { configured: boolean; masked?: string }>;
+  aiModel: string;
+  requiredApiKeyEnv: string;
+  keys: Record<TokenKey, TokenKeyStatus>;
   restartRequired: boolean;
 };
 
@@ -55,10 +67,34 @@ function parseEnvFile(envPath: string): Record<string, string> {
 
 function serializeEnvFile(values: Record<string, string>): string {
   const lines = ['# 投研助手 Token 配置', ''];
-  for (const key of TOKEN_KEYS) {
+
+  const aiModel = values[AI_MODEL_ENV]?.trim();
+  if (aiModel) {
+    lines.push(`# AI 模型`);
+    lines.push(`${AI_MODEL_ENV}=${aiModel}`);
+    lines.push('');
+  }
+
+  const configuredAiKeys = AI_API_KEY_ENVS.filter((key) => values[key]?.trim());
+  if (configuredAiKeys.length > 0) {
+    lines.push('# AI 提供商 API Key');
+    for (const key of AI_API_KEY_ENVS) {
+      const value = values[key]?.trim();
+      if (value) lines.push(`${key}=${value}`);
+    }
+    lines.push('');
+  }
+
+  const otherKeys = TOKEN_KEYS.filter(
+    (key) =>
+      key !== AI_MODEL_ENV &&
+      !(AI_API_KEY_ENVS as readonly string[]).includes(key),
+  );
+  for (const key of otherKeys) {
     const value = values[key]?.trim();
     if (value) lines.push(`${key}=${value}`);
   }
+
   return `${lines.join('\n').trim()}\n`;
 }
 
@@ -143,6 +179,15 @@ export async function activateUserEnv(
   await syncTokensToAgentCore(values);
 }
 
+function buildKeyStatus(key: TokenKey, value: string): TokenKeyStatus {
+  const trimmed = value.trim();
+  if (!trimmed) return { configured: false };
+  if (key === AI_MODEL_ENV) {
+    return { configured: true, value: trimmed };
+  }
+  return { configured: true, masked: maskSecret(trimmed) };
+}
+
 export function getTokenConfigStatus(input: {
   username: string;
   userLabel: string;
@@ -152,17 +197,18 @@ export function getTokenConfigStatus(input: {
   const keys = {} as TokenConfigStatus['keys'];
 
   for (const key of TOKEN_KEYS) {
-    const value = values[key]?.trim() ?? '';
-    keys[key] = value
-      ? { configured: true, masked: maskSecret(value) }
-      : { configured: false };
+    keys[key] = buildKeyStatus(key, values[key]?.trim() ?? '');
   }
+
+  const aiModel = keys[AI_MODEL_ENV]?.value?.trim() || DEFAULT_MODEL_ID;
 
   return {
     username: input.username,
     userLabel: input.userLabel,
     presetTokens: input.presetTokens,
     envPath: getUserEnvPath(input.username),
+    aiModel,
+    requiredApiKeyEnv: getApiKeyEnvForModel(aiModel),
     keys,
     restartRequired: false,
   };

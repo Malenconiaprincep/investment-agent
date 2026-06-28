@@ -27,12 +27,22 @@ describe('permissions', () => {
     expect(permissionForPath('/monitor')).toBeNull();
   });
 
+  it('maps screen routes to screen permission', () => {
+    expect(permissionForPath('/screen')).toBe('screen');
+    expect(permissionForPath('/screen/history')).toBe('screen');
+    expect(permissionForPath('/api/screen')).toBe('screen');
+    expect(permissionForPath('/api/screenings')).toBe('screen');
+    expect(permissionForPath('/api/screenings/abc')).toBe('screen');
+  });
+
   it('checks path access by permissions', () => {
-    const pro = ['backtest'] as const;
+    const pro = ['backtest', 'screen'] as const;
     const free = [] as const;
 
     expect(canAccessPathWithPermissions([...pro], '/backtest')).toBe(true);
     expect(canAccessPathWithPermissions([...free], '/backtest')).toBe(false);
+    expect(canAccessPathWithPermissions([...pro], '/screen')).toBe(true);
+    expect(canAccessPathWithPermissions([...free], '/screen')).toBe(false);
     expect(canAccessPathWithPermissions([...free], '/monitor')).toBe(true);
   });
 });

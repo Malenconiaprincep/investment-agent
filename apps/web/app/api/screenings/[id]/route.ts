@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runAgentCoreScreeningsJson } from '@/lib/agent-core';
+import { requirePermission } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,7 @@ type RouteContext = {
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
+    await requirePermission('screen');
     const { id } = await context.params;
 
     if (!id) {

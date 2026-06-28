@@ -55,6 +55,15 @@ export function permissionForPath(pathname: string): AppPermission | null {
   if (/^\/api\/screenings\/[^/]+\/backtest$/.test(pathname)) {
     return 'backtest';
   }
+  if (pathname === '/screen' || pathname.startsWith('/screen/')) {
+    return 'screen';
+  }
+  if (pathname === '/api/screen' || pathname.startsWith('/api/screen/')) {
+    return 'screen';
+  }
+  if (pathname === '/api/screenings' || pathname.startsWith('/api/screenings/')) {
+    return 'screen';
+  }
   return null;
 }
 

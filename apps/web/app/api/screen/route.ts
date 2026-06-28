@@ -4,6 +4,7 @@ import {
   createAgentCoreSSEStream,
   SSE_RESPONSE_HEADERS,
 } from '@/lib/agent-core-stream';
+import { requirePermission } from '@/lib/session';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -20,6 +21,7 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await requirePermission('screen');
     const json: unknown = await request.json().catch(() => ({}));
     const parsed = bodySchema.safeParse(json);
 

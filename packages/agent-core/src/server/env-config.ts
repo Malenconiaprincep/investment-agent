@@ -1,8 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import dotenv from 'dotenv';
+import { AI_API_KEY_ENVS, AI_MODEL_ENV } from '../mastra/config/model-providers.js';
 
 export const CONFIGURABLE_KEYS = [
-  'DEEPSEEK_API_KEY',
+  AI_MODEL_ENV,
+  ...AI_API_KEY_ENVS,
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
   'LIBSQL_URL',
@@ -57,8 +59,8 @@ function serializeEnvFile(values: Record<string, string>): string {
 
   const sections: Array<{ title: string; keys: ConfigurableKey[] }> = [
     {
-      title: 'DeepSeek（必填，用于 AI 分析）',
-      keys: ['DEEPSEEK_API_KEY'],
+      title: 'AI 模型（API Key 须与所选模型提供商对应）',
+      keys: [AI_MODEL_ENV, ...AI_API_KEY_ENVS],
     },
     {
       title: '问财 MCP（智能选股 / 投委会）',
@@ -119,9 +121,15 @@ export function getEnvConfigStatus(): EnvConfigStatus {
     const runtime = process.env[key]?.trim();
     const file = fileValues[key]?.trim();
     const value = runtime || file || '';
-    keys[key] = value
-      ? { configured: true, masked: maskSecret(value) }
-      : { configured: false };
+    if (!value) {
+      keys[key] = { configured: false };
+      continue;
+    }
+    if (key === AI_MODEL_ENV) {
+      keys[key] = { configured: true, masked: value };
+    } else {
+      keys[key] = { configured: true, masked: maskSecret(value) };
+    }
   }
 
   return {

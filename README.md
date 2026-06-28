@@ -38,16 +38,19 @@ cp packages/agent-core/.env.example packages/agent-core/.env
 编辑 `packages/agent-core/.env`：
 
 ```env
+AI_MODEL=deepseek/deepseek-v4-flash
 DEEPSEEK_API_KEY=sk-xxxxxxxx
 ```
 
+- AI 模型与 API Key：在「Token 设置」中选择模型并配置对应提供商 Key（国内：DeepSeek、通义千问、Kimi、智谱 GLM、MiniMax；海外：OpenAI、Anthropic 等）
 - DeepSeek API Key：[DeepSeek 开放平台](https://platform.deepseek.com/api_keys)
 - A 股行情/财务数据：东方财富 + 腾讯公开接口，**无需额外 API Key**
 
 默认模型为 `deepseek/deepseek-v4-flash`。如需切换：
 
 ```env
-DEEPSEEK_MODEL=deepseek/deepseek-chat
+AI_MODEL=deepseek/deepseek-chat
+# 或 openai/gpt-4o、anthropic/claude-sonnet-4-20250514 等
 ```
 
 ### 4. 入库投研笔记（RAG）
