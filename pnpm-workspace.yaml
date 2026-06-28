@@ -9,3 +9,5 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
   - sharp
+  - electron
+  - electron-builder

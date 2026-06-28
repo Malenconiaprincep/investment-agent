@@ -1,0 +1,138 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0-beta)'
+        required: true
+        default: 'v0.1.0-beta'
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare agent-core env for desktop bundle
+        env:
+          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          cp packages/agent-core/.env.example packages/agent-core/.env
+          if [ -n "$DEEPSEEK_KEY" ]; then
+            echo "DEEPSEEK_API_KEY=$DEEPSEEK_KEY" >> packages/agent-core/.env
+          else
+            echo "DEEPSEEK_API_KEY=sk-placeholder-for-ci-build" >> packages/agent-core/.env
+          fi
+
+      - name: Pack macOS (unsigned)
+        run: pnpm desktop:pack:mac:unsigned
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+          if-no-files-found: error
+
+  build-win:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare agent-core env for desktop bundle
+        env:
+          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        shell: bash
+        run: |
+          cp packages/agent-core/.env.example packages/agent-core/.env
+          if [ -n "$DEEPSEEK_KEY" ]; then
+            echo "DEEPSEEK_API_KEY=$DEEPSEEK_KEY" >> packages/agent-core/.env
+          else
+            echo "DEEPSEEK_API_KEY=sk-placeholder-for-ci-build" >> packages/agent-core/.env
+          fi
+
+      - name: Pack Windows x64
+        run: pnpm desktop:pack:win:x64
+
+      - name: Pack Windows portable
+        run: pnpm desktop:pack:win:portable
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            apps/desktop/release/*.exe
+          if-no-files-found: error
+
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: 投研助手 ${{ steps.tag.outputs.tag }}
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            artifacts/macos/*
+            artifacts/windows/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

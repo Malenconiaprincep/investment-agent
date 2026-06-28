@@ -127,6 +127,10 @@ pnpm eval
 pnpm eval market-research-report   # Phase 2 验收
 ```
 
+## 桌面版发布
+
+GitHub Releases 自动构建与发布说明见 [docs/release-desktop.md](docs/release-desktop.md)。
+
 ## 本地桌面应用
 
 桌面版（Electron）打包命令：

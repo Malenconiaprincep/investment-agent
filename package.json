@@ -17,6 +17,8 @@
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter @investment-agent/web dev",
     "web:build": "pnpm --filter @investment-agent/web build",
+    "site:dev": "pnpm --filter @investment-agent/site dev",
+    "site:build": "pnpm --filter @investment-agent/site build",
     "agent:serve": "pnpm --filter @investment-agent/agent-core serve",
     "dev:all": "pnpm agent:serve & pnpm web:dev",
     "desktop:prepare": "pnpm --filter @investment-agent/desktop bundle",
