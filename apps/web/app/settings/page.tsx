@@ -216,7 +216,7 @@ export default function SettingsPage() {
     <main className="page page--list">
       <PageHeader
         title="Token 设置"
-        description="选择 AI 提供商并填写对应 Key。保存后立即同步；切换模型后建议重启应用。"
+        description="选择 AI 提供商并填写对应 Key。保存后立即同步，下次 AI 调用生效。"
       />
 
       <div className="list-stack">
@@ -499,7 +499,7 @@ export default function SettingsPage() {
 
                 {saved && (
                   <p className="monitor-settings-saved">
-                    已保存并同步到 agent-core。若更改了 AI 模型，请重启应用后生效。
+                    已保存并同步到 agent-core，下次 AI 分析将使用当前模型与 Key。
                   </p>
                 )}
               </section>

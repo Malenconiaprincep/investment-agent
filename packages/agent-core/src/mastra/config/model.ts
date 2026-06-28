@@ -16,4 +16,5 @@ import {
 
 export { DEFAULT_MODEL_ID, isModelApiKeyConfigured, resolveModelId };
 
-export const DEFAULT_MODEL = resolveModelId();
+/** 每次 Agent 调用时读取 AI_MODEL，支持设置页保存后立即生效 */
+export const DEFAULT_MODEL = () => resolveModelId();
