@@ -68,4 +68,5 @@ Thumbs.db
 # Testing
 coverage/
 .vercel
-.env*
+!.env.example
+!**/.env.example
