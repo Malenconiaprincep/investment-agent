@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { BacktestEquityChart } from '@/components/charts/BacktestEquityChart';
+import { StockKlineChart } from '@/components/charts/StockKlineChart';
+import type { TradeMarker } from '@/components/charts/KlineChart';
 import { PageHeader } from '@/components/ui/PageHeader';
 
-type Strategy = 'diamond' | 'diamond-momentum' | 'etf' | 'etf-momentum';
+type Strategy = 'stock' | 'diamond' | 'diamond-momentum' | 'etf' | 'etf-momentum';
+type StockUniverseMode = 'retail-stock' | 'manual';
 
 type BacktestMetrics = {
   tradeCount: number;
@@ -80,6 +83,8 @@ type BacktestRunConfig = {
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
   stopCooldownDays?: number;
+  stockUniverse?: 'manual' | 'retail-stock';
+  stockUniverseCount?: number;
 };
 
 type BacktestTrade = {
@@ -127,17 +132,13 @@ type BacktestResult = {
 };
 
 type BacktestPanel = 'overview' | 'current' | 'etfs' | 'trades' | 'notes';
+type StockBacktestPanel = 'overview' | 'chart' | 'groups' | 'trades' | 'notes';
 
 const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
-    value: 'diamond',
-    label: '红钻固定持有',
-    help: '用真实日 K 回放红钻信号，按固定持有期统计收益。',
-  },
-  {
-    value: 'diamond-momentum',
-    label: '红钻动量出场',
-    help: '红钻 + 动量 checklist 买入，按止损/MA20/信号消失规则出场。',
+    value: 'stock',
+    label: '股票策略',
+    help: '全市场 A 股前复权日线选红钻 + 动量信号，持有天数由止损、MA20、移动止盈和信号减弱动态决定。',
   },
   {
     value: 'etf-momentum',
@@ -145,6 +146,12 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
     help: '每 10 个交易日选 20 日动量最强且站上 MA20 的前 4 只 ETF，并按市场状态调节宽基和熊市仓位。',
   },
 ];
+
+const STOCK_SYMBOL_PRESETS = [
+  { label: '茅台 + 平安', value: '600519:贵州茅台,000001:平安银行' },
+  { label: '宁德 + 工业富联', value: '300750:宁德时代,601138:工业富联' },
+  { label: '沪深样例', value: '600519:贵州茅台,000001:平安银行,300750:宁德时代' },
+] as const;
 
 const BACKTEST_RANGE_PRESETS = [
   { label: '3 个月', days: 90 },
@@ -221,6 +228,25 @@ function returnClass(value: number | null) {
   return 'muted';
 }
 
+function isEtfStrategy(value: Strategy): boolean {
+  return value === 'etf' || value === 'etf-momentum';
+}
+
+function displayStrategyName(value: string) {
+  const labels: Record<string, string> = {
+    stock: '股票策略',
+    diamond: '股票策略',
+    'red-diamond': '股票策略',
+    'diamond-momentum': '股票策略',
+    'red-diamond-momentum': '股票策略',
+    etf: 'ETF 尾盘规则',
+    'etf-tail-rules': 'ETF 尾盘规则',
+    'etf-momentum': 'ETF 动量轮动',
+    'etf-momentum-rotation': 'ETF 动量轮动',
+  };
+  return labels[value] ?? value;
+}
+
 function fmtExitReason(value: string) {
   const labels: Record<string, string> = {
     fixed_hold: '固定持有',
@@ -293,11 +319,11 @@ function calcSharpe(points: BacktestEquityPoint[] | undefined): number | null {
 
 export default function BacktestPage() {
   const defaultRange = rangeFromPresetDays(365);
-  const [strategy, setStrategy] = useState<Strategy>('etf-momentum');
-  const [symbols, setSymbols] = useState('600519,000001');
+  const [strategy, setStrategy] = useState<Strategy>('stock');
+  const [symbols, setSymbols] = useState('600519:贵州茅台,000001:平安银行');
+  const [stockUniverse, setStockUniverse] = useState<StockUniverseMode>('retail-stock');
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
-  const [holdDays] = useState('1,3,5,10,20');
   const [includeWaitPullback, setIncludeWaitPullback] = useState(false);
   const [newsFilter, setNewsFilter] = useState<'avoid_bearish' | 'require_bullish' | 'off'>(
     'avoid_bearish',
@@ -309,21 +335,22 @@ export default function BacktestPage() {
   const [error, setError] = useState<string | null>(null);
   const today = todayIsoDate();
   const activePresetDays = presetDaysForRange(startDate, endDate);
+  const usingEtfStrategy = isEtfStrategy(strategy);
 
   const activeStrategy = useMemo(
     () => STRATEGIES.find((item) => item.value === strategy) ?? STRATEGIES[0],
     [strategy],
   );
+  const resultSymbolCount = result?.config?.stockUniverseCount ?? result?.symbols.length ?? 0;
 
   async function runBacktest() {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ strategy });
-      if (strategy === 'etf' || strategy === 'etf-momentum') {
-        params.set('startDate', startDate);
-        params.set('endDate', endDate);
-      } else {
+      params.set('startDate', startDate);
+      params.set('endDate', endDate);
+      if (!usingEtfStrategy) {
         const start = new Date(startDate);
         const end = new Date(endDate);
         const calendarDays = Math.max(
@@ -333,11 +360,10 @@ export default function BacktestPage() {
         const klineDays = Math.ceil(calendarDays * 5 / 7) + 45;
         params.set('days', String(klineDays));
       }
-      if (strategy !== 'etf' && strategy !== 'etf-momentum') {
+      if (!usingEtfStrategy && stockUniverse === 'manual') {
         params.set('symbols', symbols);
-      }
-      if (strategy !== 'etf' && strategy !== 'etf-momentum' && holdDays.trim()) {
-        params.set('holdDays', holdDays.trim());
+      } else if (!usingEtfStrategy) {
+        params.set('universe', 'retail-stock');
       }
       if (strategy === 'etf' && includeWaitPullback) {
         params.set('includeWaitPullback', '1');
@@ -363,15 +389,17 @@ export default function BacktestPage() {
     <main className="page page--list">
       <PageHeader
         eyebrow="真实行情回测"
-        title="ETF 策略回测"
-        description="先看最近一年 ETF 规则是否赚钱，再看今天尾盘按同一套规则应该买入、观察还是卖出/回避。"
+        title="策略回测"
+        description="同一页回放 ETF 轮动和 A 股红钻策略；A 股优先使用本地前复权 CSV，结果可直接对照逐笔交易。"
       />
 
       <section className="action-panel backtest-controls">
         <div className="backtest-control-block">
           <div className="backtest-control-head">
             <strong>选择策略</strong>
-              <span className="muted">默认使用 ETF 动量轮动；旧尾盘规则已从日常入口下线。</span>
+            <span className="muted">
+              A 股策略读取本地前复权日线；ETF 默认使用动量轮动。
+            </span>
           </div>
           <div className="backtest-strategy-grid">
             {STRATEGIES.map((item) => (
@@ -439,16 +467,61 @@ export default function BacktestPage() {
           </div>
         </div>
 
-        {strategy !== 'etf' && strategy !== 'etf-momentum' && (
-          <label className="form-field">
-            <span>股票池</span>
-            <input
-              className="input"
-              value={symbols}
-              onChange={(event) => setSymbols(event.target.value)}
-              placeholder="600519,000001 或 600519:贵州茅台"
-            />
-          </label>
+        {!usingEtfStrategy && (
+          <div
+            className="backtest-stock-controls backtest-stock-controls--single"
+          >
+            <div className="backtest-universe-toggle" aria-label="A 股回测股票池模式">
+              <button
+                type="button"
+                className={`backtest-preset${stockUniverse === 'retail-stock' ? ' backtest-preset--active' : ''}`}
+                onClick={() => setStockUniverse('retail-stock')}
+              >
+                全市场 A 股
+              </button>
+              <button
+                type="button"
+                className={`backtest-preset${stockUniverse === 'manual' ? ' backtest-preset--active' : ''}`}
+                onClick={() => setStockUniverse('manual')}
+              >
+                手动代码
+              </button>
+              <span className="muted">默认扫描本地 5891 个前复权 CSV，并排除 688/689 科创板。</span>
+            </div>
+            {stockUniverse === 'manual' ? (
+              <label className="form-field">
+                <span>股票池</span>
+                <input
+                  className="input"
+                  value={symbols}
+                  onChange={(event) => setSymbols(event.target.value)}
+                  placeholder="600519,000001 或 600519:贵州茅台"
+                />
+                <small>
+                  本次参与回测的股票代码列表；688/689 科创板会自动排除。
+                </small>
+              </label>
+            ) : (
+              <div className="backtest-universe-note">
+                <strong>本地全市场 A 股</strong>
+                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，持有天数由退出规则动态决定。</span>
+              </div>
+            )}
+            {stockUniverse === 'manual' && (
+              <div className="backtest-symbol-presets" aria-label="股票池快捷选择">
+                {STOCK_SYMBOL_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className="backtest-preset"
+                    onClick={() => setSymbols(preset.value)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {strategy === 'etf' && (
@@ -514,7 +587,7 @@ export default function BacktestPage() {
             {loading ? '回测中…' : '开始回测'}
           </button>
           <span className="muted">
-            {activeStrategy.help} 回测区间按日历天理解，ETF 策略统一使用真实日 K。
+            {activeStrategy.help} 股票策略没有固定观察期；ETF 的 10 日是调仓周期，不是固定持有期。结果是规则验证，不是投资建议。
           </span>
         </div>
       </section>
@@ -524,7 +597,7 @@ export default function BacktestPage() {
           <span className="muted">数据口径</span>
           <strong>真实行情，不是 mock</strong>
           <span className="muted">
-            ETF 历史回测优先读本地前复权 CSV（`packages/agent-core/data/market-csv`），没有本地文件时退回腾讯日 K；“当前尾盘决策”仍优先用东财实时行情。这里的结果是规则验证，不是投资建议。
+            A 股历史回测优先读取本地前复权 CSV（packages/agent-core/data/market-csv/stock/qfq-daily，当前 5891 个文件）；ETF 历史回测优先读本地 ETF CSV，没有本地文件时退回腾讯日 K。“当前尾盘动作”仍优先用东财实时行情。
           </span>
         </div>
       </section>
@@ -533,7 +606,7 @@ export default function BacktestPage() {
 
       {!result && !loading && !error && (
         <div className="empty-state">
-          选择策略后点击“开始回测”。ETF 回测会直接使用 19 只内置 ETF 池。
+          选择策略后点击“开始回测”。A 股默认扫描本地全市场普通股票，也可切到手动代码；ETF 回测直接使用 19 只内置 ETF 池。
         </div>
       )}
 
@@ -542,13 +615,13 @@ export default function BacktestPage() {
           <section className="paper-hero">
             <div className="paper-hero-main">
               <span className="muted">{fmtTime(result.generatedAt)}</span>
-              <strong>{result.strategy}</strong>
+              <strong>{displayStrategyName(result.strategy)}</strong>
               <span className="muted">
                 {result.startDate && result.endDate
                   ? `${result.startDate} 至 ${result.endDate}`
                   : `${startDate} 至 ${endDate}`}
                 {' · '}
-                覆盖 {result.symbols.length} 个标的
+                覆盖 {resultSymbolCount} 个标的
               </span>
             </div>
             <div className="paper-hero-stats">
@@ -569,7 +642,7 @@ export default function BacktestPage() {
           result.strategy === 'etf-momentum-rotation' ? (
             <EtfStrategyReport result={result} />
           ) : (
-            <GenericBacktestDetails result={result} />
+            <StockStrategyReport result={result} />
           )}
 
           {result.symbols.some((item) => item.error) && (
@@ -622,6 +695,242 @@ function GenericBacktestDetails({ result }: { result: BacktestResult }) {
 
       <TradeDetailsSection trades={result.trades} />
     </>
+  );
+}
+
+function tradeRowKey(trade: BacktestTrade, index: number) {
+  return `${trade.symbol}-${trade.entryDate}-${trade.exitDate ?? 'open'}-${trade.holdDays}-${index}`;
+}
+
+function buildTradeMarkers(trade: BacktestTrade | undefined): TradeMarker[] {
+  if (!trade) return [];
+  const markers: TradeMarker[] = [
+    {
+      tradeDate: trade.entryDate,
+      kind: 'buy',
+      label: '买入',
+    },
+  ];
+  if (trade.exitDate) {
+    markers.push({
+      tradeDate: trade.exitDate,
+      kind: 'sell',
+      label: '卖出',
+    });
+  }
+  return markers;
+}
+
+function StockStrategyReport({ result }: { result: BacktestResult }) {
+  const [activePanel, setActivePanel] = useState<StockBacktestPanel>('overview');
+  const [selectedTradeKey, setSelectedTradeKey] = useState<string | null>(null);
+  const sortedTrades = useMemo(
+    () =>
+      [...result.trades].sort((a, b) => {
+        const byDate = b.entryDate.localeCompare(a.entryDate);
+        if (byDate !== 0) return byDate;
+        return a.symbol.localeCompare(b.symbol);
+      }),
+    [result.trades],
+  );
+  const selectedTradeIndex = selectedTradeKey
+    ? sortedTrades.findIndex((trade, index) => tradeRowKey(trade, index) === selectedTradeKey)
+    : 0;
+  const activeTradeIndex = selectedTradeIndex >= 0 ? selectedTradeIndex : 0;
+  const selectedTrade = sortedTrades[activeTradeIndex];
+  const activeTradeKey =
+    selectedTrade != null ? tradeRowKey(selectedTrade, activeTradeIndex) : null;
+  const finalReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
+  const annualReturn = calcAnnualReturnPct(result.equityCurve);
+  const maxDrawdown = calcMaxDrawdownPct(result.equityCurve);
+  const sharpe = calcSharpe(result.equityCurve);
+  const universeCount = result.config?.stockUniverseCount ?? result.symbols.length;
+  const isMomentum =
+    result.strategy === 'red-diamond-momentum' || result.strategy === 'diamond-momentum';
+  const chartDays = Math.max(120, Math.min(520, result.requestedDays + 90));
+  const panels: Array<{ id: StockBacktestPanel; label: string; hint: string }> = [
+    { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
+    { id: 'chart', label: 'K线复盘', hint: '单笔买卖点和红钻' },
+    { id: 'groups', label: '分组表现', hint: '退出规则和持有天数' },
+    { id: 'trades', label: '交易详情', hint: '逐笔买卖记录' },
+    { id: 'notes', label: '日志说明', hint: '规则和数据口径' },
+  ];
+
+  return (
+    <div className="layout-split backtest-report">
+      <aside className="layout-split-aside backtest-sidebar">
+        {panels.map((panel) => (
+          <button
+            key={panel.id}
+            type="button"
+            className={`backtest-menu-item${activePanel === panel.id ? ' backtest-menu-item--active' : ''}`}
+            onClick={() => setActivePanel(panel.id)}
+          >
+            <span>{panel.label}</span>
+            <small>{panel.hint}</small>
+          </button>
+        ))}
+      </aside>
+
+      <div className="backtest-report-main">
+        {activePanel === 'overview' && (
+          <section className="section pane-card">
+            <div className="section-head">
+              <div>
+                <h2 className="section-title">收益概述</h2>
+                <p className="muted">
+                  {isMomentum
+                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，之后按止损、MA20、移动止盈和信号减弱动态出场。`
+                    : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
+                </p>
+              </div>
+              <strong className={returnClass(finalReturn)}>累计 {fmtPct(finalReturn)}</strong>
+            </div>
+
+            <div className="overview-metric-grid">
+              <SummaryMetric label="策略累计收益" value={fmtPct(finalReturn)} tone={finalReturn} />
+              <SummaryMetric label="股票池" value={`${universeCount} 只`} />
+              <SummaryMetric label="策略年化收益" value={fmtPct(annualReturn)} tone={annualReturn} />
+              <SummaryMetric label="最大回撤" value={fmtPct(maxDrawdown)} tone={maxDrawdown} inverse />
+              <SummaryMetric label="夏普比率" value={fmtNumber(sharpe, 3)} />
+              <SummaryMetric label="胜率" value={fmtPct(result.metrics.winRatePct)} />
+              <SummaryMetric label="交易次数" value={`${result.metrics.validTradeCount}/${result.metrics.tradeCount}`} />
+              <SummaryMetric label="平均收益" value={fmtPct(result.metrics.avgReturnPct)} tone={result.metrics.avgReturnPct} />
+              <SummaryMetric label="中位收益" value={fmtPct(result.metrics.medianReturnPct)} tone={result.metrics.medianReturnPct} />
+              <SummaryMetric label="单笔最高" value={fmtPct(result.metrics.bestReturnPct)} tone={result.metrics.bestReturnPct} />
+              <SummaryMetric label="单笔最低" value={fmtPct(result.metrics.worstReturnPct)} tone={result.metrics.worstReturnPct} />
+              <SummaryMetric label="平均持有" value={`${fmtNumber(result.metrics.avgHoldDays, 1)} 日`} />
+            </div>
+
+            <BacktestEquityChart
+              strategy={(result.equityCurve ?? []).map((point) => ({
+                tradeDate: point.tradeDate,
+                returnPct: point.returnPct,
+              }))}
+              benchmark={
+                result.benchmark
+                  ? {
+                      name: result.benchmark.name,
+                      curve: result.benchmark.curve.map((point) => ({
+                        tradeDate: point.tradeDate,
+                        returnPct: point.returnPct,
+                      })),
+                      finalReturnPct: result.benchmark.finalReturnPct,
+                    }
+                  : undefined
+              }
+            />
+          </section>
+        )}
+
+        {activePanel === 'chart' && (
+          <section className="section pane-card">
+            <div className="section-head">
+              <div>
+                <h2 className="section-title">K线复盘</h2>
+                <p className="muted">
+                  点击右侧交易或交易详情中的行，可切换到对应股票的买入、卖出位置。
+                </p>
+              </div>
+              {selectedTrade && (
+                <strong className={returnClass(selectedTrade.returnPct)}>
+                  {fmtPct(selectedTrade.returnPct)}
+                </strong>
+              )}
+            </div>
+
+            {selectedTrade ? (
+              <div className="stock-backtest-chart-grid">
+                <div className="stock-backtest-chart-main">
+                  <div className="stock-backtest-selected">
+                    <div>
+                      <strong>
+                        {selectedTrade.name} ({selectedTrade.symbol})
+                      </strong>
+                      <span className="muted">
+                        {fmtTradeDate(selectedTrade.entryDate)} 买入，{fmtTradeDate(selectedTrade.exitDate)} 卖出
+                      </span>
+                    </div>
+                    <div className="stock-backtest-selected-meta">
+                      <span>买入 {fmtPrice(selectedTrade.entryPrice)}</span>
+                      <span>卖出 {fmtPrice(selectedTrade.exitPrice)}</span>
+                      <span>{fmtExitReason(selectedTrade.exitReason)}</span>
+                    </div>
+                  </div>
+                  <StockKlineChart
+                    symbol={selectedTrade.symbol}
+                    days={chartDays}
+                    height={420}
+                    lazy={false}
+                    showPriceLines={isMomentum}
+                    tradeMarkers={buildTradeMarkers(selectedTrade)}
+                    className="stock-kline-chart stock-kline-chart--backtest"
+                  />
+                </div>
+
+                <div className="stock-backtest-trade-list">
+                  {sortedTrades.slice(0, 80).map((trade, index) => {
+                    const key = tradeRowKey(trade, index);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`stock-backtest-trade-button${key === activeTradeKey ? ' stock-backtest-trade-button--active' : ''}`}
+                        onClick={() => setSelectedTradeKey(key)}
+                      >
+                        <span>
+                          {trade.name} ({trade.symbol})
+                        </span>
+                        <strong className={returnClass(trade.returnPct)}>
+                          {fmtPct(trade.returnPct)}
+                        </strong>
+                        <small>
+                          {fmtTradeDate(trade.entryDate)} · {trade.holdDays} 日 · {fmtExitReason(trade.exitReason)}
+                        </small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="chart-empty">当前区间没有可复盘的交易。</div>
+            )}
+          </section>
+        )}
+
+        {activePanel === 'groups' && (
+          <section className="section pane-card">
+            <h2 className="section-title">分组表现</h2>
+            <PerformanceGroupTable groups={result.groups} />
+          </section>
+        )}
+
+        {activePanel === 'trades' && (
+          <TradeDetailsSection
+            trades={sortedTrades}
+            selectedTradeKey={activeTradeKey ?? undefined}
+            onSelectTrade={(trade, index) => {
+              setSelectedTradeKey(tradeRowKey(trade, index));
+              setActivePanel('chart');
+            }}
+          />
+        )}
+
+        {activePanel === 'notes' && (
+          <section className="section pane-card">
+            <h2 className="section-title">日志说明</h2>
+            <ul className="sector-list">
+              {result.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+              <li>A 股 K 线复盘使用本地前复权日线；图上的红/蓝钻来自同一套信号计算，买入/卖出箭头来自回测交易明细。</li>
+              <li>股票策略使用动态退出；每笔持有天数由止损、MA20、移动止盈或信号变化触发，不再使用固定观察期。</li>
+              <li>当前结果是规则验证，不是投资建议；真实交易还要考虑滑点、涨跌停、停牌和仓位约束。</li>
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -913,7 +1222,15 @@ function PerformanceGroupTable({ groups }: { groups: BacktestGroup[] }) {
   );
 }
 
-function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
+function TradeDetailsSection({
+  trades,
+  selectedTradeKey,
+  onSelectTrade,
+}: {
+  trades: BacktestTrade[];
+  selectedTradeKey?: string;
+  onSelectTrade?: (trade: BacktestTrade, index: number) => void;
+}) {
   return (
     <section className="section pane-card">
       <h2 className="section-title">交易详情</h2>
@@ -934,29 +1251,36 @@ function TradeDetailsSection({ trades }: { trades: BacktestTrade[] }) {
             </tr>
           </thead>
           <tbody>
-            {trades.slice(0, 200).map((trade, index) => (
-              <tr key={`${trade.symbol}-${trade.entryDate}-${trade.holdDays}-${index}`}>
-                <td>
-                  {trade.name} ({trade.symbol})
-                </td>
-                <td>{trade.assetType === 'etf' ? 'ETF' : '股票'}</td>
-                <td>{fmtTradeDate(trade.entryDate)}</td>
-                <td>{fmtPrice(trade.entryPrice)}</td>
-                <td>{fmtTradeDate(trade.exitDate)}</td>
-                <td>{fmtPrice(trade.exitPrice)}</td>
-                <td>{trade.holdDays}</td>
-                <td className={returnClass(trade.returnPct)}>
-                  {fmtPct(trade.returnPct)}
-                </td>
-                <td>
-                  {String(trade.signal?.metadata?.newsLabel ?? '—')}
-                  {trade.signal?.metadata?.newsNet != null
-                    ? ` (${trade.signal.metadata.newsNet > 0 ? '+' : ''}${trade.signal.metadata.newsNet})`
-                    : ''}
-                </td>
-                <td>{fmtExitReason(trade.exitReason)}</td>
-              </tr>
-            ))}
+            {trades.slice(0, 200).map((trade, index) => {
+              const key = tradeRowKey(trade, index);
+              return (
+                <tr
+                  key={key}
+                  className={`${onSelectTrade ? 'candidate-table-row--clickable' : ''}${selectedTradeKey === key ? ' candidate-table-row--active' : ''}`}
+                  onClick={() => onSelectTrade?.(trade, index)}
+                >
+                  <td>
+                    {trade.name} ({trade.symbol})
+                  </td>
+                  <td>{trade.assetType === 'etf' ? 'ETF' : '股票'}</td>
+                  <td>{fmtTradeDate(trade.entryDate)}</td>
+                  <td>{fmtPrice(trade.entryPrice)}</td>
+                  <td>{fmtTradeDate(trade.exitDate)}</td>
+                  <td>{fmtPrice(trade.exitPrice)}</td>
+                  <td>{trade.holdDays}</td>
+                  <td className={returnClass(trade.returnPct)}>
+                    {fmtPct(trade.returnPct)}
+                  </td>
+                  <td>
+                    {String(trade.signal?.metadata?.newsLabel ?? '—')}
+                    {trade.signal?.metadata?.newsNet != null
+                      ? ` (${trade.signal.metadata.newsNet > 0 ? '+' : ''}${trade.signal.metadata.newsNet})`
+                      : ''}
+                  </td>
+                  <td>{fmtExitReason(trade.exitReason)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

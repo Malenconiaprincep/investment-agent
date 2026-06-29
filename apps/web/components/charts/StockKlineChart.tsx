@@ -5,6 +5,7 @@ import {
   KlineChart,
   type KlineBar,
   type DiamondMarker,
+  type TradeMarker,
 } from '@/components/charts/KlineChart';
 import { buildMomentumPriceLines } from '@/lib/momentum-price-lines';
 
@@ -28,9 +29,11 @@ type ChartPayload = {
 
 type StockKlineChartProps = {
   symbol: string;
+  days?: number;
   height?: number;
   lazy?: boolean;
   showPriceLines?: boolean;
+  tradeMarkers?: TradeMarker[];
   className?: string;
   placeholder?: string;
 };
@@ -53,9 +56,11 @@ function recentSignalDates(bars: KlineBar[], lookback = 30) {
 
 export function StockKlineChart({
   symbol,
+  days = 120,
   height = 220,
   lazy = true,
   showPriceLines = false,
+  tradeMarkers = [],
   className,
   placeholder = '滚动加载 K 线…',
 }: StockKlineChartProps) {
@@ -90,7 +95,7 @@ export function StockKlineChart({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/stock/${symbol}/chart?days=120`);
+        const res = await fetch(`/api/stock/${symbol}/chart?days=${days}`);
         const payload = (await res.json()) as ChartPayload & { error?: string };
         if (!res.ok) throw new Error(payload.error ?? 'K 线加载失败');
         if (!cancelled) setData(payload);
@@ -107,7 +112,7 @@ export function StockKlineChart({
     return () => {
       cancelled = true;
     };
-  }, [symbol, visible]);
+  }, [days, symbol, visible]);
 
   const bars = data ? toBars(data.kline.quotes) : [];
   const recentDates = recentSignalDates(bars);
@@ -133,6 +138,7 @@ export function StockKlineChart({
         <KlineChart
           bars={bars}
           diamonds={diamonds}
+          tradeMarkers={tradeMarkers}
           priceLines={priceLines}
           height={height}
         />

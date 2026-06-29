@@ -4,11 +4,18 @@ import {
   type DiamondSignalResult,
 } from '../market/diamond-signal.js';
 import { getDailyQuote } from '../market/services.js';
-import { inferAssetType } from '../market/asset-type.js';
+import { inferAssetType, isRetailTradableStock } from '../market/asset-type.js';
+import {
+  hasLocalStockDailyCsv,
+  listLocalStockDailyCsvSymbols,
+  LOCAL_DAILY_LOAD_ALL_DAYS,
+} from '../market/local-csv/etf-daily.js';
 import { sma, type OhlcvBar } from '../market/indicators.js';
 import {
   analyzeMomentum,
   evaluateMomentumExit,
+  MOMENTUM_STOP_LOSS_PCT,
+  MOMENTUM_TRAILING_STOP_PCT,
 } from '../paper/momentum.js';
 import {
   buildTradeGroups,
@@ -17,6 +24,13 @@ import {
   findBarIndex,
   summarizeTrades,
 } from './engine.js';
+import {
+  computeKlineDaysForRange,
+  formatTradeDateKey,
+  isTradeDateInRange,
+  resolveBacktestDateRange,
+} from './date-range.js';
+import { buildPortfolioEquityCurve } from './portfolio.js';
 import type {
   BacktestAssetType,
   BacktestExitReason,
@@ -34,14 +48,29 @@ export type BacktestSymbolInput = {
 
 export type RunDiamondBacktestInput = {
   symbols: BacktestSymbolInput[];
+  universe?: 'manual' | 'retail-stock';
   strategy?: Extract<BacktestStrategy, 'red-diamond' | 'red-diamond-momentum'>;
   days?: number;
   lookback?: number;
   holdDays?: number[];
+  startDate?: string;
+  endDate?: string;
 };
 
 const DEFAULT_DAYS = 250;
 const DEFAULT_HOLD_DAYS = [1, 3, 5, 10, 20];
+const MOMENTUM_EXIT_GROUPS: Array<{
+  key: string;
+  label: string;
+  reason: BacktestExitReason;
+}> = [
+  { key: 'exit-stop-loss', label: '止损退出', reason: 'stop_loss' },
+  { key: 'exit-ma20-break', label: '跌破 MA20', reason: 'ma20_break' },
+  { key: 'exit-trailing-stop', label: '移动止盈', reason: 'trailing_stop' },
+  { key: 'exit-signal-weakened', label: '信号减弱', reason: 'signal_weakened' },
+  { key: 'exit-signal-lost', label: '信号消失', reason: 'signal_lost' },
+  { key: 'exit-end-of-data', label: '跑到区间结束', reason: 'end_of_data' },
+];
 
 function normalizeHoldDays(holdDays: number[] | undefined): number[] {
   const values = holdDays?.length ? holdDays : DEFAULT_HOLD_DAYS;
@@ -181,15 +210,30 @@ export async function runDiamondBacktest(
   input: RunDiamondBacktestInput,
 ): Promise<BacktestRunResult> {
   const strategy = input.strategy ?? 'red-diamond';
-  const days = Math.max(60, Math.floor(input.days ?? DEFAULT_DAYS));
-  const lookback = Math.min(days, Math.max(1, Math.floor(input.lookback ?? days)));
+  const dateRange = resolveBacktestDateRange({
+    startDate: input.startDate,
+    endDate: input.endDate,
+    fallbackCalendarDays: input.days,
+  });
+  const days =
+    input.startDate || input.endDate
+      ? computeKlineDaysForRange(dateRange, 80)
+      : Math.max(60, Math.floor(input.days ?? DEFAULT_DAYS));
+  const lookback = Math.max(1, Math.floor(input.lookback ?? days));
   const holdDays = strategy === 'red-diamond'
     ? normalizeHoldDays(input.holdDays)
     : [];
   const trades: BacktestTrade[] = [];
   const symbols: BacktestRunResult['symbols'] = [];
+  const universe = input.universe ?? 'manual';
+  const universeSymbols: BacktestSymbolInput[] =
+    universe === 'retail-stock'
+      ? listLocalStockDailyCsvSymbols()
+          .filter(isRetailTradableStock)
+          .map((symbol) => ({ symbol }))
+      : input.symbols;
 
-  for (const symbol of input.symbols) {
+  for (const symbol of universeSymbols) {
     const code = symbol.symbol.trim();
     if (!/^\d{6}$/.test(code)) {
       symbols.push({
@@ -201,19 +245,40 @@ export async function runDiamondBacktest(
       continue;
     }
 
-    try {
-      const data = await getDailyQuote(code, days);
-      const name = symbol.name ?? code;
-      const bars = data.quotes.filter((bar) => bar.close != null);
-      const signals = scanDiamondSignalHistory(code, name, bars, lookback)
-        .filter((signal) => signal.strength === 'red')
-        .reverse();
-
+    if (universe === 'manual' && !isRetailTradableStock(code)) {
       symbols.push({
         symbol: code,
-        name,
-        assetType: symbol.assetType ?? inferAssetType(code),
+        name: symbol.name ?? code,
+        assetType: 'stock',
+        error: '已排除科创板或非普通 A 股股票',
       });
+      continue;
+    }
+
+    try {
+      const useLocalStockCsv = hasLocalStockDailyCsv(code);
+      const useFullLocalHistory = useLocalStockCsv && universe === 'manual';
+      const quoteDays = useFullLocalHistory ? LOCAL_DAILY_LOAD_ALL_DAYS : days;
+      const data = await getDailyQuote(code, quoteDays);
+      const name = symbol.name ?? code;
+      const bars = data.quotes.filter((bar) => bar.close != null && bar.close > 0);
+      const symbolLookback = input.lookback
+        ? Math.min(bars.length, lookback)
+        : useFullLocalHistory
+          ? bars.length
+          : Math.min(bars.length, lookback);
+      const signals = scanDiamondSignalHistory(code, name, bars, symbolLookback)
+        .filter((signal) => signal.strength === 'red')
+        .filter((signal) => isTradeDateInRange(signal.tradeDate, dateRange))
+        .reverse();
+
+      if (universe === 'manual') {
+        symbols.push({
+          symbol: code,
+          name,
+          assetType: symbol.assetType ?? inferAssetType(code),
+        });
+      }
 
       for (const diamond of signals) {
         if (
@@ -261,6 +326,8 @@ export async function runDiamondBacktest(
     strategy,
     generatedAt: new Date().toISOString(),
     requestedDays: days,
+    startDate: formatTradeDateKey(dateRange.startDate),
+    endDate: formatTradeDateKey(dateRange.endDate),
     holdDays,
     symbols,
     trades: sortedTrades,
@@ -268,7 +335,13 @@ export async function runDiamondBacktest(
     groups: buildTradeGroups(sortedTrades, [
       { key: 'all', label: '全部交易', predicate: () => true },
       { key: 'stock', label: '股票', predicate: (trade) => trade.assetType === 'stock' },
-      { key: 'etf', label: 'ETF', predicate: (trade) => trade.assetType === 'etf' },
+      ...(strategy === 'red-diamond-momentum'
+        ? MOMENTUM_EXIT_GROUPS.map((group) => ({
+            key: group.key,
+            label: group.label,
+            predicate: (trade: BacktestTrade) => trade.exitReason === group.reason,
+          }))
+        : []),
       ...(strategy === 'red-diamond'
         ? holdDays.map((daysValue) => ({
             key: `hold-${daysValue}`,
@@ -278,9 +351,30 @@ export async function runDiamondBacktest(
           }))
         : []),
     ]),
+    config: {
+      maxConcurrentPositions: 5,
+      noSymbolOverlap: true,
+      stockUniverse: universe,
+      stockUniverseCount: universeSymbols.length,
+    },
+    equityCurve: buildPortfolioEquityCurve(sortedTrades, 5),
     notes:
       strategy === 'red-diamond-momentum'
-        ? ['动量策略使用当前模拟盘 evaluateMomentumExit 规则，信号消失会触发退出。']
-        : ['固定持有期以红钻触发日收盘价买入，并在目标交易日收盘价卖出。'],
+        ? [
+            universe === 'retail-stock'
+              ? '股票池为本地全市场 A 股 CSV，已排除 688/689 科创板代码。'
+              : '股票池为手动输入代码列表，688/689 科创板会被排除。',
+            `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的红钻信号。`,
+            `股票策略：红钻 + 动量 checklist 入场；持有天数不预设，出场按 -${Math.round(MOMENTUM_STOP_LOSS_PCT * 100)}% 硬止损、跌破 MA20、从持仓高点回撤 ${Math.round(MOMENTUM_TRAILING_STOP_PCT * 100)}% 移动止盈、红/蓝钻信号减弱或消失动态决定；组合权益曲线按 5 个等权槽位滚动。`,
+            'A 股本地前复权历史早期可能出现负价格，回测已剔除非正收盘价 K 线。',
+          ]
+        : [
+            universe === 'retail-stock'
+              ? '股票池为本地全市场 A 股 CSV，已排除 688/689 科创板代码。'
+              : '股票池为手动输入代码列表，688/689 科创板会被排除。',
+            `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的红钻信号。`,
+            '固定观察期以红钻触发日收盘价作为基准，并在目标交易日收盘价统计收益；这是信号有效性统计，不代表实盘交易策略。',
+            'A 股本地前复权历史早期可能出现负价格，回测已剔除非正收盘价 K 线。',
+          ],
   };
 }

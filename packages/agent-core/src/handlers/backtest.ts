@@ -88,21 +88,31 @@ function parseDateArg(args: string[], flag: string): string | undefined {
   return value || undefined;
 }
 
+function parseStockUniverse(args: string[]): 'retail-stock' | undefined {
+  const arg = args.find((item) => item.startsWith('--universe='));
+  const value = arg?.split('=').slice(1).join('=').trim();
+  return value === 'retail-stock' ? value : undefined;
+}
+
 export async function dispatchBacktest(args: string[]): Promise<string> {
   const command = args[0];
 
-  if (command === 'diamond' || command === 'diamond-momentum') {
+  if (command === 'stock' || command === 'diamond' || command === 'diamond-momentum') {
+    const universe = parseStockUniverse(args);
     const symbols = parseSymbols(args[1]);
-    if (symbols.length === 0) {
-      throw new Error('请提供 symbols，例如: diamond 600519,000001 250 1,3,5');
+    if (!universe && symbols.length === 0) {
+      throw new Error('请提供 symbols，例如: stock 600519,000001 250，或使用 --universe=retail-stock');
     }
 
     return JSON.stringify(
       await runDiamondBacktest({
         symbols,
+        universe,
         strategy: command === 'diamond' ? 'red-diamond' : 'red-diamond-momentum',
         days: parsePositiveInt(args[2], 250),
         holdDays: parseHoldDays(args[3]),
+        startDate: parseDateArg(args, '--from'),
+        endDate: parseDateArg(args, '--to'),
       }),
     );
   }
@@ -162,6 +172,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: diamond <symbols> [days] [holdDaysCsv] | diamond-momentum <symbols> [days] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
+    'Usage: stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
   );
 }

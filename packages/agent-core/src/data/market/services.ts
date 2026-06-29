@@ -11,7 +11,9 @@ import { fetchNewsBrowser } from './free/news-browser.js';
 import { fetchDailyKlines } from './free/tencent.js';
 import {
   fetchLocalEtfDailyKlines,
+  fetchLocalStockDailyKlines,
   hasLocalEtfDailyCsv,
+  hasLocalStockDailyCsv,
   LOCAL_ETF_LOAD_ALL_DAYS,
 } from './local-csv/etf-daily.js';
 import { buildMeta } from './meta.js';
@@ -77,6 +79,18 @@ export async function getDailyQuote(symbol: string, days = 5) {
 
   if (isEtfSymbol(code) && hasLocalEtfDailyCsv(code)) {
     const { quotes, cached } = fetchLocalEtfDailyKlines(code, days);
+    const latest = quotes[0];
+    return {
+      tsCode,
+      quotes,
+      latestClose: latest?.close ?? null,
+      latestPctChg: latest?.pctChg ?? null,
+      ...buildMeta('local-csv', cached),
+    };
+  }
+
+  if (!isEtfSymbol(code) && hasLocalStockDailyCsv(code)) {
+    const { quotes, cached } = fetchLocalStockDailyKlines(code, days);
     const latest = quotes[0];
     return {
       tsCode,

@@ -126,6 +126,8 @@ export type BacktestRunConfig = {
   exitOnTrendBreak?: boolean;
   stopLossPct?: number;
   stopCooldownDays?: number;
+  stockUniverse?: 'manual' | 'retail-stock';
+  stockUniverseCount?: number;
 };
 
 export type BacktestRunResult = {

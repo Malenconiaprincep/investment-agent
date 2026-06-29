@@ -353,6 +353,13 @@ a:hover {
   font-size: 0.9375rem;
 }
 
+.form-field small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .form-field input:focus {
   outline: none;
   border-color: var(--accent);
@@ -1133,6 +1140,71 @@ a:hover {
   color-scheme: dark;
 }
 
+.backtest-stock-controls {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(9rem, 0.35fr);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.backtest-stock-controls .form-field:first-child {
+  min-width: 0;
+}
+
+.backtest-stock-controls--single .form-field:first-child {
+  grid-column: 1 / -1;
+}
+
+.backtest-universe-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+}
+
+.backtest-universe-toggle .muted {
+  font-size: 0.875rem;
+}
+
+.backtest-universe-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-height: 4.4rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.backtest-universe-note strong {
+  color: var(--text);
+}
+
+.backtest-stock-controls--single .backtest-universe-note {
+  grid-column: 1 / -1;
+}
+
+.backtest-hold-days-field {
+  min-width: 9rem;
+}
+
+.backtest-symbol-presets {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+@media (max-width: 720px) {
+  .backtest-stock-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .checkbox-row {
   display: inline-flex;
   align-items: center;
@@ -1300,6 +1372,84 @@ a:hover {
   margin-top: 0.875rem;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+.stock-backtest-chart-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.stock-backtest-chart-main {
+  min-width: 0;
+}
+
+.stock-backtest-selected {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.stock-backtest-selected > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.stock-backtest-selected-meta {
+  align-items: flex-start;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.stock-backtest-trade-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 500px;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.stock-backtest-trade-button {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.stock-backtest-trade-button span,
+.stock-backtest-trade-button strong,
+.stock-backtest-trade-button small {
+  overflow-wrap: anywhere;
+}
+
+.stock-backtest-trade-button small {
+  color: var(--muted);
+}
+
+.stock-backtest-trade-button:hover,
+.stock-backtest-trade-button--active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-muted);
+}
+
+@media (min-width: 1120px) {
+  .stock-backtest-chart-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem);
+    align-items: start;
+  }
 }
 
 @media (min-width: 560px) {
@@ -2872,6 +3022,15 @@ a:hover {
 
 .candidate-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.candidate-table-row--clickable {
+  cursor: pointer;
+}
+
+.candidate-table-row--active,
+.candidate-table-row--clickable:hover {
+  background: var(--accent-muted);
 }
 
 .muted {

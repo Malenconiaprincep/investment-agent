@@ -7,16 +7,24 @@ export const maxDuration = 180;
 
 function getArgsFromSearchParams(searchParams: URLSearchParams): string[] {
   const strategy = searchParams.get('strategy') ?? 'etf-momentum';
+  const resolvedStrategy = strategy === 'stock' ? 'diamond-momentum' : strategy;
 
-  if (strategy === 'diamond' || strategy === 'diamond-momentum') {
+  if (resolvedStrategy === 'diamond' || resolvedStrategy === 'diamond-momentum') {
+    const universe = searchParams.get('universe');
     const symbols = searchParams.get('symbols');
-    if (!symbols) throw new Error('缺少 symbols 参数');
-    return [
-      strategy,
-      symbols,
+    if (!symbols && universe !== 'retail-stock') throw new Error('缺少 symbols 参数');
+    const args = [
+      resolvedStrategy,
+      symbols ?? 'all',
       searchParams.get('days') ?? '250',
       searchParams.get('holdDays') ?? '',
-    ].filter(Boolean);
+    ].filter((arg): arg is string => Boolean(arg));
+    if (universe === 'retail-stock') args.push('--universe=retail-stock');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    if (startDate) args.push(`--from=${startDate}`);
+    if (endDate) args.push(`--to=${endDate}`);
+    return args;
   }
 
   if (strategy === 'screening') {

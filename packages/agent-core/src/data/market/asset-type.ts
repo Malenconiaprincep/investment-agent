@@ -15,9 +15,9 @@ export function isStockSymbol(code: string): boolean {
   return /^(6|0|3|8|4)\d{5}$/.test(c);
 }
 
-/** 科创板 688 — 需单独开通权限，默认零售账户不可买 */
+/** 科创板 688/689 — 需单独开通权限，默认零售账户不可买 */
 export function isStarMarketSymbol(code: string): boolean {
-  return /^688\d{3}$/.test(code.trim());
+  return /^68[89]\d{3}$/.test(code.trim());
 }
 
 /** 默认零售账户可买卖的 A 股（排除科创板） */
