@@ -1,6 +1,6 @@
 {
   "name": "@investment-agent/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1-beta.2",
   "private": true,
   "description": "投研助手桌面版（Electron）",
   "main": "src/main.mjs",
