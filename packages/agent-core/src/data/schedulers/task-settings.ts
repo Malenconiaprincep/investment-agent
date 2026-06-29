@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 
 export type ScheduledTaskId =
+  | 'monitor-background'
   | 'screen-morning'
   | 'etf-tail-pick'
   | 'stock-paper'
@@ -22,6 +23,13 @@ type ScheduledTaskConfig = Partial<Record<ScheduledTaskId, boolean>>;
 const CONFIG_PATH = path.join(DATA_DIR, 'scheduled-tasks.json');
 
 const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: boolean }> = [
+  {
+    id: 'monitor-background',
+    label: '消息雷达轮询',
+    description: '后台定时扫描候选池、跟踪池和主线快讯',
+    scheduleText: '交易日轮询',
+    defaultEnabled: true,
+  },
   {
     id: 'screen-morning',
     label: '智能选股',

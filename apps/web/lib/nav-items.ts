@@ -9,11 +9,10 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   {
-    href: '/monitor',
-    label: '雷达',
-    permission: 'monitor',
+    href: '/watchlist',
+    label: '跟踪池',
     isActive: (pathname) =>
-      pathname === '/monitor' || pathname.startsWith('/monitor/'),
+      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
   },
   {
     href: '/research',
@@ -30,12 +29,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/etf',
     label: 'ETF',
     isActive: (pathname) => pathname === '/etf' || pathname.startsWith('/etf/'),
-  },
-  {
-    href: '/watchlist',
-    label: '跟踪池',
-    isActive: (pathname) =>
-      pathname === '/watchlist' || pathname.startsWith('/watchlist/'),
   },
   {
     href: '/paper',

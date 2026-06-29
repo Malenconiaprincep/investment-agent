@@ -2985,6 +2985,10 @@ a:hover {
   color: var(--link);
 }
 
+.saved-link--danger {
+  color: var(--danger);
+}
+
 .specialist-grid {
   display: flex;
   flex-wrap: wrap;
@@ -3165,6 +3169,141 @@ a:hover {
   margin: 0;
   color: var(--muted);
   font-size: 0.8125rem;
+}
+
+.monitor-scan-status {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(20rem, 1.35fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  padding: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--link) 28%, var(--border));
+  border-radius: var(--radius);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--link) 12%, transparent),
+      color-mix(in srgb, var(--surface) 96%, transparent)
+    );
+}
+
+.monitor-scan-status--active {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      color-mix(in srgb, var(--surface) 96%, transparent)
+    );
+}
+
+.monitor-scan-status-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.monitor-scan-status-main div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.monitor-scan-status-main strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.monitor-scan-status-main span:not(.monitor-scan-pulse) {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.monitor-scan-status-link {
+  width: fit-content;
+  color: var(--link);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.monitor-scan-status-link:hover {
+  text-decoration: underline;
+}
+
+.monitor-scan-pulse {
+  position: relative;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--link);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--link) 35%, transparent);
+  flex: 0 0 auto;
+}
+
+.monitor-scan-status--active .monitor-scan-pulse {
+  background: var(--accent);
+  animation: monitor-pulse 1.4s ease-out infinite;
+}
+
+@keyframes monitor-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 0.55rem color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.monitor-scan-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.monitor-scan-status-grid span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+}
+
+.monitor-scan-status-grid em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.monitor-scan-status-grid strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .monitor-scan-status {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .monitor-scan-status-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .monitor-side-metrics {
@@ -3858,6 +3997,10 @@ a:hover {
   margin-bottom: 1rem;
 }
 
+.watchlist-radar-console {
+  margin-bottom: 1rem;
+}
+
 .watchlist-workbench-metric {
   min-width: 0;
   padding: 0.875rem 1rem;
@@ -4019,6 +4162,19 @@ a:hover {
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
   white-space: nowrap;
+}
+
+.watchlist-workbench-delete {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.watchlist-workbench-delete:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 @media (max-width: 980px) {

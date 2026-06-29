@@ -38,6 +38,7 @@ import type {
   MonitorPaperAction,
   MonitorPaperRecommendation,
 } from '../paper/monitor-bridge.js';
+import { isScheduledTaskEnabled } from '../schedulers/task-settings.js';
 
 export type MonitorPollResult = {
   tradeDate: string;
@@ -663,6 +664,27 @@ export async function runMonitorPoll(options?: {
 const MONITOR_STATE_KEY = 'monitor-poll';
 const DEFAULT_MIN_INTERVAL_MS = 90 * 1000;
 const DEFAULT_LOCK_TIMEOUT_MS = 3 * 60 * 1000;
+const DEFAULT_BACKGROUND_INTERVAL_MS = 5 * 60 * 1000;
+
+function getMonitorBackgroundIntervalMs(): number {
+  const fromEnv = Number(
+    process.env.MONITOR_BACKGROUND_INTERVAL_MS ??
+      process.env.MONITOR_POLL_INTERVAL_MS,
+  );
+  if (Number.isFinite(fromEnv) && fromEnv >= 60_000) return fromEnv;
+  return DEFAULT_BACKGROUND_INTERVAL_MS;
+}
+
+function isMonitorBackgroundEnabled(): boolean {
+  return isScheduledTaskEnabled('monitor-background');
+}
+
+function addMs(iso: string | undefined, ms: number): string | null {
+  if (!iso) return null;
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return null;
+  return new Date(time + ms).toISOString();
+}
 
 function emptySkippedResult(input: {
   tradeDate: string;
@@ -761,11 +783,12 @@ export async function getMonitorStatus() {
   const { getAutoTrackSettings } = await import('./auto-track-policy.js');
   const { listWatchlistItems } = await import('../watchlist/store.js');
 
-  const [lastRun, todayAlerts, recentPaperActions, watchlist] = await Promise.all([
+  const [lastRun, todayAlerts, recentPaperActions, watchlist, runtimeState] = await Promise.all([
     getLatestMonitorPollRun(),
     listMonitorAlerts({ tradeDate, limit: 50 }),
     listRecentMonitorPaperActions(20),
     listWatchlistItems(),
+    getMonitorRuntimeState(MONITOR_STATE_KEY),
   ]);
   const recommendations = buildMonitorRecommendations(todayAlerts);
   const paperActions = mergeMonitorPaperActionsForStatus(
@@ -780,6 +803,18 @@ export async function getMonitorStatus() {
     tradeDate,
     marketOpen: isTradingSession(now),
     tradingHours: TRADING_HOURS_LABEL,
+    background: {
+      enabled: isMonitorBackgroundEnabled(),
+      intervalMs: getMonitorBackgroundIntervalMs(),
+      running: runtimeState?.running ?? false,
+      startedAt: runtimeState?.startedAt ?? null,
+      finishedAt: runtimeState?.finishedAt ?? null,
+      nextRunAt: runtimeState?.running
+        ? null
+        : addMs(runtimeState?.finishedAt, getMonitorBackgroundIntervalMs()),
+      summary: runtimeState?.summary ?? null,
+      error: runtimeState?.error ?? null,
+    },
     lastRun,
     todayAlerts,
     recommendations,

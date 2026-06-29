@@ -23,6 +23,37 @@ type WatchlistItem = {
   } | null;
 };
 
+type MonitorStatus = {
+  now: string;
+  background?: {
+    enabled: boolean;
+    intervalMs: number;
+    running: boolean;
+    nextRunAt: string | null;
+    summary: string | null;
+    error: string | null;
+  };
+  lastRun: {
+    createdAt: string;
+    summary: string;
+    newsCount: number;
+    alertCount: number;
+    newNewsCount: number;
+    symbolsScanned: number;
+    elapsedMs: number;
+  } | null;
+  autoTrack?: {
+    modeLabel: string;
+    watchlistCount: number;
+    watchlistLimit: number;
+  };
+};
+
+type MonitorPollResponse = {
+  summary?: string;
+  error?: string;
+};
+
 type WatchLevelKey = 'hot' | 'warm' | 'rise' | 'risk' | 'track' | 'manual';
 type FilterKey = 'all' | WatchLevelKey | 'held';
 
@@ -41,6 +72,44 @@ function fmtPct(v: number | null | undefined) {
 function fmtPrice(v: number | null | undefined) {
   if (v == null) return '-';
   return v.toFixed(2);
+}
+
+function fmtTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Shanghai',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtDuration(ms: number | undefined) {
+  if (!ms || ms < 0) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
+function fmtInterval(ms: number | undefined) {
+  if (!ms || ms < 0) return '—';
+  const minutes = Math.round(ms / 60_000);
+  if (minutes >= 1) return `${minutes} 分钟`;
+  return `${Math.round(ms / 1000)} 秒`;
+}
+
+function fmtCountdown(iso: string | null | undefined, nowMs: number) {
+  if (!iso) return '等待首次扫描后计算';
+  const target = Date.parse(iso);
+  if (!Number.isFinite(target)) return fmtTime(iso);
+  const diffMs = target - nowMs;
+  if (diffMs <= 0) return '即将开始';
+  const totalSeconds = Math.ceil(diffMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds} 秒后`;
+  return `${minutes} 分 ${seconds.toString().padStart(2, '0')} 秒后`;
 }
 
 function pctClassName(v: number | null | undefined) {
@@ -136,14 +205,22 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [query, setQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [monitorStatus, setMonitorStatus] = useState<MonitorStatus | null>(null);
+  const [monitorPolling, setMonitorPolling] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const [watchlistRes, paperRes] = await Promise.all([
+      const [watchlistRes, paperRes, monitorRes] = await Promise.all([
         fetch('/api/watchlist'),
         fetch('/api/paper').catch(() => null),
+        fetch('/api/monitor').catch(() => null),
       ]);
       const watchlistJson = (await watchlistRes.json()) as {
         items?: WatchlistItem[];
@@ -161,16 +238,83 @@ export default function WatchlistPage() {
       } else {
         setHeldSymbols(new Set());
       }
+
+      if (monitorRes?.ok) {
+        setMonitorStatus((await monitorRes.json()) as MonitorStatus);
+      } else {
+        setMonitorStatus(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => void load({ silent: true }), 30_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  async function runMonitorScan() {
+    if (monitorPolling) return;
+    setMonitorPolling(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'force' }),
+      });
+      const data = (await res.json()) as MonitorPollResponse;
+      if (!res.ok) throw new Error(data.error ?? '扫描失败');
+      setScanMessage(data.summary ? `本次扫描：${data.summary}` : '本次扫描已完成');
+      await load({ silent: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '扫描失败');
+      setScanMessage(null);
+    } finally {
+      setMonitorPolling(false);
+    }
+  }
+
+  async function handleDelete(item: WatchlistItem) {
+    const confirmed = window.confirm(
+      `确定从跟踪池删除 ${item.name}（${item.symbol}）吗？`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(item.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/watchlist/${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? '删除失败');
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      setHeldSymbols((current) => {
+        const next = new Set(current);
+        next.delete(item.symbol);
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const rows = useMemo(
     () =>
@@ -216,9 +360,122 @@ export default function WatchlistPage() {
       <header className="page-header">
         <h1 className="page-title">跟踪池</h1>
         <p className="page-description">
-          管理消息雷达、研报和手动加入的观察标的，按等级筛出需要复核、等待信号或已经进入模拟盘的股票。
+          消息雷达负责发现机会并自动入池；跟踪池负责等待红钻/蓝钻、动量确认和模拟盘买入条件。
         </p>
       </header>
+
+      <section className="monitor-console watchlist-radar-console" aria-label="消息雷达">
+        <div className="monitor-console-head">
+          <div className="monitor-status-bar">
+            <span
+              className={`monitor-pill${
+                monitorPolling || monitorStatus?.background?.running
+                  ? ' monitor-pill--scanning'
+                  : ' monitor-pill--auto'
+              }`}
+            >
+              {monitorPolling
+                ? '⟳ 手动扫描中'
+                : monitorStatus?.background?.running
+                  ? '⟳ 后台扫描中'
+                  : monitorStatus?.background?.enabled
+                    ? '◉ 雷达轮询开启'
+                    : '○ 雷达轮询关闭'}
+            </span>
+            <span className="monitor-meta">
+              根据热门信息、候选池和跟踪池指标自动筛选入池标的
+            </span>
+          </div>
+
+          <div className="monitor-console-actions">
+            <button
+              type="button"
+              className="button"
+              disabled={monitorPolling}
+              onClick={() => void runMonitorScan()}
+            >
+              {monitorPolling ? '扫描中…' : '立即扫描'}
+            </button>
+            <Link href="/monitor/settings" className="button button-secondary">
+              雷达设置
+            </Link>
+          </div>
+        </div>
+
+        <div
+          className={`monitor-scan-status${
+            monitorPolling || monitorStatus?.background?.running
+              ? ' monitor-scan-status--active'
+              : ''
+          }`}
+          role="status"
+        >
+          <div className="monitor-scan-status-main">
+            <span className="monitor-scan-pulse" aria-hidden />
+            <div>
+              <strong>
+                {monitorPolling
+                  ? '正在手动扫描'
+                  : monitorStatus?.background?.running
+                    ? '后台正在扫描'
+                    : monitorStatus?.background?.enabled
+                      ? '后台轮询已开启'
+                      : '后台轮询已关闭'}
+              </strong>
+              <span>
+                {monitorStatus?.background?.enabled
+                  ? `扫描间隔 ${fmtInterval(monitorStatus.background.intervalMs)} · 符合条件会自动进入下方跟踪池`
+                  : '可在设置里的定时任务中开启自动轮询'}
+              </span>
+              {monitorStatus?.background && !monitorStatus.background.enabled && (
+                <Link href="/settings#scheduled-tasks" className="monitor-scan-status-link">
+                  去开启
+                </Link>
+              )}
+            </div>
+          </div>
+          <div className="monitor-scan-status-grid">
+            <span>
+              <em>上次扫描</em>
+              <strong>
+                {monitorStatus?.lastRun ? fmtTime(monitorStatus.lastRun.createdAt) : '暂无'}
+              </strong>
+            </span>
+            <span>
+              <em>下次预计</em>
+              <strong>
+                {monitorStatus?.background?.running
+                  ? '本轮完成后'
+                  : fmtCountdown(monitorStatus?.background?.nextRunAt, nowMs)}
+              </strong>
+            </span>
+            <span>
+              <em>最新结果</em>
+              <strong>
+                {monitorStatus?.background?.error
+                  ? '上轮失败'
+                  : monitorStatus?.background?.summary ??
+                    monitorStatus?.lastRun?.summary ??
+                    '等待扫描'}
+              </strong>
+            </span>
+          </div>
+        </div>
+
+        {monitorStatus?.lastRun && (
+          <p className="monitor-last-run">
+            上次 {fmtTime(monitorStatus.lastRun.createdAt)} · 耗时{' '}
+            {fmtDuration(monitorStatus.lastRun.elapsedMs)} · 扫描{' '}
+            {monitorStatus.lastRun.symbolsScanned} 只，新增{' '}
+            {monitorStatus.lastRun.alertCount} 条提醒
+          </p>
+        )}
+        {scanMessage && !error && (
+          <div className="notice" role="status">
+            {scanMessage}
+          </div>
+        )}
+      </section>
 
       <section className="watchlist-workbench-metrics" aria-label="跟踪池概览">
         <Metric label="跟踪标的" value={`${stats.total} 只`} />
@@ -325,6 +582,14 @@ export default function WatchlistPage() {
                         <Link href={`/demo/stock/${item.symbol}`} className="saved-link">
                           图表
                         </Link>
+                        <button
+                          type="button"
+                          className="saved-link saved-link--danger watchlist-workbench-delete"
+                          disabled={deletingId === item.id}
+                          onClick={() => void handleDelete(item)}
+                        >
+                          {deletingId === item.id ? '删除中…' : '删除'}
+                        </button>
                       </div>
                     </td>
                   </tr>

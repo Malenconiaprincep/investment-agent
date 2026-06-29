@@ -8,6 +8,7 @@ import {
 import { purgeExpiredWatchlistItems } from '../watchlist/retention.js';
 import { runMonitorPollManaged } from './engine.js';
 import { purgeExpiredMonitorData } from './store.js';
+import { isScheduledTaskEnabled } from '../schedulers/task-settings.js';
 
 let started = false;
 let timer: NodeJS.Timeout | null = null;
@@ -21,11 +22,9 @@ function parseIntervalMs(): number {
   return 5 * 60_000;
 }
 
-function isEnabled(): boolean {
-  return process.env.MONITOR_BACKGROUND_ENABLED !== '0';
-}
-
 async function tick(intervalMs: number) {
+  if (!isScheduledTaskEnabled('monitor-background')) return;
+
   const now = getBeijingNow();
   const tradeDate = formatTradeDate(now);
 
@@ -83,7 +82,7 @@ async function tick(intervalMs: number) {
 }
 
 export function startMonitorBackgroundWorker() {
-  if (started || !isEnabled()) return;
+  if (started) return;
   started = true;
 
   const intervalMs = parseIntervalMs();
