@@ -94,7 +94,7 @@ export function UserMenu({ user }: UserMenuProps) {
             role="menuitem"
             onClick={() => setOpen(false)}
           >
-            Token 设置
+            设置
           </Link>
           {canManageUsers ? (
             <Link

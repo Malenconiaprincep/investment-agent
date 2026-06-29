@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AppPermission, AppRole } from '@/lib/permissions';
+import type { AppPermission, AppPlan, AppRole } from '@/lib/permissions';
 
 export type AuthUser = {
   username: string;
   label: string;
   role: AppRole;
+  plan: AppPlan;
   permissions: AppPermission[];
 };
 

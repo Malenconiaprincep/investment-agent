@@ -15,6 +15,11 @@ import {
   updateEnvConfig,
   type ConfigurableKey,
 } from './env-config.js';
+import {
+  listScheduledTasks,
+  updateScheduledTask,
+  type ScheduledTaskId,
+} from '../data/schedulers/task-settings.js';
 
 const app = new Hono();
 
@@ -79,6 +84,37 @@ app.patch('/config/keys', async (c) => {
 
   try {
     return c.json(updateEnvConfig(updates));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return jsonError(message, 400);
+  }
+});
+
+app.get('/scheduler/tasks', (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+  return c.json({ tasks: listScheduledTasks() });
+});
+
+app.patch('/scheduler/tasks/:id', async (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+
+  let body: { enabled?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonError('请求体须为 JSON', 400);
+  }
+
+  if (typeof body.enabled !== 'boolean') {
+    return jsonError('enabled 必须为布尔值', 400);
+  }
+
+  try {
+    const tasks = updateScheduledTask(
+      c.req.param('id') as ScheduledTaskId,
+      body.enabled,
+    );
+    return c.json({ tasks });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonError(message, 400);

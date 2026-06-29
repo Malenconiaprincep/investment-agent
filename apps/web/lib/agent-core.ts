@@ -261,3 +261,45 @@ export async function patchAgentCoreEnvKeys(
   }
   return response.json() as Promise<EnvConfigStatus>;
 }
+
+export type ScheduledTaskStatus = {
+  id: string;
+  label: string;
+  description: string;
+  scheduleText: string;
+  enabled: boolean;
+};
+
+export async function fetchAgentCoreScheduledTasks(): Promise<
+  ScheduledTaskStatus[]
+> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(`${baseUrl}/scheduler/tasks`, {
+    headers: buildHeaders('application/json'),
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  const data = (await response.json()) as { tasks?: ScheduledTaskStatus[] };
+  return data.tasks ?? [];
+}
+
+export async function patchAgentCoreScheduledTask(
+  id: string,
+  enabled: boolean,
+): Promise<ScheduledTaskStatus[]> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(
+    `${baseUrl}/scheduler/tasks/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  const data = (await response.json()) as { tasks?: ScheduledTaskStatus[] };
+  return data.tasks ?? [];
+}

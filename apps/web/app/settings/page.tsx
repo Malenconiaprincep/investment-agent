@@ -15,6 +15,7 @@ import {
   PROVIDER_REGIONS,
   type ProviderRegion,
 } from '@/lib/model-providers';
+import type { AppPlan, AppRole } from '@/lib/permissions';
 
 type EnvKeyStatus = { configured: boolean; masked?: string; value?: string };
 
@@ -28,6 +29,21 @@ type TokenConfigStatus = {
   keys: Record<string, EnvKeyStatus>;
   restartRequired?: boolean;
 };
+
+type ScheduledTaskStatus = {
+  id: string;
+  label: string;
+  description: string;
+  scheduleText: string;
+  enabled: boolean;
+};
+
+type SettingsUser = {
+  role: AppRole;
+  plan: AppPlan;
+};
+
+type SettingsTab = 'scheduled' | 'ai';
 
 type OtherKeyField = {
   key: string;
@@ -64,16 +80,50 @@ export default function SettingsPage() {
   const [showOtherKeys, setShowOtherKeys] = useState(false);
   const [region, setRegion] = useState<ProviderRegion>('cn');
   const [providerId, setProviderId] = useState('deepseek');
+  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskStatus[]>([]);
+  const [taskSavingId, setTaskSavingId] = useState<string | null>(null);
+  const [canUseScheduledTasks, setCanUseScheduledTasks] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('ai');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/settings/env');
+      const [res, userRes] = await Promise.all([
+        fetch('/api/settings/env'),
+        fetch('/api/auth/me'),
+      ]);
       const data = (await res.json()) as TokenConfigStatus & { error?: string };
       if (!res.ok) throw new Error(data.error ?? '加载失败');
       setStatus(data);
       setDraft({});
+
+      const userData = (await userRes.json()) as SettingsUser & { error?: string };
+      if (!userRes.ok) throw new Error(userData.error ?? '加载账号信息失败');
+      const nextCanUseScheduledTasks =
+        userData.role === 'admin' ||
+        userData.plan === 'pro' ||
+        userData.plan === 'enterprise';
+      setCanUseScheduledTasks(nextCanUseScheduledTasks);
+      const hash =
+        typeof window === 'undefined' ? '' : window.location.hash.replace('#', '');
+      setActiveTab(
+        nextCanUseScheduledTasks && hash === 'scheduled-tasks'
+          ? 'scheduled'
+          : 'ai',
+      );
+
+      if (nextCanUseScheduledTasks) {
+        const tasksRes = await fetch('/api/settings/scheduled-tasks');
+        const taskData = (await tasksRes.json()) as {
+          tasks?: ScheduledTaskStatus[];
+          error?: string;
+        };
+        if (!tasksRes.ok) throw new Error(taskData.error ?? '加载定时任务失败');
+        setScheduledTasks(taskData.tasks ?? []);
+      } else {
+        setScheduledTasks([]);
+      }
 
       const model = data.aiModel?.trim() || DEFAULT_MODEL_ID;
       const provider = getProviderForModel(model);
@@ -92,6 +142,12 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!canUseScheduledTasks && activeTab === 'scheduled') {
+      setActiveTab('ai');
+    }
+  }, [activeTab, canUseScheduledTasks]);
 
   useEffect(() => {
     void load();
@@ -154,6 +210,13 @@ export default function SettingsPage() {
     }
   }
 
+  function selectTab(tab: SettingsTab) {
+    if (tab === 'scheduled' && !canUseScheduledTasks) return;
+    setActiveTab(tab);
+    const hash = tab === 'scheduled' ? '#scheduled-tasks' : '#ai-model';
+    window.history.replaceState(null, '', `${window.location.pathname}${hash}`);
+  }
+
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -197,6 +260,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function toggleScheduledTask(task: ScheduledTaskStatus) {
+    setTaskSavingId(task.id);
+    setError(null);
+    try {
+      const res = await fetch('/api/settings/scheduled-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: task.id, enabled: !task.enabled }),
+      });
+      const data = (await res.json()) as {
+        tasks?: ScheduledTaskStatus[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? '保存定时任务失败');
+      setScheduledTasks(data.tasks ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存定时任务失败');
+    } finally {
+      setTaskSavingId(null);
+    }
+  }
+
   const requiredApiKeyEnv = activeProvider?.apiKeyEnv ?? status?.requiredApiKeyEnv;
   const missingAiKey =
     status && requiredApiKeyEnv && !status.keys[requiredApiKeyEnv]?.configured;
@@ -215,8 +300,8 @@ export default function SettingsPage() {
   return (
     <main className="page page--list">
       <PageHeader
-        title="Token 设置"
-        description="选择 AI 提供商并填写对应 Key。保存后立即同步，下次 AI 调用生效。"
+        title="设置"
+        description="管理本机定时任务与 AI 模型配置。"
       />
 
       <div className="list-stack">
@@ -241,7 +326,67 @@ export default function SettingsPage() {
               </p>
             </section>
 
-            {missingRequired && (
+            <div className={styles.settingsTabs} role="tablist">
+              {canUseScheduledTasks && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'scheduled'}
+                  className={`${styles.settingsTab}${
+                    activeTab === 'scheduled' ? ` ${styles.settingsTabActive}` : ''
+                  }`}
+                  onClick={() => selectTab('scheduled')}
+                >
+                  定时任务
+                </button>
+              )}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'ai'}
+                className={`${styles.settingsTab}${
+                  activeTab === 'ai' ? ` ${styles.settingsTabActive}` : ''
+                }`}
+                onClick={() => selectTab('ai')}
+              >
+                AI 模型
+              </button>
+            </div>
+
+            {canUseScheduledTasks && activeTab === 'scheduled' && (
+              <section
+                id="scheduled-tasks"
+                className="pane-card monitor-settings-section"
+              >
+                <h2 className="section-title">定时任务</h2>
+                <div className="settings-env-grid">
+                  {scheduledTasks.map((task) => (
+                    <label key={task.id} className="settings-env-field">
+                      <span className="settings-env-label">
+                        {task.label}
+                        <span className="settings-env-badge">
+                          {task.scheduleText}
+                        </span>
+                      </span>
+                      <span className="muted settings-env-hint">
+                        {task.description}
+                      </span>
+                      <div className={styles.switchRow}>
+                        <input
+                          type="checkbox"
+                          checked={task.enabled}
+                          disabled={taskSavingId === task.id}
+                          onChange={() => void toggleScheduledTask(task)}
+                        />
+                        <span>{task.enabled ? '已开启' : '已关闭'}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'ai' && missingRequired && (
               <div className="error">
                 仍有必填 Token 未配置，请先补全后再使用智能选股 / AI 分析。
                 {missingAiKey && activeProvider && (
@@ -253,7 +398,8 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <form onSubmit={(e) => void handleSave(e)}>
+            {activeTab === 'ai' && (
+            <form id="ai-model" onSubmit={(e) => void handleSave(e)}>
               <section className="pane-card monitor-settings-section">
                 <h2 className="section-title">AI 模型</h2>
 
@@ -504,6 +650,7 @@ export default function SettingsPage() {
                 )}
               </section>
             </form>
+            )}
           </>
         )}
       </div>

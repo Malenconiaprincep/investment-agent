@@ -10,6 +10,11 @@ import { isFeishuNotifyEnabled } from '../notify/feishu.js';
 import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
+import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
+import {
+  isScheduledTaskEnabled,
+  type ScheduledTaskId,
+} from './task-settings.js';
 import {
   ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT,
   formatTradeDate,
@@ -22,7 +27,7 @@ import {
 } from '../paper/trading-calendar.js';
 
 type DailyTaskDef = {
-  id: string;
+  id: ScheduledTaskId;
   label: string;
   hour: number;
   minute: number;
@@ -49,6 +54,43 @@ function isDue(task: DailyTaskDef, now: Date): boolean {
 }
 
 const DAILY_TASKS: DailyTaskDef[] = [
+  {
+    id: 'screen-morning',
+    label: '智能选股',
+    hour: 9,
+    minute: 25,
+    run: async () => {
+      const outcome: {
+        query?: string;
+        passed?: boolean;
+        sessionId?: string;
+        sectorCount?: number;
+        candidateCount?: number;
+        elapsedMs?: number;
+      } = {};
+
+      await runSectorScreenStream(
+        { maxCandidates: 10, excludeSt: true, lookbackDays: 14 },
+        (event) => {
+          if (event.type === 'done') {
+            outcome.query = event.query;
+            outcome.passed = event.passed;
+            outcome.sessionId = event.sessionId;
+            outcome.sectorCount = event.sectors.length;
+            outcome.candidateCount = event.candidates.length;
+            outcome.elapsedMs = event.elapsedMs;
+          }
+        },
+      );
+
+      return {
+        skipped: outcome.passed === undefined,
+        summary: outcome.sessionId
+          ? `记录 ${outcome.sessionId} · 候选 ${outcome.candidateCount ?? 0} 只`
+          : undefined,
+      };
+    },
+  },
   {
     id: 'etf-tail-pick',
     label: 'ETF 尾盘推荐',
@@ -78,6 +120,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
 ];
 
 async function runStockIntradayMonitor(now = getBeijingNow()) {
+  if (!isScheduledTaskEnabled('stock-intraday-monitor')) return;
   if (!isTradingSession(now)) return;
 
   const intervalMs = getStockIntradayMonitorIntervalMs();
@@ -117,6 +160,7 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
 }
 
 async function runEtfPaperMonitor(now = getBeijingNow()) {
+  if (!isScheduledTaskEnabled('etf-paper-monitor')) return;
   if (!isTradingSession(now)) return;
 
   const intervalMs = getEtfPaperMonitorIntervalMs();
@@ -158,6 +202,7 @@ async function runDueTasks(now = getBeijingNow()) {
   for (const task of DAILY_TASKS) {
     const key = taskKey(task.id, tradeDate);
     if (completedKeys.has(key) || !isDue(task, now)) continue;
+    if (!isScheduledTaskEnabled(task.id)) continue;
 
     completedKeys.add(key);
     try {
@@ -193,6 +238,7 @@ export function startDailyTasksBackgroundWorker() {
     getStockIntradayMonitorIntervalMs() / 60_000 ||
     STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT;
   const schedule = [
+    `09:25 智能选股`,
     `14:00 ETF 尾盘推荐`,
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,

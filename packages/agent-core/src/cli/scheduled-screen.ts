@@ -4,15 +4,27 @@ import { runSectorScreenStream } from '../api/run-sector-screen-stream.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '../mastra/config/paths.js';
+import { isScheduledTaskEnabled } from '../data/schedulers/task-settings.js';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 
-/** 每个交易日 15:30 自动选股示例：
- * 30 15 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule >> /tmp/screen-cron.log 2>&1
+/** 每个交易日 09:25 自动选股示例：
+ * 25 9 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule >> /tmp/screen-cron.log 2>&1
  */
 async function main() {
   mkdirSync(DATA_DIR, { recursive: true });
   const startedAt = new Date().toISOString();
+
+  if (!isScheduledTaskEnabled('screen-morning')) {
+    const line = JSON.stringify({
+      ranAt: startedAt,
+      skipped: true,
+      reason: '智能选股定时任务已关闭',
+    });
+    appendFileSync(LOG_PATH, `${line}\n`, 'utf-8');
+    process.stdout.write(line);
+    return;
+  }
 
   const outcome: {
     query?: string;
