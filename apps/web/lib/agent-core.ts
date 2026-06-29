@@ -152,6 +152,10 @@ export async function runAgentCorePaperJson(args: string[]): Promise<string> {
   return callAgentCoreCli('paper', args);
 }
 
+export async function runAgentCoreNotifyJson(args: string[]): Promise<string> {
+  return callAgentCoreCli('notify', args);
+}
+
 export async function runAgentCoreEtfJson(args: string[]): Promise<string> {
   return callAgentCoreCli('etf', args);
 }

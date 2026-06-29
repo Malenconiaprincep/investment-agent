@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { resolveDefaultTabPath } from '@/lib/nav-items';
 
 export type WorkspaceTab = {
   id: string;
@@ -17,10 +18,14 @@ export type WorkspaceTab = {
 };
 
 type StoredTabs = {
+  version?: number;
   enabled: boolean;
   tabs: WorkspaceTab[];
   activeTabId: string;
 };
+
+const STORAGE_VERSION = 3;
+const DEFAULT_TAB_MODE = true;
 
 type LegacySplitStored = {
   enabled: boolean;
@@ -44,6 +49,11 @@ type WorkspaceTabsContextValue = {
 const STORAGE_KEY = 'investment-agent-workspace-tabs';
 const LEGACY_STORAGE_KEY = 'investment-agent-workspace-split';
 
+function isEmbedRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('embed') === '1';
+}
+
 const WorkspaceTabsContext = createContext<WorkspaceTabsContextValue | null>(
   null,
 );
@@ -53,7 +63,14 @@ function createTabId() {
 }
 
 export function normalizeTabPath(path: string): string {
-  return path.split('?')[0] || '/research';
+  return resolveDefaultTabPath(path.split('?')[0] || '/');
+}
+
+function normalizeStoredTabs(tabs: WorkspaceTab[]): WorkspaceTab[] {
+  return tabs.map((tab) => ({
+    ...tab,
+    path: normalizeTabPath(tab.path),
+  }));
 }
 
 function createTab(path: string): WorkspaceTab {
@@ -69,7 +86,19 @@ function readStored(): StoredTabs | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredTabs | LegacySplitStored;
     if ('tabs' in parsed && Array.isArray(parsed.tabs)) {
-      return parsed;
+      const version = parsed.version ?? 1;
+      if (version < STORAGE_VERSION) {
+        return {
+          ...parsed,
+          enabled: DEFAULT_TAB_MODE,
+          tabs: normalizeStoredTabs(parsed.tabs),
+          version: STORAGE_VERSION,
+        };
+      }
+      return {
+        ...parsed,
+        tabs: normalizeStoredTabs(parsed.tabs),
+      };
     }
     if ('leftPath' in parsed && parsed.enabled) {
       const left = createTab(parsed.leftPath);
@@ -93,9 +122,12 @@ function readStored(): StoredTabs | null {
   }
 }
 
-function writeStored(value: StoredTabs) {
+function writeStored(value: Omit<StoredTabs, 'version'>) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...value, version: STORAGE_VERSION }),
+    );
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // ignore quota errors
@@ -105,10 +137,17 @@ function writeStored(value: StoredTabs) {
 export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [enabled, setEnabled] = useState(false);
-  const [tabs, setTabs] = useState<WorkspaceTab[]>([createTab('/research')]);
+  const [enabled, setEnabled] = useState(DEFAULT_TAB_MODE);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>(() => [
+    createTab(resolveDefaultTabPath(pathname)),
+  ]);
   const [activeTabId, setActiveTabId] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [isEmbed, setIsEmbed] = useState(false);
+
+  useEffect(() => {
+    setIsEmbed(isEmbedRoute());
+  }, []);
 
   useEffect(() => {
     const stored = readStored();
@@ -120,6 +159,11 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
           stored.activeTabId || stored.tabs[0]?.id || '',
         );
       }
+    } else {
+      const initial = createTab(resolveDefaultTabPath(pathname));
+      setEnabled(DEFAULT_TAB_MODE);
+      setTabs([initial]);
+      setActiveTabId(initial.id);
     }
     setHydrated(true);
   }, []);
@@ -131,16 +175,16 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
   }, [pathname, enabled, hydrated]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isEmbed) return;
     writeStored({ enabled, tabs, activeTabId });
-  }, [enabled, tabs, activeTabId, hydrated]);
+  }, [enabled, tabs, activeTabId, hydrated, isEmbed]);
 
   useEffect(() => {
-    document.body.classList.toggle('tab-mode', enabled);
+    document.body.classList.toggle('tab-mode', enabled && !isEmbed);
     return () => {
       document.body.classList.remove('tab-mode');
     };
-  }, [enabled]);
+  }, [enabled, isEmbed]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
@@ -154,7 +198,7 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
         router.push(target);
         return false;
       }
-      const initial = createTab(pathname);
+      const initial = createTab(resolveDefaultTabPath(pathname));
       setTabs([initial]);
       setActiveTabId(initial.id);
       return true;

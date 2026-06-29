@@ -52,14 +52,20 @@ export async function dispatchPaper(args: string[]): Promise<string> {
 
   if (command === 'stock-auto-run') {
     const { runStockPaperAutoPipeline } = await import('../data/paper/auto-pipeline.js');
+    const { notifyStockPaper } = await import('../data/notify/feishu-daily.js');
     const force = args.includes('--force');
-    return JSON.stringify(await runStockPaperAutoPipeline({ force }));
+    const result = await runStockPaperAutoPipeline({ force });
+    await notifyStockPaper(result);
+    return JSON.stringify(result);
   }
 
   if (command === 'etf-auto-run') {
     const { runEtfPaperAutoPipeline } = await import('../data/paper/etf-paper-pipeline.js');
+    const { notifyEtfPaperMonitor } = await import('../data/notify/feishu-daily.js');
     const force = args.includes('--force');
-    return JSON.stringify(await runEtfPaperAutoPipeline({ force }));
+    const result = await runEtfPaperAutoPipeline({ force });
+    await notifyEtfPaperMonitor(result);
+    return JSON.stringify(result);
   }
 
   if (command === 'fix-etf-probe') {

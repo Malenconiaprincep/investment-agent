@@ -28,7 +28,12 @@ body.embed-mode .page--workspace {
 }
 
 body.embed-mode {
+  overflow-y: auto;
   scrollbar-color: var(--border-strong) var(--bg);
+}
+
+body.embed-mode .app-shell {
+  overflow: visible;
 }
 
 body.embed-mode ::-webkit-scrollbar {

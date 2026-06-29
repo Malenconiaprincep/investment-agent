@@ -213,6 +213,11 @@ const adminTokenKeys = [
   'MISTRAL_API_KEY',
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
+  'FEISHU_APP_ID',
+  'FEISHU_APP_SECRET',
+  'FEISHU_CHAT_ID',
+  'FEISHU_WEBHOOK_URL',
+  'FEISHU_WEBHOOK_SECRET',
 ];
 const agentEnvPath = path.join(repoRoot, 'packages/agent-core/.env');
 const adminDefaultsPath = path.join(desktopRoot, 'templates/admin-defaults.env');

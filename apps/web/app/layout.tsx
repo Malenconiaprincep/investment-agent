@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { IBM_Plex_Sans, Noto_Serif_SC } from 'next/font/google';
 import { AppShell } from '@/components/AppShell';
 import { EmbedMode } from '@/components/EmbedMode';
@@ -38,7 +39,9 @@ export default function RootLayout({
         <WatchlistPanelProvider>
           <WorkspaceTabsProvider>
             <EmbedMode />
-            <SiteNav />
+            <Suspense fallback={null}>
+              <SiteNav />
+            </Suspense>
             <AppShell>{children}</AppShell>
           </WorkspaceTabsProvider>
         </WatchlistPanelProvider>

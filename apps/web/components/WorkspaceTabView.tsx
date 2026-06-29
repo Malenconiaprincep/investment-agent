@@ -10,8 +10,9 @@ function embedSrc(path: string) {
 }
 
 export function WorkspaceTabBar() {
-  const { enabled, tabs, activeTabId, activateTab, closeTab, openNewTab } =
+  const { enabled, tabs, activeTabId, activeTab, activateTab, closeTab, openNewTab } =
     useWorkspaceTabs();
+  const currentTabId = activeTab?.id ?? activeTabId;
   const { user } = useAuthUser();
   const newTabPath = user
     ? defaultNavPath(user.permissions, user.role)
@@ -24,7 +25,7 @@ export function WorkspaceTabBar() {
       <div className={styles.barInner}>
         <div className={styles.tabList} role="tablist" aria-label="工作区 Tab">
           {tabs.map((tab) => {
-            const active = tab.id === activeTabId;
+            const active = tab.id === currentTabId;
             return (
               <div
                 key={tab.id}
@@ -69,12 +70,13 @@ export function WorkspaceTabBar() {
 }
 
 export function WorkspaceTabPanels() {
-  const { tabs, activeTabId } = useWorkspaceTabs();
+  const { tabs, activeTabId, activeTab } = useWorkspaceTabs();
+  const currentTabId = activeTab?.id ?? activeTabId;
 
   return (
     <div className={styles.panels}>
       {tabs.map((tab) => {
-        const active = tab.id === activeTabId;
+        const active = tab.id === currentTabId;
         return (
           <div
             key={tab.id}

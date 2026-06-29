@@ -54,6 +54,28 @@ function ensureSessionSecret(dataDir) {
   return secret;
 }
 
+function readPersistedPorts(dataDir) {
+  const portsPath = path.join(dataDir, 'service-ports.json');
+  if (!existsSync(portsPath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(portsPath, 'utf-8'));
+    const agentPort = Number(parsed?.agentPort);
+    const webPort = Number(parsed?.webPort);
+    if (!Number.isInteger(agentPort) || !Number.isInteger(webPort)) return null;
+    return { agentPort, webPort };
+  } catch {
+    return null;
+  }
+}
+
+function persistPorts(dataDir, nextAgentPort, nextWebPort) {
+  writeFileSync(
+    path.join(dataDir, 'service-ports.json'),
+    JSON.stringify({ agentPort: nextAgentPort, webPort: nextWebPort }),
+    'utf-8',
+  );
+}
+
 function shouldOpenDevTools() {
   return (
     isDev ||
@@ -199,15 +221,36 @@ async function waitForHealth(url, timeoutMs = 120_000) {
   throw new Error(`服务启动超时: ${url}`);
 }
 
+async function servicesHealthy() {
+  if (!webChild || webChild.killed || !agentChild || agentChild.killed) {
+    return false;
+  }
+
+  try {
+    const [agentOk, webOk] = await Promise.all([
+      fetch(`http://127.0.0.1:${agentPort}/health`)
+        .then((response) => response.ok)
+        .catch(() => false),
+      fetch(`http://127.0.0.1:${webPort}/`)
+        .then((response) => response.ok || response.status === 307 || response.status === 308)
+        .catch(() => false),
+    ]);
+    return agentOk && webOk;
+  } catch {
+    return false;
+  }
+}
+
 async function startServices() {
   const userData = app.getPath('userData');
   const dataDir = path.join(userData, 'data');
   const activeEnvPath = ensureActiveEnvFile(dataDir);
   const sessionSecret = ensureSessionSecret(dataDir);
   const resourcesPath = resolveResourcesPath();
+  const persistedPorts = readPersistedPorts(dataDir);
 
-  agentPort = await getFreePort(4010);
-  webPort = await getFreePort(3010);
+  agentPort = await getFreePort(persistedPorts?.agentPort ?? 4010);
+  webPort = await getFreePort(persistedPorts?.webPort ?? 3010);
 
   const agentCoreRoot = resolvePackDir('agent-core');
   const webRoot = resolvePackDir('web');
@@ -286,6 +329,7 @@ async function startServices() {
   );
 
   await waitForHealth(`http://127.0.0.1:${webPort}/login`);
+  persistPorts(dataDir, agentPort, webPort);
 }
 
 function stopServices() {
@@ -354,7 +398,7 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${webPort}/login`);
+  mainWindow.loadURL(`http://127.0.0.1:${webPort}/`);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isLocalAppUrl(url)) {
@@ -378,7 +422,15 @@ function createWindow() {
 
 async function boot() {
   try {
-    await startServices();
+    if (!(await servicesHealthy())) {
+      stopServices();
+      await startServices();
+    }
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      return;
+    }
     createWindow();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -396,10 +448,7 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    void boot();
   });
 
   app.whenReady().then(() => {

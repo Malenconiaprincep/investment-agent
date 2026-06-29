@@ -62,11 +62,23 @@ export function filterNavItems(
   );
 }
 
+export function primaryNavPath(): string {
+  return NAV_ITEMS[0]?.href ?? '/research';
+}
+
 export function defaultNavPath(
   permissions: AppPermission[],
   role?: AppRole,
 ): string {
-  return filterNavItems(permissions, role)[0]?.href ?? '/research';
+  return filterNavItems(permissions, role)[0]?.href ?? primaryNavPath();
+}
+
+export function resolveDefaultTabPath(pathname: string): string {
+  const normalized = pathname.split('?')[0] || '/';
+  if (normalized === '/') {
+    return primaryNavPath();
+  }
+  return normalized;
 }
 
 export function navLabelForPath(pathname: string): string {

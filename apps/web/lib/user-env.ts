@@ -17,7 +17,40 @@ export const TOKEN_KEYS = [
   'IWENCAI_BASE_URL',
 ] as const;
 
+export const FEISHU_NOTIFY_KEYS = [
+  'FEISHU_APP_ID',
+  'FEISHU_APP_SECRET',
+  'FEISHU_CHAT_ID',
+  'FEISHU_WEBHOOK_URL',
+  'FEISHU_WEBHOOK_SECRET',
+] as const;
+
+export const FEISHU_TOGGLE_KEYS = [
+  'FEISHU_NOTIFY_ENABLED',
+  'FEISHU_NOTIFY_ETF_MONITOR',
+  'FEISHU_NOTIFY_MONITOR',
+  'FEISHU_NOTIFY_STOCK_INTRADAY',
+] as const;
+
+export const SYNCED_ENV_KEYS = [
+  ...TOKEN_KEYS,
+  ...FEISHU_NOTIFY_KEYS,
+  ...FEISHU_TOGGLE_KEYS,
+] as const;
+
 export type TokenKey = (typeof TOKEN_KEYS)[number];
+export type FeishuNotifyKey = (typeof FEISHU_NOTIFY_KEYS)[number];
+export type FeishuToggleKey = (typeof FEISHU_TOGGLE_KEYS)[number];
+export type SyncedEnvKey = (typeof SYNCED_ENV_KEYS)[number];
+
+export type FeishuConfigStatus = {
+  configured: boolean;
+  mode: 'app' | 'webhook' | null;
+  notifyEnabled: boolean;
+  etfMonitorPushAll: boolean;
+  monitorRealtime: boolean;
+  stockIntraday: boolean;
+};
 
 export type TokenKeyStatus = {
   configured: boolean;
@@ -32,7 +65,8 @@ export type TokenConfigStatus = {
   envPath: string;
   aiModel: string;
   requiredApiKeyEnv: string;
-  keys: Record<TokenKey, TokenKeyStatus>;
+  keys: Record<SyncedEnvKey, TokenKeyStatus>;
+  feishu: FeishuConfigStatus;
   restartRequired: boolean;
 };
 
@@ -95,6 +129,24 @@ function serializeEnvFile(values: Record<string, string>): string {
     if (value) lines.push(`${key}=${value}`);
   }
 
+  const feishuKeys = FEISHU_NOTIFY_KEYS.filter((key) => values[key]?.trim());
+  if (feishuKeys.length > 0) {
+    lines.push('', '# 飞书推送');
+    for (const key of FEISHU_NOTIFY_KEYS) {
+      const value = values[key]?.trim();
+      if (value) lines.push(`${key}=${value}`);
+    }
+  }
+
+  const toggleKeys = FEISHU_TOGGLE_KEYS.filter((key) => values[key]?.trim());
+  if (toggleKeys.length > 0) {
+    lines.push('', '# 飞书推送开关');
+    for (const key of FEISHU_TOGGLE_KEYS) {
+      const value = values[key]?.trim();
+      if (value) lines.push(`${key}=${value}`);
+    }
+  }
+
   return `${lines.join('\n').trim()}\n`;
 }
 
@@ -132,7 +184,7 @@ function loadAdminDefaultTokens(): Record<string, string> {
     if (!existsSync(candidate)) continue;
     const parsed = parseEnvFile(candidate);
     const picked: Record<string, string> = {};
-    for (const key of TOKEN_KEYS) {
+    for (const key of SYNCED_ENV_KEYS) {
       if (parsed[key]?.trim()) picked[key] = parsed[key].trim();
     }
     if (Object.keys(picked).length > 0) return picked;
@@ -164,7 +216,7 @@ function writeActiveEnv(values: Record<string, string>) {
 
 async function syncTokensToAgentCore(values: Record<string, string>) {
   const updates: Record<string, string | null> = {};
-  for (const key of TOKEN_KEYS) {
+  for (const key of SYNCED_ENV_KEYS) {
     updates[key] = values[key]?.trim() || null;
   }
   await patchAgentCoreEnvKeys(updates);
@@ -175,17 +227,92 @@ export async function activateUserEnv(
   presetTokens: boolean,
 ): Promise<void> {
   const values = ensureUserEnvSeeded(username, presetTokens);
+  if (presetTokens) {
+    const defaults = loadAdminDefaultTokens();
+    let changed = false;
+    for (const key of SYNCED_ENV_KEYS) {
+      if (!values[key]?.trim() && defaults[key]?.trim()) {
+        values[key] = defaults[key].trim();
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeUserEnv(username, values);
+    }
+  }
   writeActiveEnv(values);
   await syncTokensToAgentCore(values);
 }
 
-function buildKeyStatus(key: TokenKey, value: string): TokenKeyStatus {
+function buildKeyStatus(key: SyncedEnvKey, value: string): TokenKeyStatus {
   const trimmed = value.trim();
-  if (!trimmed) return { configured: false };
   if (key === AI_MODEL_ENV) {
+    return trimmed
+      ? { configured: true, value: trimmed }
+      : { configured: false };
+  }
+  if ((FEISHU_TOGGLE_KEYS as readonly string[]).includes(key)) {
+    const effective = resolveFeishuToggleValue(key as FeishuToggleKey, trimmed);
+    return {
+      configured: effective === '1',
+      value: effective,
+    };
+  }
+  if (!trimmed) return { configured: false };
+  if (key === 'IWENCAI_BASE_URL') {
     return { configured: true, value: trimmed };
   }
   return { configured: true, masked: maskSecret(trimmed) };
+}
+
+const FEISHU_TOGGLE_DEFAULTS: Record<FeishuToggleKey, '0' | '1'> = {
+  FEISHU_NOTIFY_ENABLED: '1',
+  FEISHU_NOTIFY_ETF_MONITOR: '0',
+  FEISHU_NOTIFY_MONITOR: '1',
+  FEISHU_NOTIFY_STOCK_INTRADAY: '1',
+};
+
+function resolveFeishuToggleValue(
+  key: FeishuToggleKey,
+  value: string,
+): '0' | '1' {
+  if (value === '0' || value === '1') return value;
+  return FEISHU_TOGGLE_DEFAULTS[key];
+}
+
+export function getFeishuConfigStatus(
+  values: Record<string, string>,
+): FeishuConfigStatus {
+  const appId = values.FEISHU_APP_ID?.trim();
+  const appSecret = values.FEISHU_APP_SECRET?.trim();
+  const webhook = values.FEISHU_WEBHOOK_URL?.trim();
+  const mode =
+    appId && appSecret ? 'app' : webhook ? 'webhook' : null;
+
+  return {
+    configured: mode != null,
+    mode,
+    notifyEnabled:
+      resolveFeishuToggleValue(
+        'FEISHU_NOTIFY_ENABLED',
+        values.FEISHU_NOTIFY_ENABLED?.trim() ?? '',
+      ) === '1',
+    etfMonitorPushAll:
+      resolveFeishuToggleValue(
+        'FEISHU_NOTIFY_ETF_MONITOR',
+        values.FEISHU_NOTIFY_ETF_MONITOR?.trim() ?? '',
+      ) === '1',
+    monitorRealtime:
+      resolveFeishuToggleValue(
+        'FEISHU_NOTIFY_MONITOR',
+        values.FEISHU_NOTIFY_MONITOR?.trim() ?? '',
+      ) === '1',
+    stockIntraday:
+      resolveFeishuToggleValue(
+        'FEISHU_NOTIFY_STOCK_INTRADAY',
+        values.FEISHU_NOTIFY_STOCK_INTRADAY?.trim() ?? '',
+      ) === '1',
+  };
 }
 
 export function getTokenConfigStatus(input: {
@@ -196,7 +323,7 @@ export function getTokenConfigStatus(input: {
   const values = ensureUserEnvSeeded(input.username, input.presetTokens);
   const keys = {} as TokenConfigStatus['keys'];
 
-  for (const key of TOKEN_KEYS) {
+  for (const key of SYNCED_ENV_KEYS) {
     keys[key] = buildKeyStatus(key, values[key]?.trim() ?? '');
   }
 
@@ -210,6 +337,7 @@ export function getTokenConfigStatus(input: {
     aiModel,
     requiredApiKeyEnv: getApiKeyEnvForModel(aiModel),
     keys,
+    feishu: getFeishuConfigStatus(values),
     restartRequired: false,
   };
 }
@@ -218,11 +346,11 @@ export async function updateUserTokenConfig(
   username: string,
   presetTokens: boolean,
   userLabel: string,
-  updates: Partial<Record<TokenKey, string | null>>,
+  updates: Partial<Record<SyncedEnvKey, string | null>>,
 ): Promise<TokenConfigStatus> {
   const current = ensureUserEnvSeeded(username, presetTokens);
 
-  for (const key of TOKEN_KEYS) {
+  for (const key of SYNCED_ENV_KEYS) {
     if (!(key in updates)) continue;
     const next = updates[key];
     if (next === null || next === undefined || !next.trim()) {

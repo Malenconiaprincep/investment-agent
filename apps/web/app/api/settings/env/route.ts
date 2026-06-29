@@ -3,7 +3,7 @@ import { requireSessionUsername, getMarketUserProfile } from '@/lib/session';
 import {
   getTokenConfigStatus,
   updateUserTokenConfig,
-  type TokenKey,
+  type SyncedEnvKey,
 } from '@/lib/user-env';
 
 export const runtime = 'nodejs';
@@ -37,7 +37,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const body = (await request.json()) as Partial<Record<TokenKey, string | null>>;
+    const body = (await request.json()) as Partial<
+      Record<SyncedEnvKey, string | null>
+    >;
     const status = await updateUserTokenConfig(
       profile.username,
       profile.presetTokens,

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { AuthHeader } from '@/components/AuthHeader';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
 import { WorkspaceTabBar } from '@/components/WorkspaceTabView';
@@ -31,6 +31,7 @@ function WatchlistIcon() {
 
 export function SiteNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { toggle, open, itemCount } = useWatchlistPanel();
   const { user } = useAuthUser();
   const {
@@ -39,6 +40,10 @@ export function SiteNav() {
     openOrSwitchTab,
     openNewTab,
   } = useWorkspaceTabs();
+
+  if (searchParams.get('embed') === '1') {
+    return null;
+  }
 
   if (isAuthPath(pathname)) {
     return <AuthHeader />;

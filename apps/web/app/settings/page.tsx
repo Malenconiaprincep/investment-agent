@@ -15,6 +15,11 @@ import {
   PROVIDER_REGIONS,
   type ProviderRegion,
 } from '@/lib/model-providers';
+import {
+  FEISHU_NOTIFY_KEYS,
+  FEISHU_TOGGLE_KEYS,
+  type FeishuToggleKey,
+} from '@/lib/user-env';
 import type { AppPlan, AppRole } from '@/lib/permissions';
 
 type EnvKeyStatus = { configured: boolean; masked?: string; value?: string };
@@ -27,6 +32,14 @@ type TokenConfigStatus = {
   aiModel: string;
   requiredApiKeyEnv: string;
   keys: Record<string, EnvKeyStatus>;
+  feishu: {
+    configured: boolean;
+    mode: 'app' | 'webhook' | null;
+    notifyEnabled: boolean;
+    etfMonitorPushAll: boolean;
+    monitorRealtime: boolean;
+    stockIntraday: boolean;
+  };
   restartRequired?: boolean;
 };
 
@@ -43,7 +56,78 @@ type SettingsUser = {
   plan: AppPlan;
 };
 
-type SettingsTab = 'scheduled' | 'ai';
+type SettingsTab = 'scheduled' | 'ai' | 'notify';
+
+type FeishuKeyField = {
+  key: (typeof FEISHU_NOTIFY_KEYS)[number];
+  label: string;
+  placeholder: string;
+  hint?: string;
+  secret?: boolean;
+};
+
+const FEISHU_APP_FIELDS: FeishuKeyField[] = [
+  {
+    key: 'FEISHU_APP_ID',
+    label: 'App ID',
+    placeholder: 'cli_xxxxxxxx',
+    hint: 'open.feishu.cn 创建企业自建应用',
+  },
+  {
+    key: 'FEISHU_APP_SECRET',
+    label: 'App Secret',
+    placeholder: '应用密钥',
+    secret: true,
+  },
+  {
+    key: 'FEISHU_CHAT_ID',
+    label: '群 Chat ID',
+    placeholder: 'oc_xxxxxxxx',
+    hint: '机器人所在群的 chat_id',
+  },
+];
+
+const FEISHU_WEBHOOK_FIELDS: FeishuKeyField[] = [
+  {
+    key: 'FEISHU_WEBHOOK_URL',
+    label: 'Webhook 地址',
+    placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+  },
+  {
+    key: 'FEISHU_WEBHOOK_SECRET',
+    label: 'Webhook 签名密钥',
+    placeholder: '可选',
+    secret: true,
+    hint: '群机器人安全设置里可查看',
+  },
+];
+
+const FEISHU_TOGGLE_FIELDS: Array<{
+  key: FeishuToggleKey;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: 'FEISHU_NOTIFY_ENABLED',
+    label: '启用飞书推送',
+    hint: '关闭后所有飞书通知都不会发送',
+  },
+  {
+    key: 'FEISHU_NOTIFY_ETF_MONITOR',
+    label: 'ETF 模拟盘每次监听都推送',
+    hint: '默认仅在有成交/止损时推送',
+  },
+  {
+    key: 'FEISHU_NOTIFY_MONITOR',
+    label: '消息雷达实时推送',
+    hint: '新闻催化、自动买入候选、模拟盘成交',
+  },
+  {
+    key: 'FEISHU_NOTIFY_STOCK_INTRADAY',
+    label: '股票盘中信号推送',
+    hint: '交易时段扫描红钻+动量达标标的',
+  },
+];
 
 type OtherKeyField = {
   key: string;
@@ -84,6 +168,8 @@ export default function SettingsPage() {
   const [taskSavingId, setTaskSavingId] = useState<string | null>(null);
   const [canUseScheduledTasks, setCanUseScheduledTasks] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('ai');
+  const [notifyTesting, setNotifyTesting] = useState(false);
+  const [notifyTestMessage, setNotifyTestMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,7 +196,9 @@ export default function SettingsPage() {
       setActiveTab(
         nextCanUseScheduledTasks && hash === 'scheduled-tasks'
           ? 'scheduled'
-          : 'ai',
+          : hash === 'notify'
+            ? 'notify'
+            : 'ai',
       );
 
       if (nextCanUseScheduledTasks) {
@@ -172,7 +260,19 @@ export default function SettingsPage() {
   function fieldValue(key: string): string {
     if (key in draft) return draft[key] ?? '';
     if (key === AI_MODEL_ENV) return status?.keys[AI_MODEL_ENV]?.value ?? '';
+    if (key === 'IWENCAI_BASE_URL') {
+      return status?.keys.IWENCAI_BASE_URL?.value ?? '';
+    }
     return '';
+  }
+
+  function toggleChecked(key: FeishuToggleKey): boolean {
+    if (key in draft) return draft[key] === '1';
+    return status?.keys[key]?.value === '1';
+  }
+
+  function setToggleDraft(key: FeishuToggleKey, enabled: boolean) {
+    setDraft((prev) => ({ ...prev, [key]: enabled ? '1' : '0' }));
   }
 
   function secretPlaceholder(key: string, fallback: string): string {
@@ -213,24 +313,21 @@ export default function SettingsPage() {
   function selectTab(tab: SettingsTab) {
     if (tab === 'scheduled' && !canUseScheduledTasks) return;
     setActiveTab(tab);
-    const hash = tab === 'scheduled' ? '#scheduled-tasks' : '#ai-model';
+    const hash =
+      tab === 'scheduled'
+        ? '#scheduled-tasks'
+        : tab === 'notify'
+          ? '#notify'
+          : '#ai-model';
     window.history.replaceState(null, '', `${window.location.pathname}${hash}`);
   }
 
-  async function handleSave(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSaved(false);
-
-    const allKeys = [
-      AI_MODEL_ENV,
-      ...MODEL_PROVIDERS.map((p) => p.apiKeyEnv),
-      ...OTHER_KEY_FIELDS.map((f) => f.key),
-    ];
-
+  async function saveEnvUpdates(
+    keys: string[],
+    successMessage: string,
+  ): Promise<boolean> {
     const updates: Record<string, string | null> = {};
-    for (const key of allKeys) {
+    for (const key of keys) {
       if (!(key in draft)) continue;
       const value = draft[key]?.trim() ?? '';
       updates[key] = value || null;
@@ -238,25 +335,78 @@ export default function SettingsPage() {
 
     if (Object.keys(updates).length === 0) {
       setError('没有需要保存的修改');
-      setSaving(false);
-      return;
+      return false;
     }
 
+    const res = await fetch('/api/settings/env', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const data = (await res.json()) as TokenConfigStatus & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? '保存失败');
+    setStatus(data);
+    setDraft({});
+    setSaved(true);
+    setNotifyTestMessage(successMessage);
+    return true;
+  }
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    setNotifyTestMessage(null);
+
     try {
-      const res = await fetch('/api/settings/env', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      const data = (await res.json()) as TokenConfigStatus & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? '保存失败');
-      setStatus(data);
-      setDraft({});
-      setSaved(true);
+      await saveEnvUpdates(
+        [
+          AI_MODEL_ENV,
+          ...MODEL_PROVIDERS.map((p) => p.apiKeyEnv),
+          ...OTHER_KEY_FIELDS.map((f) => f.key),
+        ],
+        '已保存并同步到 agent-core，下次 AI 分析将使用当前模型与 Key。',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveNotify(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    setNotifyTestMessage(null);
+
+    try {
+      await saveEnvUpdates(
+        [...FEISHU_NOTIFY_KEYS, ...FEISHU_TOGGLE_KEYS],
+        '飞书通知配置已保存并同步到 agent-core。',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleFeishuTest() {
+    setNotifyTesting(true);
+    setError(null);
+    setNotifyTestMessage(null);
+    try {
+      const res = await fetch('/api/settings/feishu-test', { method: 'POST' });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error ?? '飞书测试失败');
+      setNotifyTestMessage('测试消息已发送，请在飞书群查看。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '飞书测试失败');
+    } finally {
+      setNotifyTesting(false);
     }
   }
 
@@ -301,7 +451,7 @@ export default function SettingsPage() {
     <main className="page page--list">
       <PageHeader
         title="设置"
-        description="管理本机定时任务与 AI 模型配置。"
+        description="管理本机定时任务、AI 模型与飞书通知配置。"
       />
 
       <div className="list-stack">
@@ -350,6 +500,17 @@ export default function SettingsPage() {
                 onClick={() => selectTab('ai')}
               >
                 AI 模型
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'notify'}
+                className={`${styles.settingsTab}${
+                  activeTab === 'notify' ? ` ${styles.settingsTabActive}` : ''
+                }`}
+                onClick={() => selectTab('notify')}
+              >
+                通知
               </button>
             </div>
 
@@ -650,6 +811,145 @@ export default function SettingsPage() {
                 )}
               </section>
             </form>
+            )}
+
+            {activeTab === 'notify' && (
+              <form id="notify" onSubmit={(e) => void handleSaveNotify(e)}>
+                <section className="pane-card monitor-settings-section">
+                  <h2 className="section-title">飞书推送</h2>
+                  <p className="muted monitor-settings-hint">
+                    模拟盘成交、消息雷达、盘中信号等通知会推送到飞书群。
+                    {status.feishu.configured ? (
+                      <>
+                        {' '}
+                        当前模式：
+                        <strong>
+                          {status.feishu.mode === 'app' ? '企业自建应用' : 'Webhook'}
+                        </strong>
+                        {status.feishu.notifyEnabled ? '' : '（已关闭）'}
+                      </>
+                    ) : (
+                      ' 请配置 App 或 Webhook（二选一，App 优先）。'
+                    )}
+                  </p>
+
+                  <div className="settings-env-grid">
+                    {FEISHU_APP_FIELDS.map((field) => (
+                      <label key={field.key} className="settings-env-field">
+                        <span className="settings-env-label">
+                          {field.label}
+                          {status.keys[field.key]?.configured && (
+                            <span className="settings-env-badge">已配置</span>
+                          )}
+                        </span>
+                        <input
+                          type={field.secret ? 'password' : 'text'}
+                          className="input"
+                          autoComplete="off"
+                          placeholder={secretPlaceholder(
+                            field.key,
+                            field.placeholder,
+                          )}
+                          value={fieldValue(field.key)}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              [field.key]: e.target.value,
+                            }))
+                          }
+                        />
+                        {field.hint && (
+                          <span className="muted settings-env-hint">
+                            {field.hint}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+
+                  <p className={`muted settings-env-hint ${styles.summary}`}>
+                    或使用群自定义机器人 Webhook
+                  </p>
+
+                  <div className="settings-env-grid">
+                    {FEISHU_WEBHOOK_FIELDS.map((field) => (
+                      <label key={field.key} className="settings-env-field">
+                        <span className="settings-env-label">
+                          {field.label}
+                          {status.keys[field.key]?.configured && (
+                            <span className="settings-env-badge">已配置</span>
+                          )}
+                        </span>
+                        <input
+                          type={field.secret ? 'password' : 'text'}
+                          className="input"
+                          autoComplete="off"
+                          placeholder={secretPlaceholder(
+                            field.key,
+                            field.placeholder,
+                          )}
+                          value={fieldValue(field.key)}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              [field.key]: e.target.value,
+                            }))
+                          }
+                        />
+                        {field.hint && (
+                          <span className="muted settings-env-hint">
+                            {field.hint}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="pane-card monitor-settings-section">
+                  <h2 className="section-title">推送开关</h2>
+                  <div className="settings-env-grid">
+                    {FEISHU_TOGGLE_FIELDS.map((field) => (
+                      <label key={field.key} className="settings-env-field">
+                        <span className="settings-env-label">{field.label}</span>
+                        <span className="muted settings-env-hint">{field.hint}</span>
+                        <div className={styles.switchRow}>
+                          <input
+                            type="checkbox"
+                            checked={toggleChecked(field.key)}
+                            onChange={(e) =>
+                              setToggleDraft(field.key, e.target.checked)
+                            }
+                          />
+                          <span>{toggleChecked(field.key) ? '已开启' : '已关闭'}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="page-toolbar" style={{ marginTop: '1rem' }}>
+                    <button
+                      type="submit"
+                      className="button button-primary"
+                      disabled={saving}
+                    >
+                      {saving ? '保存中…' : '保存通知配置'}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={notifyTesting || !status.feishu.configured}
+                      onClick={() => void handleFeishuTest()}
+                    >
+                      {notifyTesting ? '发送中…' : '发送测试消息'}
+                    </button>
+                  </div>
+
+                  {saved && notifyTestMessage && (
+                    <p className="monitor-settings-saved">{notifyTestMessage}</p>
+                  )}
+                </section>
+              </form>
             )}
           </>
         )}
