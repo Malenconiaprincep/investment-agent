@@ -7,6 +7,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -35,6 +36,7 @@ function copyDir(from, to, options = {}) {
   mkdirSync(path.dirname(to), { recursive: true });
   cpSync(from, to, {
     recursive: true,
+    dereference: true,
     ...(skipGit
       ? {
           filter: (src) =>
@@ -43,6 +45,39 @@ function copyDir(from, to, options = {}) {
         }
       : {}),
   });
+}
+
+function assertNoBrokenSymlinks(rootDir) {
+  const broken = [];
+
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        try {
+          statSync(fullPath);
+        } catch {
+          broken.push(`${path.relative(rootDir, fullPath)} -> ${readlinkSync(fullPath)}`);
+        }
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      }
+    }
+  }
+
+  if (existsSync(rootDir)) {
+    walk(rootDir);
+  }
+
+  if (broken.length > 0) {
+    throw new Error(
+      `打包目录存在失效符号链接，请先修复再发布：\n${broken
+        .map((item) => `  - ${item}`)
+        .join('\n')}`,
+    );
+  }
 }
 
 /** pnpm deploy 会保留指回 monorepo 的 workspace 符号链接，打进 .app 后路径失效。 */
@@ -127,6 +162,7 @@ copyDir(staticDir, path.join(webPack, 'apps/web/.next/static'));
 if (existsSync(publicDir)) {
   copyDir(publicDir, path.join(webPack, 'apps/web/public'));
 }
+assertNoBrokenSymlinks(webPack);
 
 // 记录启动入口，供 Electron 主进程读取
 writeFileSync(
@@ -153,6 +189,7 @@ if (existsSync(vendorSrc)) {
 }
 
 pruneMonorepoSymlinks(agentPack);
+assertNoBrokenSymlinks(agentPack);
 
 const mastraDir = path.join(agentPack, '.mastra');
 if (existsSync(mastraDir)) {
