@@ -50,16 +50,16 @@ function writeJson(relativePath, data) {
 function updateEnvExample(version) {
   const filePath = path.join(repoRoot, envExampleFile);
   const current = readFileSync(filePath, 'utf-8');
-  const next = current.replace(
-    /^NEXT_PUBLIC_APP_VERSION=.*$/m,
-    `NEXT_PUBLIC_APP_VERSION=${version}`,
-  );
+  const pattern = /^NEXT_PUBLIC_APP_VERSION=.*$/m;
 
-  if (next === current) {
+  if (!pattern.test(current)) {
     throw new Error(`${envExampleFile} 缺少 NEXT_PUBLIC_APP_VERSION`);
   }
 
-  writeFileSync(filePath, next, 'utf-8');
+  const next = current.replace(pattern, `NEXT_PUBLIC_APP_VERSION=${version}`);
+  if (next !== current) {
+    writeFileSync(filePath, next, 'utf-8');
+  }
 }
 
 export function setReleaseVersion(inputVersion, options = {}) {
