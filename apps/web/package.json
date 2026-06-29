@@ -1,6 +1,6 @@
 {
   "name": "@investment-agent/web",
-  "version": "0.1.1-beta.2",
+  "version": "0.1.1-beta.3",
   "private": true,
   "description": "Investment research agent web UI",
   "scripts": {

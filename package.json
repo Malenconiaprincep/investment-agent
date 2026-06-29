@@ -1,6 +1,6 @@
 {
   "name": "investment-agent",
-  "version": "0.1.1-beta.2",
+  "version": "0.1.1-beta.3",
   "private": true,
   "packageManager": "pnpm@10.26.0",
   "description": "A-share investment research agent powered by Mastra",
