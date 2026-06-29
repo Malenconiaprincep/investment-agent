@@ -19,7 +19,7 @@ import {
   FEISHU_NOTIFY_KEYS,
   FEISHU_TOGGLE_KEYS,
   type FeishuToggleKey,
-} from '@/lib/user-env';
+} from '@/lib/feishu-settings';
 import type { AppPlan, AppRole } from '@/lib/permissions';
 
 type EnvKeyStatus = { configured: boolean; masked?: string; value?: string };

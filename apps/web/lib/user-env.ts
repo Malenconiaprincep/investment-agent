@@ -17,31 +17,23 @@ export const TOKEN_KEYS = [
   'IWENCAI_BASE_URL',
 ] as const;
 
-export const FEISHU_NOTIFY_KEYS = [
-  'FEISHU_APP_ID',
-  'FEISHU_APP_SECRET',
-  'FEISHU_CHAT_ID',
-  'FEISHU_WEBHOOK_URL',
-  'FEISHU_WEBHOOK_SECRET',
-] as const;
+import {
+  FEISHU_NOTIFY_KEYS,
+  FEISHU_TOGGLE_KEYS,
+  type FeishuNotifyKey,
+  type FeishuToggleKey,
+} from './feishu-settings';
 
-export const FEISHU_TOGGLE_KEYS = [
-  'FEISHU_NOTIFY_ENABLED',
-  'FEISHU_NOTIFY_ETF_MONITOR',
-  'FEISHU_NOTIFY_MONITOR',
-  'FEISHU_NOTIFY_STOCK_INTRADAY',
-] as const;
-
+export type TokenKey = (typeof TOKEN_KEYS)[number];
 export const SYNCED_ENV_KEYS = [
   ...TOKEN_KEYS,
   ...FEISHU_NOTIFY_KEYS,
   ...FEISHU_TOGGLE_KEYS,
 ] as const;
-
-export type TokenKey = (typeof TOKEN_KEYS)[number];
-export type FeishuNotifyKey = (typeof FEISHU_NOTIFY_KEYS)[number];
-export type FeishuToggleKey = (typeof FEISHU_TOGGLE_KEYS)[number];
 export type SyncedEnvKey = (typeof SYNCED_ENV_KEYS)[number];
+
+export { FEISHU_NOTIFY_KEYS, FEISHU_TOGGLE_KEYS };
+export type { FeishuNotifyKey, FeishuToggleKey };
 
 export type FeishuConfigStatus = {
   configured: boolean;
