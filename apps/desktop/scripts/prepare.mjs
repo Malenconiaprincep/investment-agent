@@ -2,10 +2,12 @@ import { execSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -77,6 +79,93 @@ function assertNoBrokenSymlinks(rootDir) {
         .map((item) => `  - ${item}`)
         .join('\n')}`,
     );
+  }
+}
+
+function materializeSymlinks(rootDir) {
+  const replaced = [];
+
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        const targetPath = realpathSync(fullPath);
+        rmSync(fullPath, { recursive: true, force: true });
+        cpSync(targetPath, fullPath, { recursive: true, dereference: true });
+        replaced.push(path.relative(rootDir, fullPath));
+        if (lstatSync(fullPath).isDirectory()) {
+          walk(fullPath);
+        }
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      }
+    }
+  }
+
+  if (existsSync(rootDir)) {
+    walk(rootDir);
+  }
+
+  if (replaced.length > 0) {
+    console.log('实体化符号链接:');
+    for (const rel of replaced) {
+      console.log(`  - ${rel}`);
+    }
+  }
+}
+
+function hoistPnpmPackages(rootDir) {
+  const nodeModules = path.join(rootDir, 'node_modules');
+  const pnpmStore = path.join(nodeModules, '.pnpm');
+  if (!existsSync(pnpmStore)) return;
+
+  const hoisted = [];
+
+  function copyPackage(from, packageName) {
+    const to = path.join(nodeModules, packageName);
+    if (existsSync(to)) return;
+    mkdirSync(path.dirname(to), { recursive: true });
+    cpSync(from, to, { recursive: true, dereference: true });
+    hoisted.push(packageName);
+  }
+
+  for (const virtualStoreEntry of readdirSync(pnpmStore, { withFileTypes: true })) {
+    if (!virtualStoreEntry.isDirectory() || virtualStoreEntry.name === 'node_modules') {
+      continue;
+    }
+
+    const packageNodeModules = path.join(
+      pnpmStore,
+      virtualStoreEntry.name,
+      'node_modules',
+    );
+    if (!existsSync(packageNodeModules)) continue;
+
+    for (const packageEntry of readdirSync(packageNodeModules, { withFileTypes: true })) {
+      const packagePath = path.join(packageNodeModules, packageEntry.name);
+      if (packageEntry.name.startsWith('.')) continue;
+
+      if (packageEntry.name.startsWith('@')) {
+        for (const scopedEntry of readdirSync(packagePath, { withFileTypes: true })) {
+          copyPackage(
+            path.join(packagePath, scopedEntry.name),
+            path.join(packageEntry.name, scopedEntry.name),
+          );
+        }
+        continue;
+      }
+
+      copyPackage(packagePath, packageEntry.name);
+    }
+  }
+
+  if (hoisted.length > 0) {
+    console.log('提升 pnpm 依赖到 node_modules:');
+    for (const rel of hoisted) {
+      console.log(`  - ${rel}`);
+    }
   }
 }
 
@@ -162,6 +251,8 @@ copyDir(staticDir, path.join(webPack, 'apps/web/.next/static'));
 if (existsSync(publicDir)) {
   copyDir(publicDir, path.join(webPack, 'apps/web/public'));
 }
+materializeSymlinks(webPack);
+hoistPnpmPackages(webPack);
 assertNoBrokenSymlinks(webPack);
 
 // 记录启动入口，供 Electron 主进程读取
@@ -189,6 +280,8 @@ if (existsSync(vendorSrc)) {
 }
 
 pruneMonorepoSymlinks(agentPack);
+materializeSymlinks(agentPack);
+hoistPnpmPackages(agentPack);
 assertNoBrokenSymlinks(agentPack);
 
 const mastraDir = path.join(agentPack, '.mastra');
