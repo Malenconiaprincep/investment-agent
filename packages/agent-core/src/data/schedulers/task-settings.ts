@@ -5,6 +5,8 @@ import { DATA_DIR } from '../../mastra/config/paths.js';
 export type ScheduledTaskId =
   | 'monitor-background'
   | 'screen-morning'
+  | 'etf-morning-radar'
+  | 'etf-morning-confirm'
   | 'etf-tail-pick'
   | 'stock-paper'
   | 'etf-paper-monitor'
@@ -38,6 +40,20 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     defaultEnabled: true,
   },
   {
+    id: 'etf-morning-radar',
+    label: 'ETF 早盘异动雷达',
+    description: '开盘后发现 ETF 板块异动，只提醒观察，不触发买入',
+    scheduleText: '交易日 09:35',
+    defaultEnabled: true,
+  },
+  {
+    id: 'etf-morning-confirm',
+    label: 'ETF 10点承接确认',
+    description: '复查早盘异动 ETF 的承接和量能，等待尾盘确认',
+    scheduleText: '交易日 10:00',
+    defaultEnabled: true,
+  },
+  {
     id: 'etf-paper-monitor',
     label: 'ETF 模拟盘监听',
     description: '交易时段按配置间隔检查 ETF 模拟盘买卖信号',
@@ -55,7 +71,7 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     id: 'etf-tail-pick',
     label: 'ETF 尾盘推荐',
     description: '收盘前根据 ETF 池和规则生成尾盘参考',
-    scheduleText: '交易日 14:00',
+    scheduleText: '交易日 14:45',
     defaultEnabled: true,
   },
   {

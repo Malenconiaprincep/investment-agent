@@ -1,4 +1,5 @@
 import type { EtfTailPickResult } from '../etf/tail-picker.js';
+import type { EtfMorningRadarResult } from '../etf/morning-radar.js';
 import type { EtfPaperPipelineResult } from '../paper/etf-paper-pipeline.js';
 import type { PaperAutoPipelineResult } from '../paper/auto-pipeline.js';
 import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
@@ -48,6 +49,37 @@ export function buildEtfTailPickLines(result: EtfTailPickResult): string[] {
       lines.push(`· ${item.name}(${item.symbol}) 差 ${item.failCount} 项`);
     }
   }
+
+  if (result.errors.length > 0) {
+    lines.push('', `采数异常 ${result.errors.length} 条（见日志）`);
+  }
+
+  return lines;
+}
+
+export function buildEtfMorningRadarLines(result: EtfMorningRadarResult): string[] {
+  const lines = [
+    `时间：${beijingTimeLabel()}`,
+    `交易日：${result.tradeDate}`,
+    `摘要：${result.summary}`,
+  ];
+
+  if (result.candidates.length === 0) {
+    lines.push('当前没有达到异动阈值的 ETF。');
+    return lines;
+  }
+
+  lines.push('', '异动池（提醒，不是买入推荐）：');
+  for (const item of result.candidates.slice(0, 6)) {
+    lines.push(
+      `· ${item.name}(${item.symbol}) ${item.price.toFixed(3)} ${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}% · ${item.actionLabel}`,
+    );
+    lines.push(`  ${item.reasons.join('；')}`);
+  }
+  if (result.candidates.length > 6) {
+    lines.push(`… 另有 ${result.candidates.length - 6} 只`);
+  }
+  lines.push('', '策略：早盘只发现机会，正式买入/调仓等 14:45 尾盘确认。');
 
   if (result.errors.length > 0) {
     lines.push('', `采数异常 ${result.errors.length} 条（见日志）`);
@@ -160,6 +192,16 @@ export async function notifyEtfTailPick(result: EtfTailPickResult): Promise<void
   await notifyFeishuPostSafe(
     '📊 ETF 尾盘推荐',
     buildEtfTailPickLines(result),
+  );
+}
+
+export async function notifyEtfMorningRadar(
+  result: EtfMorningRadarResult,
+): Promise<void> {
+  if (result.candidates.length === 0) return;
+  await notifyFeishuPostSafe(
+    result.stage === 'open' ? '👀 ETF 早盘异动' : '🧭 ETF 承接确认',
+    buildEtfMorningRadarLines(result),
   );
 }
 

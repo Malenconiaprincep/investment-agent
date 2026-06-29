@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-etf-tail.log');
 
-/** 本机 crontab：0 14 * * 1-5 cd /path/to/investment-agent && pnpm etf:tail-schedule */
+/** 本机 crontab：45 14 * * 1-5 cd /path/to/investment-agent && pnpm etf:tail-schedule */
 async function main() {
   mkdirSync(DATA_DIR, { recursive: true });
   const startedAt = new Date().toISOString();

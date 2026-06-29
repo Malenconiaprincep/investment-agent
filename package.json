@@ -36,6 +36,7 @@
     "setup:iwencai": "pnpm --filter @investment-agent/agent-core setup:iwencai",
     "monitor:poll": "pnpm --filter @investment-agent/agent-core monitor:poll",
     "monitor:watch": "pnpm --filter @investment-agent/agent-core monitor:watch",
+    "etf:morning-radar": "pnpm --filter @investment-agent/agent-core etf:morning-radar",
     "etf:tail-pick": "pnpm --filter @investment-agent/agent-core etf:tail-pick",
     "etf:tail-schedule": "pnpm --filter @investment-agent/agent-core etf:tail-schedule",
     "backtest": "pnpm --filter @investment-agent/agent-core backtest",

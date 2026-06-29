@@ -1,6 +1,8 @@
 import { runEtfTailPick } from '../etf/tail-picker.js';
+import { runEtfMorningRadar } from '../etf/morning-radar.js';
 import {
   notifyDailyTaskFailure,
+  notifyEtfMorningRadar,
   notifyEtfPaperMonitor,
   notifyEtfTailPick,
   notifyStockPaper,
@@ -92,10 +94,32 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
+    id: 'etf-morning-radar',
+    label: 'ETF 早盘异动雷达',
+    hour: 9,
+    minute: 35,
+    run: async () => {
+      const result = await runEtfMorningRadar({ stage: 'open' });
+      await notifyEtfMorningRadar(result);
+      return { summary: result.summary };
+    },
+  },
+  {
+    id: 'etf-morning-confirm',
+    label: 'ETF 10点承接确认',
+    hour: 10,
+    minute: 0,
+    run: async () => {
+      const result = await runEtfMorningRadar({ stage: 'confirm' });
+      await notifyEtfMorningRadar(result);
+      return { summary: result.summary };
+    },
+  },
+  {
     id: 'etf-tail-pick',
     label: 'ETF 尾盘推荐',
     hour: 14,
-    minute: 0,
+    minute: 45,
     run: async () => {
       const result = await runEtfTailPick();
       if (result.status !== 'skipped') {
@@ -239,7 +263,9 @@ export function startDailyTasksBackgroundWorker() {
     STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT;
   const schedule = [
     `09:25 智能选股`,
-    `14:00 ETF 尾盘推荐`,
+    `09:35 ETF 早盘异动雷达`,
+    `10:00 ETF 承接确认`,
+    `14:45 ETF 尾盘推荐`,
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,

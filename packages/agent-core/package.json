@@ -33,6 +33,7 @@
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
     "monitor:poll": "tsx src/cli/scheduled-monitor.ts",
     "monitor:watch": "tsx src/cli/monitor-watch.ts",
+    "etf:morning-radar": "tsx src/cli/etf-json.ts morning-radar",
     "etf:tail-pick": "tsx src/cli/etf-json.ts tail-pick",
     "etf:tail-schedule": "tsx src/cli/scheduled-etf-tail.ts",
     "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
