@@ -65,6 +65,39 @@ pnpm desktop:pack:win:portable   # Windows 便携版
 
 产物在 `apps/desktop/release/`。
 
+## Beta 测试包安装提示
+
+当前本地与 CI 产出的 macOS 包为 unsigned 测试包，适合内部自测或小范围试用。正式对外分发前建议使用 Apple Developer ID 签名并完成 notarization。
+
+### macOS
+
+优先分发 dmg：
+
+```text
+apps/desktop/release/投研助手-*-arm64.dmg
+```
+
+不要直接分发 `apps/desktop/release/mac-arm64/投研助手.app` 文件夹，也不要手动压缩 `.app` 文件夹，否则容易丢失隐藏目录或符号链接。
+
+测试用户遇到安全拦截时：
+
+1. 如果提示「无法验证开发者」，进入「系统设置」→「隐私与安全性」，点击「仍要打开」。
+2. 如果提示「文件已损坏」，先将 App 拖入「应用程序」，再执行：
+
+```bash
+sudo xattr -dr com.apple.quarantine "/Applications/投研助手.app"
+```
+
+### Windows
+
+优先分发安装包：
+
+```text
+apps/desktop/release/投研助手-Setup-*-x64.exe
+```
+
+Windows unsigned 测试包可能触发 SmartScreen。测试用户可点击「更多信息」→「仍要运行」继续安装。若系统提示需要 64 位 Windows，说明当前系统是 32 位，需升级后安装 x64 版本；ARM 设备请使用 arm64 安装包。
+
 ## 官网下载页
 
 部署 `apps/site` 后，下载页通过 GitHub Releases API 展示安装包。它会读取最近发布的 Release 列表，因此 beta / prerelease 也能展示。环境变量：

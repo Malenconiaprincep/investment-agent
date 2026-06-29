@@ -36,6 +36,27 @@ export default function QuickstartPage() {
         完成安装后打开「投研助手」。首次启动会自动加载内置 Web 工作台与本地服务。
       </p>
 
+      <h2>Beta 测试包安全提示</h2>
+      <p>
+        当前 Beta 测试包可能尚未完成正式代码签名与公证。系统安全提示属于
+        macOS / Windows 对测试包的常见拦截，并不代表安装包内容缺失。
+      </p>
+      <ul>
+        <li>
+          <strong>macOS 提示「无法验证开发者」</strong>：打开「系统设置」→「隐私与安全性」，在底部找到「投研助手」并点击「仍要打开」。
+        </li>
+        <li>
+          <strong>macOS 提示「文件已损坏」</strong>：先确认已将 App 拖入「应用程序」，然后在终端执行{' '}
+          <code>
+            sudo xattr -dr com.apple.quarantine &quot;/Applications/投研助手.app&quot;
+          </code>{' '}
+          后重新打开。
+        </li>
+        <li>
+          <strong>Windows SmartScreen 提示</strong>：点击「更多信息」→「仍要运行」继续安装。
+        </li>
+      </ul>
+
       <h2>3. 登录</h2>
       <p>
         使用 Beta 测试账号登录。安装包预置管理员 Token；如需额外账号，请通过{' '}

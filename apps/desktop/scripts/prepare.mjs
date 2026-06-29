@@ -280,8 +280,6 @@ if (existsSync(vendorSrc)) {
 }
 
 pruneMonorepoSymlinks(agentPack);
-materializeSymlinks(agentPack);
-hoistPnpmPackages(agentPack);
 assertNoBrokenSymlinks(agentPack);
 
 const mastraDir = path.join(agentPack, '.mastra');

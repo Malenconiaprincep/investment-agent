@@ -61,6 +61,19 @@ export default function DesktopPage() {
       <h2>常见问题</h2>
       <ul>
         <li>
+          <strong>macOS 提示无法验证开发者</strong>：打开「系统设置」→「隐私与安全性」，在底部找到「投研助手」并点击「仍要打开」
+        </li>
+        <li>
+          <strong>macOS 提示文件已损坏</strong>：Beta 测试包可能需要手动移除隔离标记。确认 App 已拖入「应用程序」后，在终端执行{' '}
+          <code>
+            sudo xattr -dr com.apple.quarantine &quot;/Applications/投研助手.app&quot;
+          </code>{' '}
+          并重新打开
+        </li>
+        <li>
+          <strong>Windows SmartScreen 拦截</strong>：点击「更多信息」→「仍要运行」继续安装
+        </li>
+        <li>
           <strong>Windows 提示需要 64 位系统</strong>：32 位 Windows 不支持
           Electron 35，请升级系统后安装 x64 版本
         </li>
