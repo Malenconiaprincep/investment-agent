@@ -134,7 +134,13 @@ pnpm eval market-research-report   # Phase 2 验收
 
 ## 桌面版发布
 
-GitHub Releases 自动构建与发布说明见 [docs/release-desktop.md](docs/release-desktop.md)。
+一条命令同步版本号、打 tag、推送并触发 GitHub Releases 自动打包：
+
+```bash
+pnpm release:desktop v0.1.1-beta.1
+```
+
+完整发布与官网下载页自动更新说明见 [docs/release-desktop.md](docs/release-desktop.md)。
 
 ## 本地桌面应用
 

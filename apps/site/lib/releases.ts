@@ -10,6 +10,7 @@ export type ReleaseInfo = {
   name: string;
   publishedAt: string;
   htmlUrl: string;
+  prerelease: boolean;
   assets: ReleaseAsset[];
 };
 
@@ -37,6 +38,7 @@ function parseRelease(data: unknown): ReleaseInfo | null {
     name?: string;
     published_at?: string;
     html_url?: string;
+    prerelease?: boolean;
     assets?: Array<{
       name?: string;
       browser_download_url?: string;
@@ -61,8 +63,22 @@ function parseRelease(data: unknown): ReleaseInfo | null {
     name: release.name ?? release.tag_name,
     publishedAt: release.published_at ?? '',
     htmlUrl: release.html_url,
+    prerelease: release.prerelease ?? false,
     assets,
   };
+}
+
+function parseReleases(data: unknown): ReleaseInfo | null {
+  if (!Array.isArray(data)) return null;
+
+  for (const item of data) {
+    const release = parseRelease(item);
+    if (release && release.assets.length > 0) {
+      return release;
+    }
+  }
+
+  return null;
 }
 
 export async function fetchLatestRelease(): Promise<ReleaseInfo | null> {
@@ -71,15 +87,15 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo | null> {
   const match = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
   if (!match) return null;
 
-  const apiUrl = `https://api.github.com/repos/${match[1]}/releases/latest`;
+  const apiUrl = `https://api.github.com/repos/${match[1]}/releases?per_page=10`;
 
   try {
     const res = await fetch(apiUrl, {
-      next: { revalidate: 3600 },
+      next: { revalidate: 300 },
       headers: { Accept: 'application/vnd.github+json' },
     });
     if (!res.ok) return null;
-    return parseRelease(await res.json());
+    return parseReleases(await res.json());
   } catch {
     return null;
   }

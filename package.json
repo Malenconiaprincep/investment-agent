@@ -2,6 +2,7 @@
   "name": "investment-agent",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.26.0",
   "description": "A-share investment research agent powered by Mastra",
   "scripts": {
     "dev": "pnpm --filter @investment-agent/agent-core dev",
@@ -30,6 +31,8 @@
     "desktop:pack:win:x64": "pnpm --filter @investment-agent/desktop pack:win:x64",
     "desktop:pack:win:arm64": "pnpm --filter @investment-agent/desktop pack:win:arm64",
     "desktop:pack:win:portable": "pnpm --filter @investment-agent/desktop pack:win:portable",
+    "version:desktop": "node scripts/set-release-version.mjs",
+    "release:desktop": "node scripts/release-desktop.mjs",
     "setup:iwencai": "pnpm --filter @investment-agent/agent-core setup:iwencai",
     "monitor:poll": "pnpm --filter @investment-agent/agent-core monitor:poll",
     "monitor:watch": "pnpm --filter @investment-agent/agent-core monitor:watch",

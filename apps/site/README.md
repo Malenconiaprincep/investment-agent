@@ -20,6 +20,9 @@ pnpm site:dev
 1. 在 Vercel 新建项目，Root Directory 设为 `apps/site`
 2. 配置环境变量（见 `.env.example`）
 3. 部署后启用 Vercel Analytics（项目 Settings → Analytics）
+4. 如需桌面版发布后自动刷新官网，在 Vercel **Settings → Git → Deploy Hooks** 创建 hook，并把 URL 配到 GitHub Actions Secret `SITE_DEPLOY_HOOK_URL`
+
+`/download` 会读取 GitHub Releases 列表展示最新安装包，beta / prerelease 也会展示。
 
 ## 页面
 
