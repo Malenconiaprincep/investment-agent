@@ -80,8 +80,8 @@ pnpm web:dev
 
 | 账号 | 密码 | Token |
 |------|------|-------|
-| `adminwb` | `Wb@Invest2026!xK9` | 已预置（从 `packages/agent-core/.env` 同步） |
-| `test` | `test123456` | 需登录后在「Token 设置」自行配置 |
+| `adminwb` | `Wb@Invest2026!xK9` | 管理员；API Key / 飞书等在设置页自行配置 |
+| `test` | `test123456` | 需登录后在「设置」自行配置 Token |
 
 也可在 `/register` 自助注册新账号（默认 Free 权限）。
 
@@ -167,11 +167,11 @@ pnpm desktop:pack:win:arm64      # 仅 ARM（骁龙 / Surface Pro X 等）
 
 | 账号 | 密码 | 说明 |
 |------|------|------|
-| `adminwb` | `Wb@Invest2026!xK9` | 管理员，Token 已在打包时预置 |
+| `adminwb` | `Wb@Invest2026!xK9` | 管理员；API Key / 飞书等在设置页自行配置 |
 | `test` | `test123456` | 测试账号，需自行配置全部 Token |
 
 - 桌面版 Token 按账号保存在 `~/Library/Application Support/投研助手/data/users/{账号}/.env`（Windows 为 `%APPDATA%/投研助手/data/users/{账号}/.env`）
-- 打包时会从 `packages/agent-core/.env` 生成 `adminwb` 的默认 Token（`apps/desktop/templates/admin-defaults.env`，已 gitignore）
+- 打包时仅内置问财 API 默认地址 `IWENCAI_BASE_URL` 与 AI 模型列表（代码）；**不**内置任何 API Key / 飞书密钥
 - 认证逻辑见 `apps/web/lib/local-auth.ts`、`apps/web/lib/users.ts`
 
 ## 项目结构

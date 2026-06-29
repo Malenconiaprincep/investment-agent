@@ -6,7 +6,9 @@ import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import styles from './workspace-tabs.module.css';
 
 function embedSrc(path: string) {
-  return `${path.split('?')[0]}?embed=1`;
+  const [pathAndQuery, hash] = path.split('#');
+  const base = `${pathAndQuery.split('?')[0]}?embed=1`;
+  return hash ? `${base}#${hash}` : base;
 }
 
 export function WorkspaceTabBar() {

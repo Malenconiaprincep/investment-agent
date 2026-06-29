@@ -15,3 +15,18 @@ export const FEISHU_TOGGLE_KEYS = [
 
 export type FeishuNotifyKey = (typeof FEISHU_NOTIFY_KEYS)[number];
 export type FeishuToggleKey = (typeof FEISHU_TOGGLE_KEYS)[number];
+
+export function isFeishuConfigReady(input: {
+  values: Partial<Record<FeishuNotifyKey, string | undefined>>;
+  configured?: Partial<Record<FeishuNotifyKey, boolean>>;
+}): boolean {
+  const has = (key: FeishuNotifyKey) =>
+    Boolean(input.values[key]?.trim()) || Boolean(input.configured?.[key]);
+
+  const appReady =
+    has('FEISHU_APP_ID') &&
+    has('FEISHU_APP_SECRET') &&
+    has('FEISHU_CHAT_ID');
+  const webhookReady = has('FEISHU_WEBHOOK_URL');
+  return appReady || webhookReady;
+}

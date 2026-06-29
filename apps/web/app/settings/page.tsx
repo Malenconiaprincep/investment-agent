@@ -18,6 +18,7 @@ import {
 import {
   FEISHU_NOTIFY_KEYS,
   FEISHU_TOGGLE_KEYS,
+  isFeishuConfigReady,
   type FeishuToggleKey,
 } from '@/lib/feishu-settings';
 import type { AppPlan, AppRole } from '@/lib/permissions';
@@ -169,7 +170,8 @@ export default function SettingsPage() {
   const [canUseScheduledTasks, setCanUseScheduledTasks] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('ai');
   const [notifyTesting, setNotifyTesting] = useState(false);
-  const [notifyTestMessage, setNotifyTestMessage] = useState<string | null>(null);
+  const [notifySavedMessage, setNotifySavedMessage] = useState<string | null>(null);
+  const [feishuTestMessage, setFeishuTestMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -324,7 +326,7 @@ export default function SettingsPage() {
 
   async function saveEnvUpdates(
     keys: string[],
-    successMessage: string,
+    successMessage?: string,
   ): Promise<boolean> {
     const updates: Record<string, string | null> = {};
     for (const key of keys) {
@@ -334,7 +336,9 @@ export default function SettingsPage() {
     }
 
     if (Object.keys(updates).length === 0) {
-      setError('没有需要保存的修改');
+      if (successMessage) {
+        setError('没有需要保存的修改');
+      }
       return false;
     }
 
@@ -347,17 +351,34 @@ export default function SettingsPage() {
     if (!res.ok) throw new Error(data.error ?? '保存失败');
     setStatus(data);
     setDraft({});
-    setSaved(true);
-    setNotifyTestMessage(successMessage);
+    if (successMessage) {
+      setSaved(true);
+      setNotifySavedMessage(successMessage);
+    }
     return true;
   }
+
+  const canTestFeishu = useMemo(() => {
+    const values: Partial<Record<(typeof FEISHU_NOTIFY_KEYS)[number], string>> =
+      {};
+    for (const key of FEISHU_NOTIFY_KEYS) {
+      if (key in draft) values[key] = draft[key];
+    }
+    const configured: Partial<
+      Record<(typeof FEISHU_NOTIFY_KEYS)[number], boolean>
+    > = {};
+    for (const key of FEISHU_NOTIFY_KEYS) {
+      configured[key] = Boolean(status?.keys[key]?.configured);
+    }
+    return isFeishuConfigReady({ values, configured });
+  }, [draft, status]);
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError(null);
     setSaved(false);
-    setNotifyTestMessage(null);
+    setFeishuTestMessage(null);
 
     try {
       await saveEnvUpdates(
@@ -380,7 +401,8 @@ export default function SettingsPage() {
     setSaving(true);
     setError(null);
     setSaved(false);
-    setNotifyTestMessage(null);
+    setNotifySavedMessage(null);
+    setFeishuTestMessage(null);
 
     try {
       await saveEnvUpdates(
@@ -397,12 +419,19 @@ export default function SettingsPage() {
   async function handleFeishuTest() {
     setNotifyTesting(true);
     setError(null);
-    setNotifyTestMessage(null);
+    setFeishuTestMessage(null);
     try {
+      const pendingKeys = [...FEISHU_NOTIFY_KEYS, ...FEISHU_TOGGLE_KEYS].filter(
+        (key) => key in draft,
+      );
+      if (pendingKeys.length > 0) {
+        await saveEnvUpdates(pendingKeys);
+      }
+
       const res = await fetch('/api/settings/feishu-test', { method: 'POST' });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? '飞书测试失败');
-      setNotifyTestMessage('测试消息已发送，请在飞书群查看。');
+      setFeishuTestMessage('测试消息已发送，请在飞书群查看。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '飞书测试失败');
     } finally {
@@ -471,7 +500,7 @@ export default function SettingsPage() {
               <p className="muted monitor-settings-hint">
                 <strong>{status.userLabel}</strong>（{status.username}）
                 {status.presetTokens
-                  ? ' · 已预置 Token，可直接使用；如需更换可在此修改'
+                  ? ' · 管理员账号；API Key / 飞书等请在下方自行配置'
                   : ' · 请自行配置全部 Token 后使用智能选股等功能'}
               </p>
             </section>
@@ -904,6 +933,25 @@ export default function SettingsPage() {
                       </label>
                     ))}
                   </div>
+
+                  <div className="page-toolbar" style={{ marginTop: '1rem' }}>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={notifyTesting || saving || !canTestFeishu}
+                      onClick={() => void handleFeishuTest()}
+                    >
+                      {notifyTesting ? '测试中…' : '测试飞书通知'}
+                    </button>
+                    <span className="muted">
+                      {canTestFeishu
+                        ? '发送测试消息到飞书群（未保存的修改会先自动保存）'
+                        : '请先填写 App 凭证（含 Chat ID）或 Webhook 地址'}
+                    </span>
+                  </div>
+                  {feishuTestMessage && (
+                    <p className="monitor-settings-saved">{feishuTestMessage}</p>
+                  )}
                 </section>
 
                 <section className="pane-card monitor-settings-section">
@@ -935,18 +983,10 @@ export default function SettingsPage() {
                     >
                       {saving ? '保存中…' : '保存通知配置'}
                     </button>
-                    <button
-                      type="button"
-                      className="button button-secondary"
-                      disabled={notifyTesting || !status.feishu.configured}
-                      onClick={() => void handleFeishuTest()}
-                    >
-                      {notifyTesting ? '发送中…' : '发送测试消息'}
-                    </button>
                   </div>
 
-                  {saved && notifyTestMessage && (
-                    <p className="monitor-settings-saved">{notifyTestMessage}</p>
+                  {saved && notifySavedMessage && (
+                    <p className="monitor-settings-saved">{notifySavedMessage}</p>
                   )}
                 </section>
               </form>

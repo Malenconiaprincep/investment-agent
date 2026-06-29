@@ -24,6 +24,12 @@ import {
   type FeishuToggleKey,
 } from './feishu-settings';
 
+export const PACKAGED_ENV_KEYS = ['IWENCAI_BASE_URL'] as const;
+
+export type PackagedEnvKey = (typeof PACKAGED_ENV_KEYS)[number];
+
+export const DEFAULT_IWENCAI_BASE_URL = 'https://openapi.iwencai.com';
+
 export type TokenKey = (typeof TOKEN_KEYS)[number];
 export const SYNCED_ENV_KEYS = [
   ...TOKEN_KEYS,
@@ -171,17 +177,34 @@ function resolveAdminDefaultsPaths(): string[] {
   return paths;
 }
 
-function loadAdminDefaultTokens(): Record<string, string> {
+function loadPackagedDefaults(): Record<string, string> {
+  const defaults: Record<string, string> = {
+    IWENCAI_BASE_URL: DEFAULT_IWENCAI_BASE_URL,
+  };
+
   for (const candidate of resolveAdminDefaultsPaths()) {
     if (!existsSync(candidate)) continue;
     const parsed = parseEnvFile(candidate);
-    const picked: Record<string, string> = {};
-    for (const key of SYNCED_ENV_KEYS) {
-      if (parsed[key]?.trim()) picked[key] = parsed[key].trim();
+    const baseUrl = parsed.IWENCAI_BASE_URL?.trim();
+    if (baseUrl) {
+      defaults.IWENCAI_BASE_URL = baseUrl;
+      return defaults;
     }
-    if (Object.keys(picked).length > 0) return picked;
   }
-  return {};
+
+  return defaults;
+}
+
+function applyPackagedDefaults(values: Record<string, string>): boolean {
+  const defaults = loadPackagedDefaults();
+  let changed = false;
+  for (const key of PACKAGED_ENV_KEYS) {
+    if (!values[key]?.trim() && defaults[key]?.trim()) {
+      values[key] = defaults[key].trim();
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export function ensureUserEnvSeeded(
@@ -193,7 +216,7 @@ export function ensureUserEnvSeeded(
     return parseEnvFile(userPath);
   }
 
-  const initial = presetTokens ? loadAdminDefaultTokens() : {};
+  const initial = loadPackagedDefaults();
   writeEnvFile(userPath, initial);
   return initial;
 }
@@ -219,18 +242,8 @@ export async function activateUserEnv(
   presetTokens: boolean,
 ): Promise<void> {
   const values = ensureUserEnvSeeded(username, presetTokens);
-  if (presetTokens) {
-    const defaults = loadAdminDefaultTokens();
-    let changed = false;
-    for (const key of SYNCED_ENV_KEYS) {
-      if (!values[key]?.trim() && defaults[key]?.trim()) {
-        values[key] = defaults[key].trim();
-        changed = true;
-      }
-    }
-    if (changed) {
-      writeUserEnv(username, values);
-    }
+  if (applyPackagedDefaults(values)) {
+    writeUserEnv(username, values);
   }
   writeActiveEnv(values);
   await syncTokensToAgentCore(values);

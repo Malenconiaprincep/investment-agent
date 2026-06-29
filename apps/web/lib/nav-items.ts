@@ -81,7 +81,19 @@ export function resolveDefaultTabPath(pathname: string): string {
   return normalized;
 }
 
+export function normalizeTabPath(path: string): string {
+  const withoutHash = path.split('#')[0] ?? path;
+  return resolveDefaultTabPath(withoutHash.split('?')[0] || '/');
+}
+
 export function navLabelForPath(pathname: string): string {
-  const match = NAV_ITEMS.find((item) => item.isActive(pathname));
+  const normalized = pathname.split('?')[0]?.split('#')[0] ?? pathname;
+  if (normalized === '/settings' || normalized.startsWith('/settings/')) {
+    return '设置';
+  }
+  if (normalized === '/admin/users' || normalized.startsWith('/admin/')) {
+    return '用户管理';
+  }
+  const match = NAV_ITEMS.find((item) => item.isActive(normalized));
   return match?.label ?? '页面';
 }

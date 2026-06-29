@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import type { AuthUser } from '@/hooks/useAuthUser';
 import './UserMenu.css';
 
@@ -18,6 +19,7 @@ function avatarInitial(label: string, username: string): string {
 export function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const { enabled: tabMode, openOrSwitchTab } = useWorkspaceTabs();
 
   useEffect(() => {
     if (!open) return;
@@ -43,6 +45,16 @@ export function UserMenu({ user }: UserMenuProps) {
   const toggle = useCallback(() => {
     setOpen((v) => !v);
   }, []);
+
+  const handleMenuNav = useCallback(
+    (event: React.MouseEvent, href: string) => {
+      setOpen(false);
+      if (!tabMode) return;
+      event.preventDefault();
+      openOrSwitchTab(href);
+    },
+    [tabMode, openOrSwitchTab],
+  );
 
   if (!user) {
     return (
@@ -92,7 +104,7 @@ export function UserMenu({ user }: UserMenuProps) {
             href="/settings"
             className="user-menu__item"
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={(event) => handleMenuNav(event, '/settings')}
           >
             设置
           </Link>
@@ -101,7 +113,7 @@ export function UserMenu({ user }: UserMenuProps) {
               href="/admin/users"
               className="user-menu__item"
               role="menuitem"
-              onClick={() => setOpen(false)}
+              onClick={(event) => handleMenuNav(event, '/admin/users')}
             >
               用户管理
             </Link>

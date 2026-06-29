@@ -197,44 +197,28 @@ if (existsSync(mastraDir)) {
   rmSync(mastraDir, { recursive: true, force: true });
 }
 
-console.log('\n[4/4] 生成管理员默认 Token…');
-const adminTokenKeys = [
-  'AI_MODEL',
-  'DEEPSEEK_API_KEY',
-  'DASHSCOPE_API_KEY',
-  'MOONSHOT_API_KEY',
-  'ZHIPU_API_KEY',
-  'MINIMAX_API_KEY',
-  'OPENAI_API_KEY',
-  'ANTHROPIC_API_KEY',
-  'GOOGLE_API_KEY',
-  'OPENROUTER_API_KEY',
-  'XAI_API_KEY',
-  'MISTRAL_API_KEY',
-  'IWENCAI_API_KEY',
-  'IWENCAI_BASE_URL',
-  'FEISHU_APP_ID',
-  'FEISHU_APP_SECRET',
-  'FEISHU_CHAT_ID',
-  'FEISHU_WEBHOOK_URL',
-  'FEISHU_WEBHOOK_SECRET',
-];
+console.log('\n[4/4] 生成安装包默认配置…');
 const agentEnvPath = path.join(repoRoot, 'packages/agent-core/.env');
 const adminDefaultsPath = path.join(desktopRoot, 'templates/admin-defaults.env');
+const defaultIwencaiBase = 'https://openapi.iwencai.com';
 
+let iwencaiBaseUrl = defaultIwencaiBase;
 if (existsSync(agentEnvPath)) {
-  const parsed = dotenv.parse(readFileSync(agentEnvPath));
-  const lines = ['# adminwb 账号预置 Token（打包时从 agent-core/.env 生成）', ''];
-  for (const key of adminTokenKeys) {
-    if (parsed[key]?.trim()) {
-      lines.push(`${key}=${parsed[key].trim()}`);
-    }
-  }
-  writeFileSync(adminDefaultsPath, `${lines.join('\n').trim()}\n`, 'utf-8');
-  console.log(`已写入 ${adminDefaultsPath}`);
-} else {
-  console.warn('未找到 packages/agent-core/.env，跳过 adminwb 默认 Token 生成');
+  const parsed = dotenv.parse(readFileSync(agentEnvPath, 'utf-8'));
+  iwencaiBaseUrl = parsed.IWENCAI_BASE_URL?.trim() || defaultIwencaiBase;
 }
+
+writeFileSync(
+  adminDefaultsPath,
+  [
+    '# 安装包内置默认（仅问财 API 地址；密钥由用户在设置页自行配置）',
+    '',
+    `IWENCAI_BASE_URL=${iwencaiBaseUrl}`,
+    '',
+  ].join('\n'),
+  'utf-8',
+);
+console.log(`已写入 ${adminDefaultsPath}`);
 
 console.log('\n[5/5] 完成');
 console.log(`Web:        ${webPack}`);

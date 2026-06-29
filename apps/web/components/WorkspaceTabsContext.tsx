@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { resolveDefaultTabPath } from '@/lib/nav-items';
+import { normalizeTabPath, resolveDefaultTabPath } from '@/lib/nav-items';
 
 export type WorkspaceTab = {
   id: string;
@@ -62,8 +62,8 @@ function createTabId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function normalizeTabPath(path: string): string {
-  return resolveDefaultTabPath(path.split('?')[0] || '/');
+function createTab(path: string): WorkspaceTab {
+  return { id: createTabId(), path: normalizeTabPath(path) };
 }
 
 function normalizeStoredTabs(tabs: WorkspaceTab[]): WorkspaceTab[] {
@@ -71,10 +71,6 @@ function normalizeStoredTabs(tabs: WorkspaceTab[]): WorkspaceTab[] {
     ...tab,
     path: normalizeTabPath(tab.path),
   }));
-}
-
-function createTab(path: string): WorkspaceTab {
-  return { id: createTabId(), path: normalizeTabPath(path) };
 }
 
 function readStored(): StoredTabs | null {
