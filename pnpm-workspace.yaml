@@ -3,7 +3,9 @@ packages:
   - 'apps/*'
 
 allowBuilds:
+  electron: true
   esbuild: true
+  onnxruntime-node: true
   sharp: true
 
 onlyBuiltDependencies:
@@ -11,3 +13,4 @@ onlyBuiltDependencies:
   - sharp
   - electron
   - electron-builder
+  - onnxruntime-node

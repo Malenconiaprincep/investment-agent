@@ -782,13 +782,16 @@ export async function getMonitorStatus() {
     await import('../paper/monitor-bridge.js');
   const { getAutoTrackSettings } = await import('./auto-track-policy.js');
   const { listWatchlistItems } = await import('../watchlist/store.js');
+  const { listRecentMonitorNewsEvents } = await import('./store.js');
 
-  const [lastRun, todayAlerts, recentPaperActions, watchlist, runtimeState] = await Promise.all([
+  const [lastRun, todayAlerts, recentPaperActions, watchlist, runtimeState, recentNews] =
+    await Promise.all([
     getLatestMonitorPollRun(),
     listMonitorAlerts({ tradeDate, limit: 50 }),
     listRecentMonitorPaperActions(20),
     listWatchlistItems(),
     getMonitorRuntimeState(MONITOR_STATE_KEY),
+    listRecentMonitorNewsEvents(24),
   ]);
   const recommendations = buildMonitorRecommendations(todayAlerts);
   const paperActions = mergeMonitorPaperActionsForStatus(
@@ -817,6 +820,7 @@ export async function getMonitorStatus() {
     },
     lastRun,
     todayAlerts,
+    recentNews,
     recommendations,
     paperActions,
     autoTrack,

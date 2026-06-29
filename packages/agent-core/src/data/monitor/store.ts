@@ -379,6 +379,33 @@ export async function filterUnseenNews(
   return unseen;
 }
 
+function mapNewsEventRow(row: Record<string, unknown>): MonitorNewsEvent {
+  return {
+    newsKey: String(row.news_key),
+    title: String(row.title),
+    url: row.url == null ? null : String(row.url),
+    source: row.source == null ? null : String(row.source),
+    publishedAt: row.published_at == null ? null : String(row.published_at),
+    firstSeenAt: String(row.first_seen_at),
+  };
+}
+
+export async function listRecentMonitorNewsEvents(
+  limit = 20,
+): Promise<MonitorNewsEvent[]> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT news_key, title, url, source, published_at, first_seen_at
+          FROM monitor_news_events
+          ORDER BY first_seen_at DESC
+          LIMIT ?`,
+    args: [Math.max(1, Math.min(limit, 50))],
+  });
+  return result.rows.map((row) =>
+    mapNewsEventRow(row as Record<string, unknown>),
+  );
+}
+
 export async function getMonitorRuntimeState(
   key = 'default',
 ): Promise<MonitorRuntimeState | null> {

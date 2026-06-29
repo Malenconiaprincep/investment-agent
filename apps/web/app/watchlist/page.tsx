@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DualPaperPayload } from '@/lib/paper-dual';
+import radarStyles from './watchlist-radar.module.css';
 
 type WatchlistItem = {
   id: string;
@@ -21,6 +22,27 @@ type WatchlistItem = {
     diamondStrength: 'red' | 'blue' | null;
     tradeDate?: string;
   } | null;
+};
+
+type MonitorNewsItem = {
+  newsKey: string;
+  title: string;
+  url: string | null;
+  source: string | null;
+  publishedAt: string | null;
+  firstSeenAt: string;
+};
+
+type MonitorAlertItem = {
+  id: string;
+  title: string;
+  summary: string;
+  newsTitle: string | null;
+  newsUrl: string | null;
+  theme: string | null;
+  symbol: string | null;
+  name: string | null;
+  createdAt: string;
 };
 
 type MonitorStatus = {
@@ -42,6 +64,8 @@ type MonitorStatus = {
     symbolsScanned: number;
     elapsedMs: number;
   } | null;
+  recentNews?: MonitorNewsItem[];
+  todayAlerts?: MonitorAlertItem[];
   autoTrack?: {
     modeLabel: string;
     watchlistCount: number;
@@ -210,6 +234,7 @@ export default function WatchlistPage() {
   const [monitorPolling, setMonitorPolling] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [newsExpanded, setNewsExpanded] = useState(false);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -355,6 +380,30 @@ export default function WatchlistPage() {
     };
   }, [rows]);
 
+  const radarNews = useMemo(() => {
+    const fromEvents = monitorStatus?.recentNews ?? [];
+    if (fromEvents.length > 0) return fromEvents;
+
+    const seen = new Set<string>();
+    const fromAlerts: MonitorNewsItem[] = [];
+    for (const alert of monitorStatus?.todayAlerts ?? []) {
+      const title = alert.newsTitle?.trim() || alert.title.trim();
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      fromAlerts.push({
+        newsKey: alert.id,
+        title,
+        url: alert.newsUrl,
+        source: alert.theme ?? (alert.name ? `${alert.name}` : '雷达提醒'),
+        publishedAt: null,
+        firstSeenAt: alert.createdAt,
+      });
+    }
+    return fromAlerts;
+  }, [monitorStatus?.recentNews, monitorStatus?.todayAlerts]);
+
+  const visibleNews = newsExpanded ? radarNews : radarNews.slice(0, 6);
+
   return (
     <main className="page page--workspace">
       <header className="page-header">
@@ -475,6 +524,57 @@ export default function WatchlistPage() {
             {scanMessage}
           </div>
         )}
+
+        <div className={radarStyles.radarNews}>
+          <div className={radarStyles.radarNewsHead}>
+            <h2 className={radarStyles.radarNewsTitle}>热点资讯</h2>
+            <span className={`muted ${radarStyles.radarNewsCount}`}>
+              {radarNews.length > 0
+                ? `${radarNews.length} 条`
+                : monitorStatus?.lastRun
+                  ? `本轮扫描 ${monitorStatus.lastRun.newsCount} 条源资讯`
+                  : '等待扫描'}
+            </span>
+          </div>
+          {visibleNews.length > 0 ? (
+            <>
+              <ul className="monitor-news-feed" aria-label="雷达热点资讯">
+                {visibleNews.map((item) => (
+                  <li key={item.newsKey} className={`monitor-news-feed-item ${radarStyles.radarNewsFeedItem}`}>
+                    <span className="monitor-news-feed-time">
+                      {fmtTime(item.publishedAt ?? item.firstSeenAt)}
+                    </span>
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        className="monitor-news-feed-title"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      <span className="monitor-news-feed-title">{item.title}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {radarNews.length > 6 ? (
+                <button
+                  type="button"
+                  className="button button-secondary monitor-news-feed-toggle"
+                  onClick={() => setNewsExpanded((prev) => !prev)}
+                >
+                  {newsExpanded ? '收起资讯' : `展开全部 ${radarNews.length} 条`}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className={`${radarStyles.radarNewsEmpty} muted`}>
+              暂无资讯。开启后台轮询或点击「立即扫描」后，雷达抓取的热点新闻会显示在这里。
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="watchlist-workbench-metrics" aria-label="跟踪池概览">
