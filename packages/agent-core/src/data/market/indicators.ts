@@ -5,6 +5,7 @@ export type OhlcvBar = {
   low: number | null;
   close: number | null;
   vol: number | null;
+  amount?: number | null;
 };
 
 export function sma(values: number[], period: number): number | null {

@@ -1,5 +1,6 @@
 import type { OhlcvBar } from '../market/indicators.js';
 import type {
+  BacktestEquityPoint,
   BacktestGroup,
   BacktestMetrics,
   BacktestSignal,
@@ -142,6 +143,21 @@ export function summarizeTrades(trades: BacktestTrade[]): BacktestMetrics {
         ? round(avgWin / avgLoss)
         : null,
   };
+}
+
+export function calcMaxDrawdownPct(
+  equityCurve: BacktestEquityPoint[] | undefined,
+): number | null {
+  if (!equityCurve || equityCurve.length === 0) return null;
+
+  let peak = equityCurve[0]?.equity ?? 0;
+  let maxDrawdown = 0;
+  for (const point of equityCurve) {
+    if (point.equity > peak) peak = point.equity;
+    if (peak <= 0) continue;
+    maxDrawdown = Math.min(maxDrawdown, ((point.equity - peak) / peak) * 100);
+  }
+  return round(maxDrawdown);
 }
 
 export function buildTradeGroups(

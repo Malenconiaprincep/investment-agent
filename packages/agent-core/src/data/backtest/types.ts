@@ -48,6 +48,7 @@ export type BacktestMetrics = {
   tradeCount: number;
   validTradeCount: number;
   winRatePct: number | null;
+  maxDrawdownPct?: number | null;
   avgReturnPct: number | null;
   medianReturnPct: number | null;
   bestReturnPct: number | null;
@@ -132,6 +133,14 @@ export type BacktestRunConfig = {
   newsLookbackDays?: number;
   rawSignalCount?: number;
   newsBlockedCount?: number;
+  stockMarketFilter?: 'off' | 'avoid_bearish' | 'require_bullish';
+  minBenchmarkMomentum20Pct?: number;
+  defensiveBenchmarkMomentum20Pct?: number;
+  marketBlockedCount?: number;
+  qualityBlockedCount?: number;
+  excludeRiskyStockNames?: boolean;
+  minEntryPrice?: number;
+  minAvgTurnoverAmount?: number;
   portfolioSkippedCount?: number;
   momentumDays?: number;
   rebalanceDays?: number;
@@ -153,9 +162,12 @@ export type BacktestRunConfig = {
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
   initialCapital?: number;
+  takeProfitPct?: number;
 };
 
 export type BacktestRunResult = {
+  runId?: string;
+  persistedAt?: string;
   strategy: BacktestStrategy;
   generatedAt: string;
   requestedDays: number;

@@ -28,6 +28,8 @@
     "screenings:list": "tsx src/cli/screenings-json.ts list",
     "backtest": "tsx src/cli/backtest-json.ts",
     "backtest:scenarios": "tsx src/cli/backtest-scenarios.ts",
+    "backtest:stock-news": "tsx src/cli/backtest-stock-news-compare.ts",
+    "backtest:stock-robustness": "tsx src/cli/backtest-stock-robustness.ts",
     "backtest:robustness": "tsx src/cli/backtest-robustness.ts",
     "backtest:walk-forward": "tsx src/cli/backtest-walk-forward.ts",
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",

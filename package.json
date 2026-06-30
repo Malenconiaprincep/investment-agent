@@ -40,6 +40,8 @@
     "etf:tail-pick": "pnpm --filter @investment-agent/agent-core etf:tail-pick",
     "etf:tail-schedule": "pnpm --filter @investment-agent/agent-core etf:tail-schedule",
     "backtest": "pnpm --filter @investment-agent/agent-core backtest",
+    "backtest:stock-news": "pnpm --filter @investment-agent/agent-core backtest:stock-news",
+    "backtest:stock-robustness": "pnpm --filter @investment-agent/agent-core backtest:stock-robustness",
     "watchlist:snapshot": "pnpm --filter @investment-agent/agent-core watchlist:snapshot",
     "watchlist:weekly": "pnpm --filter @investment-agent/agent-core watchlist:weekly",
     "paper:schedule": "pnpm --filter @investment-agent/agent-core paper:schedule",

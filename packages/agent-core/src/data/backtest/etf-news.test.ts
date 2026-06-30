@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateEtfNewsSentiment,
   getEtfNewsProfile,
+  getStockNewsProfile,
   scoreNewsTitleForEtf,
   shouldBlockEtfEntryByNews,
 } from './etf-news.js';
@@ -50,5 +51,15 @@ describe('etf news sentiment', () => {
     expect(
       shouldBlockEtfEntryByNews(sentiment, 'require_bullish').blocked,
     ).toBe(true);
+  });
+
+  it('scores stock headlines by company short name', () => {
+    const profile = getStockNewsProfile('600519', '贵州茅台股份有限公司');
+    const scored = scoreNewsTitleForEtf(
+      '贵州茅台遭遇利空，白酒板块走弱',
+      profile,
+    );
+    expect(scored.relevant).toBe(true);
+    expect(scored.bearish).toBeGreaterThan(0);
   });
 });

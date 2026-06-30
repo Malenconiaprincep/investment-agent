@@ -122,6 +122,26 @@ export function getEtfNewsProfile(symbol: string, name: string): EtfNewsProfile 
   };
 }
 
+export function getStockNewsProfile(symbol: string, name: string): EtfNewsProfile {
+  const cleanName = name
+    .replace(/\s+/g, '')
+    .replace(/股份有限公司|有限责任公司|有限公司|集团股份|集团|股份|A股|股票/g, '')
+    .trim();
+  const keywords = [
+    name.trim(),
+    cleanName,
+    symbol.trim(),
+  ].filter((keyword, index, all) => {
+    return keyword.length >= 2 && all.indexOf(keyword) === index;
+  });
+
+  return {
+    symbol,
+    name,
+    keywords: keywords.length > 0 ? keywords : [symbol],
+  };
+}
+
 function countPatternHits(title: string, patterns: RegExp[]): number {
   return patterns.reduce((count, pattern) => count + (pattern.test(title) ? 1 : 0), 0);
 }

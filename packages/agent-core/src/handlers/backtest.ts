@@ -4,6 +4,7 @@ import {
 } from '../data/backtest/diamond.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
 import { runEtfTailRulesBacktest } from '../data/backtest/etf.js';
+import { saveBacktestRun } from '../data/backtest/store.js';
 import { computeScreeningBacktest } from '../data/screening/backtest.js';
 import { getScreeningSession } from '../data/screening/store.js';
 
@@ -75,6 +76,15 @@ function parseNewsLookback(args: string[]): number | undefined {
   return Number.isFinite(value) && value >= 1 ? Math.floor(value) : undefined;
 }
 
+function parseMarketFilter(args: string[]): 'off' | 'avoid_bearish' | 'require_bullish' | undefined {
+  const arg = args.find((item) => item.startsWith('--market-filter='));
+  const value = arg?.split('=')[1]?.trim();
+  if (value === 'off' || value === 'avoid_bearish' || value === 'require_bullish') {
+    return value;
+  }
+  return undefined;
+}
+
 function parseFlagInt(args: string[], flag: string): number | undefined {
   const arg = args.find((item) => item.startsWith(`${flag}=`));
   if (!arg) return undefined;
@@ -87,6 +97,25 @@ function parseFlagNumber(args: string[], flag: string): number | undefined {
   if (!arg) return undefined;
   const value = Number(arg.split('=').slice(1).join('='));
   return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function parseFlagNonNegativeNumber(args: string[], flag: string): number | undefined {
+  const arg = args.find((item) => item.startsWith(`${flag}=`));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=').slice(1).join('='));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function parsePercentFlag(args: string[], flag: string): number | undefined {
+  const value = parseFlagNumber(args, flag);
+  if (value == null) return undefined;
+  return value > 1 ? value / 100 : value;
+}
+
+function parseBooleanFlag(args: string[], flag: string): boolean | undefined {
+  if (args.includes(flag)) return true;
+  if (args.includes(`--no-${flag.replace(/^--/, '')}`)) return false;
+  return undefined;
 }
 
 function parseDateArg(args: string[], flag: string): string | undefined {
@@ -111,18 +140,42 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
       throw new Error('请提供 symbols，例如: stock 600519,000001 250，或使用 --universe=retail-stock');
     }
 
-    return JSON.stringify(
-      await runDiamondBacktest({
-        symbols,
-        universe,
-        strategy: command === 'diamond' ? 'red-diamond' : 'red-diamond-momentum',
-        days: parsePositiveInt(args[2], 250),
-        holdDays: parseHoldDays(args[3]),
-        startDate: parseDateArg(args, '--from'),
-        endDate: parseDateArg(args, '--to'),
-        initialCapital: parseFlagNumber(args, '--capital'),
-      }),
-    );
+    const result = await runDiamondBacktest({
+      symbols,
+      universe,
+      strategy: command === 'diamond' ? 'red-diamond' : 'red-diamond-momentum',
+      days: parsePositiveInt(args[2], 250),
+      holdDays: parseHoldDays(args[3]),
+      startDate: parseDateArg(args, '--from'),
+      endDate: parseDateArg(args, '--to'),
+      initialCapital: parseFlagNumber(args, '--capital'),
+      maxConcurrentPositions: parseMaxConcurrent(args),
+      newsFilter: parseNewsFilter(args),
+      newsLookbackDays: parseNewsLookback(args),
+      stockMarketFilter: parseMarketFilter(args),
+      minBenchmarkMomentum20Pct: parseFlagNonNegativeNumber(
+        args,
+        '--min-benchmark-momentum',
+      ),
+      defensiveBenchmarkMomentum20Pct: parseFlagNonNegativeNumber(
+        args,
+        '--defensive-benchmark-momentum',
+      ),
+      excludeRiskyStockNames: parseBooleanFlag(args, '--exclude-risky-names'),
+      minEntryPrice: parseFlagNumber(args, '--min-price'),
+      minAvgTurnoverAmount: parseFlagNumber(args, '--min-amount'),
+      stopLossPct: parsePercentFlag(args, '--stop-loss'),
+      takeProfitPct: parsePercentFlag(args, '--take-profit'),
+    });
+    const saved = await saveBacktestRun(result, {
+      source: 'backtest-cli',
+      args,
+    });
+    return JSON.stringify({
+      ...result,
+      runId: saved.id,
+      persistedAt: saved.createdAt,
+    });
   }
 
   if (command === 'etf') {
@@ -182,6 +235,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
+    'Usage: stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
   );
 }

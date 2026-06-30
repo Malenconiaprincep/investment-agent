@@ -19,6 +19,29 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     if (startDate) args.push(`--from=${startDate}`);
     if (endDate) args.push(`--to=${endDate}`);
     if (initialCapital) args.push(`--capital=${initialCapital}`);
+    const maxConcurrent = searchParams.get('maxConcurrent');
+    if (maxConcurrent) args.push(`--max-concurrent=${maxConcurrent}`);
+    const marketFilter = searchParams.get('marketFilter');
+    if (marketFilter) args.push(`--market-filter=${marketFilter}`);
+    const minBenchmarkMomentum = searchParams.get('minBenchmarkMomentum');
+    if (minBenchmarkMomentum) {
+      args.push(`--min-benchmark-momentum=${minBenchmarkMomentum}`);
+    }
+    const defensiveBenchmarkMomentum = searchParams.get('defensiveBenchmarkMomentum');
+    if (defensiveBenchmarkMomentum) {
+      args.push(`--defensive-benchmark-momentum=${defensiveBenchmarkMomentum}`);
+    }
+    const minPrice = searchParams.get('minPrice');
+    if (minPrice) args.push(`--min-price=${minPrice}`);
+    const minAmount = searchParams.get('minAmount');
+    if (minAmount) args.push(`--min-amount=${minAmount}`);
+    const excludeRiskyNames = searchParams.get('excludeRiskyNames');
+    if (excludeRiskyNames === '1') args.push('--exclude-risky-names');
+    if (excludeRiskyNames === '0') args.push('--no-exclude-risky-names');
+    const newsFilter = searchParams.get('newsFilter');
+    if (newsFilter) args.push(`--news-filter=${newsFilter}`);
+    const newsLookback = searchParams.get('newsLookback');
+    if (newsLookback) args.push(`--news-lookback=${newsLookback}`);
     return args;
   }
 
