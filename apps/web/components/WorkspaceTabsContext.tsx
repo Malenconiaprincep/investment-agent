@@ -281,3 +281,20 @@ export function useWorkspaceTabs() {
   }
   return ctx;
 }
+
+export function useMountedWorkspaceTabs() {
+  const ctx = useWorkspaceTabs();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return useMemo(
+    () => ({
+      ...ctx,
+      enabled: mounted ? ctx.enabled : false,
+    }),
+    [ctx, mounted],
+  );
+}

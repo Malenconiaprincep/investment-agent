@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { AuthHeader } from '@/components/AuthHeader';
 import { useWatchlistPanel } from '@/components/WatchlistPanelContext';
 import { WorkspaceTabBar } from '@/components/WorkspaceTabView';
-import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
+import { useMountedWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import { UserMenu } from '@/components/UserMenu';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { isAuthPath } from '@/lib/auth-paths';
@@ -39,7 +39,7 @@ export function SiteNav() {
     toggleTabMode,
     openOrSwitchTab,
     openNewTab,
-  } = useWorkspaceTabs();
+  } = useMountedWorkspaceTabs();
 
   if (searchParams.get('embed') === '1') {
     return null;
@@ -134,7 +134,7 @@ export function SiteNav() {
           <UserMenu user={user} />
         </div>
       </div>
-      <WorkspaceTabBar />
+      {tabMode ? <WorkspaceTabBar /> : null}
     </header>
   );
 }

@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { WatchlistPanel } from '@/components/WatchlistPanel';
 import { MonitorBackgroundNotifier } from '@/components/MonitorBackgroundNotifier';
 import { WorkspaceTabPanels } from '@/components/WorkspaceTabView';
-import { useWorkspaceTabs } from '@/components/WorkspaceTabsContext';
+import { useMountedWorkspaceTabs } from '@/components/WorkspaceTabsContext';
 import { isAuthPath } from '@/lib/auth-paths';
 
 function EmbedAwareChrome({ children }: { children: ReactNode }) {
@@ -29,7 +29,7 @@ function EmbedAwareChrome({ children }: { children: ReactNode }) {
 }
 
 function TabMain({ children }: { children: ReactNode }) {
-  const { enabled } = useWorkspaceTabs();
+  const { enabled } = useMountedWorkspaceTabs();
 
   if (enabled) {
     return <WorkspaceTabPanels />;
