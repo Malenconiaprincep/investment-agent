@@ -177,7 +177,7 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
     value: 'stock',
     label: '股票策略',
-    help: '全市场 A 股前复权日线选红钻 + 动量信号，默认 5 日确认，期间只处理极端风控，到期再看 MA20 和信号弱化。',
+    help: '全市场 A 股前复权日线选红钻 + 动量信号；默认过滤 ST/低价/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。',
   },
   {
     value: 'etf-momentum',
@@ -675,7 +675,7 @@ export default function BacktestPage() {
             ) : (
               <div className="backtest-universe-note">
                 <strong>本地全市场 A 股</strong>
-                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，默认最多持有 5 个交易日。</span>
+                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，默认过滤 ST、3 元以下和近 5 日成交额低于 3000 万的票。</span>
               </div>
             )}
             {stockUniverse === 'manual' && (
@@ -1004,7 +1004,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，最多持有 5 个交易日，期间只处理极端止损/止盈，到期再看 MA20 和信号弱化。`
+                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，过滤 ST/低价/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。`
                     : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
                 </p>
               </div>
