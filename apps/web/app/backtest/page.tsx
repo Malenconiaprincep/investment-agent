@@ -395,6 +395,31 @@ function calcSharpe(points: BacktestEquityPoint[] | undefined): number | null {
   return Number(((mean / std) * Math.sqrt(252)).toFixed(3));
 }
 
+function equityDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const key = value.replace(/-/g, '').slice(0, 8);
+  return key.length === 8 ? key : null;
+}
+
+function filterEquityThroughDate(
+  points: BacktestEquityPoint[] | undefined,
+  endDate: string | null,
+): BacktestEquityPoint[] | undefined {
+  if (!points || !endDate) return points;
+  return points.filter((point) => {
+    const key = equityDateKey(point.tradeDate);
+    return key != null && key <= endDate;
+  });
+}
+
+function lastEquityAtOrBefore(
+  points: BacktestEquityPoint[] | undefined,
+  endDate: string | null,
+): BacktestEquityPoint | undefined {
+  const filtered = filterEquityThroughDate(points, endDate);
+  return filtered?.at(-1);
+}
+
 export default function BacktestPage() {
   const defaultRange = rangeFromPresetDays(365);
   const [strategy, setStrategy] = useState<Strategy>('stock');
@@ -958,15 +983,41 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
   const selectedTrade = sortedTrades[activeTradeIndex];
   const activeTradeKey =
     selectedTrade != null ? tradeRowKey(selectedTrade, activeTradeIndex) : null;
-  const finalReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
-  const benchmarkReturn = result.benchmark?.finalReturnPct ?? null;
+  const strategyLastDate = equityDateKey(result.equityCurve?.at(-1)?.tradeDate);
+  const benchmarkLastDate = equityDateKey(result.benchmark?.curve?.at(-1)?.tradeDate);
+  const comparisonEndDate =
+    strategyLastDate && benchmarkLastDate
+      ? strategyLastDate <= benchmarkLastDate
+        ? strategyLastDate
+        : benchmarkLastDate
+      : strategyLastDate ?? benchmarkLastDate;
+  const alignedEquityCurve = filterEquityThroughDate(
+    result.equityCurve,
+    comparisonEndDate,
+  );
+  const alignedBenchmarkCurve = filterEquityThroughDate(
+    result.benchmark?.curve,
+    comparisonEndDate,
+  );
+  const latestStrategyReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
+  const finalReturn =
+    lastEquityAtOrBefore(result.equityCurve, comparisonEndDate)?.returnPct ??
+    latestStrategyReturn;
+  const benchmarkReturn =
+    lastEquityAtOrBefore(result.benchmark?.curve, comparisonEndDate)?.returnPct ??
+    result.benchmark?.finalReturnPct ??
+    null;
   const excessReturn =
     finalReturn != null && benchmarkReturn != null
       ? Number((finalReturn - benchmarkReturn).toFixed(2))
       : null;
-  const annualReturn = calcAnnualReturnPct(result.equityCurve);
-  const maxDrawdown = calcMaxDrawdownPct(result.equityCurve);
-  const sharpe = calcSharpe(result.equityCurve);
+  const annualReturn = calcAnnualReturnPct(alignedEquityCurve);
+  const maxDrawdown = calcMaxDrawdownPct(alignedEquityCurve);
+  const sharpe = calcSharpe(alignedEquityCurve);
+  const hasDataCutoffMismatch =
+    strategyLastDate != null &&
+    benchmarkLastDate != null &&
+    strategyLastDate !== benchmarkLastDate;
   const universeCount = result.config?.stockUniverseCount ?? result.symbols.length;
   const isMomentum =
     result.strategy === 'red-diamond-momentum' || result.strategy === 'diamond-momentum';
@@ -1006,6 +1057,9 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                   {isMomentum
                     ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，过滤 ST/低价/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。`
                     : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
+                  {hasDataCutoffMismatch
+                    ? ` 收益概述按策略和大盘共同数据截止日 ${fmtTradeDate(comparisonEndDate)} 对齐；策略最新收益 ${fmtPct(latestStrategyReturn)}。`
+                    : ''}
                 </p>
               </div>
               <strong className={returnClass(finalReturn)}>累计 {fmtPct(finalReturn)}</strong>
@@ -1030,7 +1084,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
             </div>
 
             <BacktestEquityChart
-              strategy={(result.equityCurve ?? []).map((point) => ({
+              strategy={(alignedEquityCurve ?? []).map((point) => ({
                 tradeDate: point.tradeDate,
                 returnPct: point.returnPct,
               }))}
@@ -1038,11 +1092,11 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 result.benchmark
                   ? {
                       name: result.benchmark.name,
-                      curve: result.benchmark.curve.map((point) => ({
+                      curve: (alignedBenchmarkCurve ?? result.benchmark.curve).map((point) => ({
                         tradeDate: point.tradeDate,
                         returnPct: point.returnPct,
                       })),
-                      finalReturnPct: result.benchmark.finalReturnPct,
+                      finalReturnPct: benchmarkReturn,
                     }
                   : undefined
               }
