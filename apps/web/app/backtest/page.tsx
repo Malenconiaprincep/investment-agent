@@ -33,6 +33,30 @@ type BacktestEquityPoint = {
   closedTrades: number;
 };
 
+type BacktestPositionSnapshot = {
+  symbol: string;
+  name: string;
+  assetType: 'stock' | 'etf';
+  entryDate: string;
+  entryPrice: number;
+  shares: number;
+  costAmount: number;
+  marketValue: number;
+  weightPct: number;
+  returnPct: number | null;
+  exitDate?: string | null;
+};
+
+type BacktestPortfolioSnapshot = {
+  tradeDate: string;
+  cash: number;
+  investedMarketValue: number;
+  totalValue: number;
+  returnPct: number;
+  closedTrades: number;
+  positions: BacktestPositionSnapshot[];
+};
+
 type BacktestBenchmark = {
   symbol: string;
   name: string;
@@ -85,6 +109,7 @@ type BacktestRunConfig = {
   stopCooldownDays?: number;
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
+  initialCapital?: number;
 };
 
 type BacktestTrade = {
@@ -124,6 +149,7 @@ type BacktestResult = {
   metrics: BacktestMetrics;
   groups: BacktestGroup[];
   equityCurve?: BacktestEquityPoint[];
+  portfolioSnapshots?: BacktestPortfolioSnapshot[];
   benchmark?: BacktestBenchmark;
   symbolSummaries?: BacktestSymbolSummary[];
   currentDecisions?: BacktestCurrentDecision[];
@@ -144,14 +170,14 @@ type BacktestStreamEvent =
   | { type: 'result'; result: BacktestResult }
   | { type: 'error'; message: string };
 
-type BacktestPanel = 'overview' | 'current' | 'etfs' | 'trades' | 'notes';
-type StockBacktestPanel = 'overview' | 'chart' | 'groups' | 'trades' | 'notes';
+type BacktestPanel = 'overview' | 'current' | 'etfs' | 'holdings' | 'trades' | 'notes';
+type StockBacktestPanel = 'overview' | 'chart' | 'groups' | 'holdings' | 'trades' | 'notes';
 
 const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
     value: 'stock',
     label: '股票策略',
-    help: '全市场 A 股前复权日线选红钻 + 动量信号，持有天数由止损、MA20、移动止盈和信号减弱动态决定。',
+    help: '全市场 A 股前复权日线选红钻 + 动量信号，默认 5 日确认，期间只处理极端风控，到期再看 MA20 和信号弱化。',
   },
   {
     value: 'etf-momentum',
@@ -212,6 +238,14 @@ function fmtPct(value: number | null) {
 function fmtNumber(value: number | null, digits = 2) {
   if (value == null) return '—';
   return value.toFixed(digits);
+}
+
+function fmtMoney(value: number | null, digits = 0) {
+  if (value == null) return '—';
+  return new Intl.NumberFormat('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
 }
 
 function fmtPrice(value: number | null) {
@@ -276,12 +310,18 @@ function fmtExitReason(value: string) {
     take_profit: '止盈',
     ma20_break: '跌破 MA20',
     trailing_stop: '移动止盈',
-    signal_lost: '信号失效',
+    signal_lost: '信号消失',
     signal_weakened: '信号减弱',
     max_hold: '达到持有上限',
-    end_of_data: '数据不足',
+    end_of_data: '回测结束',
   };
   return labels[value] ?? value;
+}
+
+function displayTradeName(trade: Pick<BacktestTrade, 'name' | 'symbol'>) {
+  return trade.name && trade.name !== trade.symbol
+    ? `${trade.name} (${trade.symbol})`
+    : trade.symbol;
 }
 
 function calcMaxDrawdownPct(points: BacktestEquityPoint[] | undefined): number | null {
@@ -352,6 +392,7 @@ export default function BacktestPage() {
   );
   const [exitMaxFail, setExitMaxFail] = useState('2');
   const [maxConcurrent, setMaxConcurrent] = useState('5');
+  const [initialCapital, setInitialCapital] = useState('100000');
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<BacktestProgress | null>(null);
@@ -371,6 +412,7 @@ export default function BacktestPage() {
     const params = new URLSearchParams({ strategy });
     params.set('startDate', startDate);
     params.set('endDate', endDate);
+    params.set('initialCapital', initialCapital || '100000');
     if (!usingEtfStrategy) {
       const start = new Date(startDate);
       const end = new Date(endDate);
@@ -562,6 +604,22 @@ export default function BacktestPage() {
               </label>
             </div>
           </div>
+          <div className="backtest-capital-row">
+            <label className="backtest-date-field backtest-capital-field">
+              <span>初始资金</span>
+              <input
+                className="input"
+                type="number"
+                min={1000}
+                step={1000}
+                value={initialCapital}
+                onChange={(event) => setInitialCapital(event.target.value)}
+              />
+            </label>
+            <span className="muted">
+              用于换算每日持仓、股数/份额和账面金额，不改变信号收益率口径。
+            </span>
+          </div>
         </div>
 
         {!usingEtfStrategy && (
@@ -601,7 +659,7 @@ export default function BacktestPage() {
             ) : (
               <div className="backtest-universe-note">
                 <strong>本地全市场 A 股</strong>
-                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，持有天数由退出规则动态决定。</span>
+                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，默认最多持有 5 个交易日。</span>
               </div>
             )}
             {stockUniverse === 'manual' && (
@@ -909,6 +967,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
     { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
     { id: 'chart', label: 'K线复盘', hint: '单笔买卖点和红钻' },
     { id: 'groups', label: '分组表现', hint: '退出规则和持有天数' },
+    { id: 'holdings', label: '每日持仓', hint: '现金、股数和市值' },
     { id: 'trades', label: '交易详情', hint: '逐笔买卖记录' },
     { id: 'notes', label: '日志说明', hint: '规则和数据口径' },
   ];
@@ -937,7 +996,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，之后按止损、MA20、移动止盈和信号减弱动态出场。`
+                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，最多持有 5 个交易日，期间只处理极端止损/止盈，到期再看 MA20 和信号弱化。`
                     : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
                 </p>
               </div>
@@ -946,6 +1005,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
 
             <div className="overview-metric-grid">
               <SummaryMetric label="策略累计收益" value={fmtPct(finalReturn)} tone={finalReturn} />
+              <SummaryMetric label="初始资金" value={`${fmtMoney(result.config?.initialCapital ?? null)} 元`} />
               <SummaryMetric label="大盘累计收益" value={fmtPct(benchmarkReturn)} tone={benchmarkReturn} />
               <SummaryMetric label="超额收益" value={fmtPct(excessReturn)} tone={excessReturn} />
               <SummaryMetric label="股票池" value={`${universeCount} 只`} />
@@ -1004,7 +1064,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                   <div className="stock-backtest-selected">
                     <div>
                       <strong>
-                        {selectedTrade.name} ({selectedTrade.symbol})
+                        {displayTradeName(selectedTrade)}
                       </strong>
                       <span className="muted">
                         {fmtTradeDate(selectedTrade.entryDate)} 买入，{fmtTradeDate(selectedTrade.exitDate)} 卖出
@@ -1038,7 +1098,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                         onClick={() => setSelectedTradeKey(key)}
                       >
                         <span>
-                          {trade.name} ({trade.symbol})
+                          {displayTradeName(trade)}
                         </span>
                         <strong className={returnClass(trade.returnPct)}>
                           {fmtPct(trade.returnPct)}
@@ -1075,6 +1135,13 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
           />
         )}
 
+        {activePanel === 'holdings' && (
+          <PortfolioHoldingsSection
+            snapshots={result.portfolioSnapshots}
+            initialCapital={result.config?.initialCapital}
+          />
+        )}
+
         {activePanel === 'notes' && (
           <section className="section pane-card">
             <h2 className="section-title">日志说明</h2>
@@ -1083,7 +1150,8 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 <li key={note}>{note}</li>
               ))}
               <li>A 股 K 线复盘使用本地前复权日线；图上的红/蓝钻来自同一套信号计算，买入/卖出箭头来自回测交易明细。</li>
-              <li>股票策略使用动态退出；每笔持有天数由止损、MA20、移动止盈或信号变化触发，不再使用固定观察期。</li>
+              <li>股票策略默认最多持有 5 个交易日；持有期内只处理极端止损/止盈，到期再检查 MA20、移动止盈或信号变化。</li>
+              <li>“信号消失”表示买入后红钻或动量条件不再满足；“回测结束”表示交易已经走到回测区间末尾，没有后续交易日继续模拟。</li>
               <li>当前结果是规则验证，不是投资建议；真实交易还要考虑滑点、涨跌停、停牌和仓位约束。</li>
             </ul>
           </section>
@@ -1117,6 +1185,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
     { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
     { id: 'current', label: '当前动作', hint: '今天尾盘买卖建议' },
     { id: 'etfs', label: 'ETF 表现', hint: '每只 ETF 的历史效果' },
+    { id: 'holdings', label: '每日持仓', hint: '现金、份额和市值' },
     { id: 'trades', label: '交易详情', hint: '逐笔买卖记录' },
     { id: 'notes', label: '日志说明', hint: '规则和数据口径' },
   ];
@@ -1154,6 +1223,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
 
             <div className="overview-metric-grid">
               <SummaryMetric label="策略累计收益" value={fmtPct(finalReturn)} tone={finalReturn} />
+              <SummaryMetric label="初始资金" value={`${fmtMoney(result.config?.initialCapital ?? null)} 元`} />
               <SummaryMetric label="大盘累计收益" value={fmtPct(benchmarkReturn)} tone={benchmarkReturn} />
               <SummaryMetric label="超额收益" value={fmtPct(excessReturn)} tone={excessReturn} />
               <SummaryMetric label="策略年化收益" value={fmtPct(annualReturn)} tone={annualReturn} />
@@ -1230,6 +1300,13 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
         )}
 
         {activePanel === 'trades' && <TradeDetailsSection trades={result.trades} />}
+
+        {activePanel === 'holdings' && (
+          <PortfolioHoldingsSection
+            snapshots={result.portfolioSnapshots}
+            initialCapital={result.config?.initialCapital}
+          />
+        )}
 
         {activePanel === 'notes' && (
           <section className="section pane-card">
@@ -1381,6 +1458,102 @@ function PerformanceGroupTable({ groups }: { groups: BacktestGroup[] }) {
   );
 }
 
+function PortfolioHoldingsSection({
+  snapshots,
+  initialCapital,
+}: {
+  snapshots: BacktestPortfolioSnapshot[] | undefined;
+  initialCapital?: number;
+}) {
+  const ordered = [...(snapshots ?? [])].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+  const latest = ordered[0];
+
+  if (!latest) {
+    return (
+      <section className="section pane-card">
+        <h2 className="section-title">每日持仓</h2>
+        <div className="chart-empty">当前回测没有生成持仓快照。</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="section pane-card">
+      <div className="section-head">
+        <div>
+          <h2 className="section-title">每日持仓</h2>
+          <p className="muted">
+            按初始资金 {fmtMoney(initialCapital ?? null)} 元换算股数/份额；日终卖出的仓位已转为现金，普通交易持仓期按占用资金展示。
+          </p>
+        </div>
+        <strong className={returnClass(latest.returnPct)}>
+          总资产 {fmtMoney(latest.totalValue)} 元
+        </strong>
+      </div>
+
+      <div className="overview-metric-grid overview-metric-grid--compact">
+        <SummaryMetric label="初始资金" value={`${fmtMoney(initialCapital ?? null)} 元`} />
+        <SummaryMetric label="最新现金" value={`${fmtMoney(latest.cash)} 元`} />
+        <SummaryMetric label="持仓市值" value={`${fmtMoney(latest.investedMarketValue)} 元`} />
+        <SummaryMetric label="账面收益" value={fmtPct(latest.returnPct)} tone={latest.returnPct} />
+      </div>
+
+      <div className="portfolio-snapshot-list">
+        {ordered.slice(0, 80).map((snapshot) => (
+          <details className="portfolio-snapshot" key={snapshot.tradeDate}>
+            <summary>
+              <span>{fmtTradeDate(snapshot.tradeDate)}</span>
+              <span>总资产 {fmtMoney(snapshot.totalValue)} 元</span>
+              <span>现金 {fmtMoney(snapshot.cash)} 元</span>
+              <strong className={returnClass(snapshot.returnPct)}>
+                {fmtPct(snapshot.returnPct)}
+              </strong>
+              <span>{snapshot.positions.length} 个持仓</span>
+            </summary>
+            {snapshot.positions.length > 0 ? (
+              <div className="table-scroll-wrap">
+                <table className="candidate-table portfolio-position-table">
+                  <thead>
+                    <tr>
+                      <th>名称</th>
+                      <th>类型</th>
+                      <th>买入日</th>
+                      <th>买入价</th>
+                      <th>股数/份额</th>
+                      <th>成本</th>
+                      <th>市值/占用</th>
+                      <th>权重</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshot.positions.map((position) => (
+                      <tr key={`${snapshot.tradeDate}-${position.symbol}-${position.entryDate}`}>
+                        <td>{displayTradeName(position)}</td>
+                        <td>{position.assetType === 'etf' ? 'ETF' : '股票'}</td>
+                        <td>{fmtTradeDate(position.entryDate)}</td>
+                        <td>{fmtPrice(position.entryPrice)}</td>
+                        <td>{fmtNumber(position.shares, 2)}</td>
+                        <td>{fmtMoney(position.costAmount)} 元</td>
+                        <td>{fmtMoney(position.marketValue)} 元</td>
+                        <td>{fmtNumber(position.weightPct)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="muted portfolio-snapshot-empty">当日无持仓，资金全部为空仓现金。</p>
+            )}
+          </details>
+        ))}
+      </div>
+      {ordered.length > 80 && (
+        <p className="muted">仅展示最近 80 个快照，完整数据可通过 `/api/backtest` 获取。</p>
+      )}
+    </section>
+  );
+}
+
 function TradeDetailsSection({
   trades,
   selectedTradeKey,
@@ -1397,7 +1570,7 @@ function TradeDetailsSection({
         <table className="candidate-table">
           <thead>
             <tr>
-              <th>标的</th>
+              <th>股票名称</th>
               <th>类型</th>
               <th>买入日</th>
               <th>买入价</th>
@@ -1419,7 +1592,7 @@ function TradeDetailsSection({
                   onClick={() => onSelectTrade?.(trade, index)}
                 >
                   <td>
-                    {trade.name} ({trade.symbol})
+                    {displayTradeName(trade)}
                   </td>
                   <td>{trade.assetType === 'etf' ? 'ETF' : '股票'}</td>
                   <td>{fmtTradeDate(trade.entryDate)}</td>

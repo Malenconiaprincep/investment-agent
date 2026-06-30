@@ -24,7 +24,14 @@ export async function GET() {
       () => null,
     );
     const summary = summaryStdout ? JSON.parse(summaryStdout) : null;
-    return NextResponse.json({ items, summary });
+    return NextResponse.json(
+      { items, summary },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取监控池失败';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -44,6 +51,8 @@ export async function POST(request: Request) {
       parsed.data.symbol,
       parsed.data.name,
       parsed.data.reason ?? '',
+      parsed.data.sourceType ?? 'manual',
+      parsed.data.sourceId ?? '',
     ];
     const stdout = await runAgentCoreWatchlistJson(args);
     return NextResponse.json(JSON.parse(stdout));

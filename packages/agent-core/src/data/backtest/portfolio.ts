@@ -1,5 +1,9 @@
 import { normalizeTradeDateKey } from './date-range.js';
-import type { BacktestEquityPoint, BacktestTrade } from './types.js';
+import type {
+  BacktestEquityPoint,
+  BacktestPortfolioSnapshot,
+  BacktestTrade,
+} from './types.js';
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
@@ -8,6 +12,11 @@ function round(value: number, digits = 2): number {
 export type PortfolioFilterOptions = {
   maxConcurrent: number;
   noSymbolOverlap: boolean;
+};
+
+export type PortfolioLedger = {
+  equityCurve: BacktestEquityPoint[];
+  snapshots: BacktestPortfolioSnapshot[];
 };
 
 export function filterTradesByPortfolioRules(
@@ -57,43 +66,108 @@ export function buildPortfolioEquityCurve(
   trades: BacktestTrade[],
   slots = 5,
 ): BacktestEquityPoint[] {
+  return buildPortfolioLedger(trades, {
+    slots,
+    initialCapital: 100,
+  }).equityCurve;
+}
+
+export function buildPortfolioLedger(
+  trades: BacktestTrade[],
+  options: {
+    slots?: number;
+    initialCapital?: number;
+  } = {},
+): PortfolioLedger {
   const valid = trades.filter(
-    (trade) => trade.exitDate && trade.returnPct != null,
+    (trade) => trade.exitDate && trade.returnPct != null && trade.entryPrice > 0,
   );
-  if (valid.length === 0) return [];
+  if (valid.length === 0) return { equityCurve: [], snapshots: [] };
 
-  const slotCount = Math.max(1, Math.floor(slots));
-  const slotWeight = 1 / slotCount;
-  const events = valid
-    .flatMap((trade) => [
-      {
-        date: normalizeTradeDateKey(trade.entryDate),
-        kind: 'entry' as const,
-        trade,
-      },
-      {
-        date: normalizeTradeDateKey(trade.exitDate as string),
-        kind: 'exit' as const,
-        trade,
-      },
-    ])
-    .sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      if (a.kind === b.kind) return 0;
-      return a.kind === 'exit' ? -1 : 1;
-    });
+  const slotCount = Math.max(1, Math.floor(options.slots ?? 5));
+  const initialCapital =
+    options.initialCapital != null && Number.isFinite(options.initialCapital)
+      ? Math.max(1, options.initialCapital)
+      : 100;
+  const dates = [
+    ...new Set(
+      valid.flatMap((trade) => [
+        normalizeTradeDateKey(trade.entryDate),
+        normalizeTradeDateKey(trade.exitDate as string),
+      ]),
+    ),
+  ].sort();
+  const entriesByDate = new Map<string, BacktestTrade[]>();
+  const exitsByDate = new Map<string, BacktestTrade[]>();
+  for (const trade of valid) {
+    const entryDate = normalizeTradeDateKey(trade.entryDate);
+    const exitDate = normalizeTradeDateKey(trade.exitDate as string);
+    entriesByDate.set(entryDate, [...(entriesByDate.get(entryDate) ?? []), trade]);
+    exitsByDate.set(exitDate, [...(exitsByDate.get(exitDate) ?? []), trade]);
+  }
 
-  let cash = 100;
-  const active = new Map<string, { trade: BacktestTrade; allocation: number }>();
+  let cash = initialCapital;
+  const active = new Map<string, {
+    trade: BacktestTrade;
+    costAmount: number;
+    shares: number;
+    marketValue: number;
+  }>();
   const points: BacktestEquityPoint[] = [];
+  const snapshots: BacktestPortfolioSnapshot[] = [];
   let closedTrades = 0;
 
   const markPoint = (tradeDate: string) => {
-    let invested = 0;
-    for (const position of active.values()) {
-      invested += position.allocation;
+    const positions = [...active.values()]
+      .sort((a, b) => {
+        if (a.trade.entryDate !== b.trade.entryDate) {
+          return a.trade.entryDate.localeCompare(b.trade.entryDate);
+        }
+        return a.trade.symbol.localeCompare(b.trade.symbol);
+      });
+    let investedMarketValue = 0;
+    for (const position of positions) {
+      investedMarketValue += position.marketValue;
     }
-    const equity = cash + invested;
+    const totalValue = cash + investedMarketValue;
+    const returnPct = ((totalValue - initialCapital) / initialCapital) * 100;
+    const roundedTotalValue = round(totalValue, 2);
+    const roundedInvestedMarketValue = round(investedMarketValue, 2);
+    const roundedCash = round(cash, 2);
+
+    snapshots.push({
+      tradeDate,
+      cash: roundedCash,
+      investedMarketValue: roundedInvestedMarketValue,
+      totalValue: roundedTotalValue,
+      returnPct: round(returnPct),
+      closedTrades,
+      positions: positions.map((position) => {
+        const tradeReturnPct =
+          position.trade.returnPct != null &&
+          normalizeTradeDateKey(position.trade.exitDate as string) <= tradeDate
+            ? position.trade.returnPct
+            : null;
+        return {
+          symbol: position.trade.symbol,
+          name: position.trade.name,
+          assetType: position.trade.assetType,
+          entryDate: position.trade.entryDate,
+          entryPrice: position.trade.entryPrice,
+          shares: round(position.shares, 2),
+          costAmount: round(position.costAmount, 2),
+          marketValue: round(position.marketValue, 2),
+          weightPct:
+            roundedTotalValue > 0
+              ? round((position.marketValue / roundedTotalValue) * 100)
+              : 0,
+          returnPct: tradeReturnPct,
+          exitDate: position.trade.exitDate,
+        };
+      }),
+    });
+
+    const equity = (totalValue / initialCapital) * 100;
     points.push({
       tradeDate,
       equity: round(equity, 4),
@@ -102,36 +176,70 @@ export function buildPortfolioEquityCurve(
     });
   };
 
-  for (const event of events) {
-    if (event.kind === 'entry') {
-      if (active.size >= slotCount) continue;
-      const allocation = cash * slotWeight;
-      if (allocation <= 0) continue;
-      cash -= allocation;
-      active.set(`${event.trade.symbol}-${event.trade.entryDate}`, {
-        trade: event.trade,
-        allocation,
-      });
-      markPoint(event.date);
-      continue;
-    }
-
-    const key = `${event.trade.symbol}-${event.trade.entryDate}`;
+  const closePosition = (trade: BacktestTrade): boolean => {
+    const key = `${trade.symbol}-${trade.entryDate}`;
     const position = active.get(key);
-    if (!position) continue;
+    if (!position) return false;
     const proceeds =
-      position.allocation * (1 + (event.trade.returnPct as number) / 100);
+      position.costAmount * (1 + (trade.returnPct as number) / 100);
     cash += proceeds;
     active.delete(key);
     closedTrades += 1;
-    markPoint(event.date);
+    return true;
+  };
+
+  for (const date of dates) {
+    for (const trade of exitsByDate.get(date) ?? []) {
+      closePosition(trade);
+    }
+
+    const entries = entriesByDate.get(date) ?? [];
+    for (let index = 0; index < entries.length; index += 1) {
+      const trade = entries[index];
+      if (active.size >= slotCount) continue;
+      const remainingEntries = entries.length - index;
+      const remainingSlots = Math.max(1, slotCount - active.size);
+      const slotsToFill = Math.min(remainingEntries, remainingSlots);
+      const costAmount = cash / slotsToFill;
+      if (costAmount <= 0 || trade.entryPrice <= 0) continue;
+      cash -= costAmount;
+      active.set(`${trade.symbol}-${trade.entryDate}`, {
+        trade,
+        costAmount,
+        shares: costAmount / trade.entryPrice,
+        marketValue: costAmount,
+      });
+      if (normalizeTradeDateKey(trade.exitDate as string) === date) {
+        closePosition(trade);
+      }
+    }
+
+    markPoint(date);
   }
 
-  const deduped = new Map<string, BacktestEquityPoint>();
+  const dedupedPoints = new Map<string, BacktestEquityPoint>();
   for (const point of points) {
-    deduped.set(point.tradeDate, point);
+    dedupedPoints.set(point.tradeDate, point);
   }
-  return [...deduped.values()].sort((a, b) =>
-    a.tradeDate.localeCompare(b.tradeDate),
-  );
+  const dedupedSnapshots = new Map<string, BacktestPortfolioSnapshot>();
+  for (const snapshot of snapshots) {
+    dedupedSnapshots.set(snapshot.tradeDate, snapshot);
+  }
+
+  return {
+    equityCurve: [...dedupedPoints.values()].sort((a, b) =>
+      a.tradeDate.localeCompare(b.tradeDate),
+    ),
+    snapshots: [...dedupedSnapshots.values()].sort((a, b) =>
+      a.tradeDate.localeCompare(b.tradeDate),
+    ),
+  };
+}
+
+export function buildPortfolioSnapshots(
+  trades: BacktestTrade[],
+  slots = 5,
+  initialCapital = 100_000,
+): BacktestPortfolioSnapshot[] {
+  return buildPortfolioLedger(trades, { slots, initialCapital }).snapshots;
 }

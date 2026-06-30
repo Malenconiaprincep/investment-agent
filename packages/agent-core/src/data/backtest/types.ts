@@ -68,6 +68,30 @@ export type BacktestEquityPoint = {
   closedTrades: number;
 };
 
+export type BacktestPositionSnapshot = {
+  symbol: string;
+  name: string;
+  assetType: BacktestAssetType;
+  entryDate: string;
+  entryPrice: number;
+  shares: number;
+  costAmount: number;
+  marketValue: number;
+  weightPct: number;
+  returnPct: number | null;
+  exitDate?: string | null;
+};
+
+export type BacktestPortfolioSnapshot = {
+  tradeDate: string;
+  cash: number;
+  investedMarketValue: number;
+  totalValue: number;
+  returnPct: number;
+  closedTrades: number;
+  positions: BacktestPositionSnapshot[];
+};
+
 export type BacktestBenchmark = {
   symbol: string;
   name: string;
@@ -128,6 +152,7 @@ export type BacktestRunConfig = {
   stopCooldownDays?: number;
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
+  initialCapital?: number;
 };
 
 export type BacktestRunResult = {
@@ -147,6 +172,7 @@ export type BacktestRunResult = {
   metrics: BacktestMetrics;
   groups: BacktestGroup[];
   equityCurve?: BacktestEquityPoint[];
+  portfolioSnapshots?: BacktestPortfolioSnapshot[];
   benchmark?: BacktestBenchmark;
   symbolSummaries?: BacktestSymbolSummary[];
   currentDecisions?: BacktestCurrentDecision[];

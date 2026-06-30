@@ -82,6 +82,13 @@ function parseFlagInt(args: string[], flag: string): number | undefined {
   return Number.isFinite(value) && value >= 1 ? Math.floor(value) : undefined;
 }
 
+function parseFlagNumber(args: string[], flag: string): number | undefined {
+  const arg = args.find((item) => item.startsWith(`${flag}=`));
+  if (!arg) return undefined;
+  const value = Number(arg.split('=').slice(1).join('='));
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function parseDateArg(args: string[], flag: string): string | undefined {
   const arg = args.find((item) => item.startsWith(`${flag}=`));
   const value = arg?.split('=').slice(1).join('=').trim();
@@ -113,6 +120,7 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         holdDays: parseHoldDays(args[3]),
         startDate: parseDateArg(args, '--from'),
         endDate: parseDateArg(args, '--to'),
+        initialCapital: parseFlagNumber(args, '--capital'),
       }),
     );
   }
@@ -132,6 +140,7 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         maxConcurrentPositions: parseMaxConcurrent(args),
         newsFilter: parseNewsFilter(args),
         newsLookbackDays: parseNewsLookback(args),
+        initialCapital: parseFlagNumber(args, '--capital'),
       }),
     );
   }
@@ -148,6 +157,7 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         momentumDays: parseFlagInt(args, '--momentum'),
         rebalanceDays: parseFlagInt(args, '--rebalance'),
         trendMaDays: parseFlagInt(args, '--trend-ma'),
+        initialCapital: parseFlagNumber(args, '--capital'),
       }),
     );
   }

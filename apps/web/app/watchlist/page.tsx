@@ -110,6 +110,21 @@ function fmtTime(iso: string) {
   }
 }
 
+function fmtJoinDateTime(item: Pick<WatchlistItem, 'createdAt' | 'entryDate'>) {
+  const raw = item.createdAt || item.entryDate;
+  if (!raw) return item.entryDate ?? '-';
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) return item.entryDate ?? raw;
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(time));
+}
+
 function fmtDuration(ms: number | undefined) {
   if (!ms || ms < 0) return '—';
   if (ms < 1000) return `${ms}ms`;
@@ -665,7 +680,7 @@ export default function WatchlistPage() {
                       <div className="watchlist-workbench-entry">
                         <span>{sourceLabel(item.sourceType)}</span>
                         <span>
-                          {item.entryDate ?? '-'}
+                          加入 {fmtJoinDateTime(item)}
                           {age != null ? ` · ${age} 天` : ''}
                         </span>
                         <span>加入价 {fmtPrice(item.entryPrice)}</span>

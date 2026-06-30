@@ -1,5 +1,7 @@
 import { getDailyQuote } from '../market/services.js';
+import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
 import { scanDiamondSignal } from '../market/diamond-signal.js';
+import { todayDateKey } from '../backtest/date-range.js';
 import { purgeExpiredWatchlistItems } from './retention.js';
 import {
   listWatchlistItems,
@@ -16,7 +18,10 @@ export async function runDailyWatchlistSnapshot() {
     try {
       const quote = await getDailyQuote(item.symbol, 5);
       const latest = quote.quotes[0];
-      if (!latest?.close) continue;
+      const live = await fetchIntradayQuote(item.symbol).catch(() => null);
+      const close = live?.price ?? latest?.close;
+      const pctChg = live?.pctChg ?? latest?.pctChg ?? null;
+      if (!close) continue;
 
       let diamondStrength: 'red' | 'blue' | null = null;
       try {
@@ -41,7 +46,7 @@ export async function runDailyWatchlistSnapshot() {
         item.entryPrice && item.entryPrice > 0
           ? Number(
               (
-                ((latest.close - item.entryPrice) / item.entryPrice) *
+                ((close - item.entryPrice) / item.entryPrice) *
                 100
               ).toFixed(2),
             )
@@ -50,17 +55,17 @@ export async function runDailyWatchlistSnapshot() {
       await saveWatchlistSnapshot({
         watchlistId: item.id,
         symbol: item.symbol,
-        tradeDate: latest.tradeDate,
-        close: latest.close,
-        pctChg: latest.pctChg,
+        tradeDate: live ? todayDateKey() : latest?.tradeDate ?? todayDateKey(),
+        close,
+        pctChg,
         vsEntryPct,
         diamondStrength,
       });
 
       results.push({
         symbol: item.symbol,
-        close: latest.close,
-        pctChg: latest.pctChg,
+        close,
+        pctChg,
         vsEntryPct,
         diamondStrength,
       });

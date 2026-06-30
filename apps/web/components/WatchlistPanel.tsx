@@ -16,6 +16,8 @@ type WatchlistItem = {
   reason: string | null;
   sourceType: string | null;
   entryPrice: number | null;
+  entryDate: string | null;
+  createdAt: string;
   latest?: {
     close: number;
     pctChg: number | null;
@@ -34,6 +36,31 @@ function pctTone(v: number | null | undefined) {
   if (v > 0) return 'watchlist-panel-pct--up';
   if (v < 0) return 'watchlist-panel-pct--down';
   return 'watchlist-panel-pct--flat';
+}
+
+function fmtPrice(v: number | null | undefined) {
+  if (v == null) return '—';
+  return v.toFixed(2);
+}
+
+function fmtJoinTime(item: WatchlistItem) {
+  const raw = item.createdAt || item.entryDate;
+  if (!raw) return item.entryDate ?? '—';
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) return item.entryDate ?? raw;
+
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(time));
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+
+  return `${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')}`;
 }
 
 function sourceLabel(sourceType: string | null) {
@@ -210,6 +237,10 @@ export function WatchlistPanel() {
                   <div className="watchlist-panel-item-head">
                     <strong>{item.name}</strong>
                     <span className="watchlist-panel-item-code">{item.symbol}</span>
+                  </div>
+                  <div className="watchlist-panel-item-entry">
+                    <span>加入 {fmtJoinTime(item)}</span>
+                    <span>加入价 {fmtPrice(item.entryPrice)}</span>
                   </div>
                   <div className="watchlist-panel-item-meta">
                     <span

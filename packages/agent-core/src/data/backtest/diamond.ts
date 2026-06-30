@@ -8,6 +8,7 @@ import { inferAssetType, isRetailTradableStock } from '../market/asset-type.js';
 import {
   hasLocalStockDailyCsv,
   hasLocalEtfDailyCsv,
+  getLocalStockName,
   LOCAL_ETF_LOAD_ALL_DAYS,
   listLocalStockDailyCsvSymbols,
   LOCAL_DAILY_LOAD_ALL_DAYS,
@@ -16,7 +17,6 @@ import { sma, type OhlcvBar } from '../market/indicators.js';
 import {
   analyzeMomentum,
   evaluateMomentumExit,
-  MOMENTUM_STOP_LOSS_PCT,
   MOMENTUM_TRAILING_STOP_PCT,
 } from '../paper/momentum.js';
 import {
@@ -34,7 +34,7 @@ import {
   addCalendarDays,
   todayDateKey,
 } from './date-range.js';
-import { buildPortfolioEquityCurve } from './portfolio.js';
+import { buildPortfolioLedger } from './portfolio.js';
 import type {
   BacktestAssetType,
   BacktestEquityPoint,
@@ -60,6 +60,7 @@ export type RunDiamondBacktestInput = {
   holdDays?: number[];
   startDate?: string;
   endDate?: string;
+  initialCapital?: number;
 };
 
 const DEFAULT_DAYS = 250;
@@ -69,14 +70,21 @@ const MOMENTUM_EXIT_GROUPS: Array<{
   label: string;
   reason: BacktestExitReason;
 }> = [
+  { key: 'exit-take-profit', label: '止盈保护', reason: 'take_profit' },
   { key: 'exit-stop-loss', label: '止损退出', reason: 'stop_loss' },
   { key: 'exit-ma20-break', label: '跌破 MA20', reason: 'ma20_break' },
   { key: 'exit-trailing-stop', label: '移动止盈', reason: 'trailing_stop' },
   { key: 'exit-signal-weakened', label: '信号减弱', reason: 'signal_weakened' },
   { key: 'exit-signal-lost', label: '信号消失', reason: 'signal_lost' },
+  { key: 'exit-max-hold', label: '持有到期', reason: 'max_hold' },
   { key: 'exit-end-of-data', label: '跑到区间结束', reason: 'end_of_data' },
 ];
 const SIGNAL_WARMUP_BARS = 260;
+const STOCK_BACKTEST_STOP_LOSS_PCT = 0.2;
+const MOMENTUM_TAKE_PROFIT_PCT = 0.5;
+const MOMENTUM_MIN_SIGNAL_EXIT_HOLD_DAYS = 5;
+const MOMENTUM_SIGNAL_EXIT_CONFIRM_DAYS = 3;
+const MOMENTUM_MAX_HOLD_DAYS = 5;
 
 function normalizeHoldDays(holdDays: number[] | undefined): number[] {
   const values = holdDays?.length ? holdDays : DEFAULT_HOLD_DAYS;
@@ -189,12 +197,71 @@ function ma20At(bars: OhlcvBar[]): number | null {
   return sma(closes, 20);
 }
 
+function ma5At(bars: OhlcvBar[]): number | null {
+  const closes = bars
+    .map((bar) => bar.close)
+    .filter((value): value is number => value != null);
+  return sma(closes, 5);
+}
+
 function mapMomentumExitReason(reason: string): BacktestExitReason {
   if (reason.includes('硬止损')) return 'stop_loss';
+  if (reason.includes('止盈保护')) return 'take_profit';
   if (reason.includes('跌破 MA20')) return 'ma20_break';
   if (reason.includes('移动止盈')) return 'trailing_stop';
+  if (reason.includes('持有上限')) return 'max_hold';
   if (reason.includes('仅余蓝钻')) return 'signal_weakened';
   return 'signal_lost';
+}
+
+function evaluateBacktestMomentumExit(input: {
+  avgCost: number;
+  close: number;
+  ma5: number | null;
+  ma20: number | null;
+  highWaterMark: number | null;
+  diamondStrength: 'red' | 'blue' | null;
+  holdDays: number;
+  weakSignalDays: number;
+}): { reason: string } | null {
+  if (input.avgCost > 0) {
+    const lossPct = (input.close - input.avgCost) / input.avgCost;
+    if (lossPct <= -STOCK_BACKTEST_STOP_LOSS_PCT) {
+      return { reason: `硬止损（${(lossPct * 100).toFixed(1)}%）` };
+    }
+
+    const gainPct = (input.close - input.avgCost) / input.avgCost;
+    if (gainPct >= MOMENTUM_TAKE_PROFIT_PCT) {
+      return { reason: `止盈保护（${(gainPct * 100).toFixed(1)}%）` };
+    }
+  }
+
+  if (input.holdDays < MOMENTUM_MAX_HOLD_DAYS) return null;
+
+  const baseExit = evaluateMomentumExit({
+    avgCost: input.avgCost,
+    close: input.close,
+    ma20: input.ma20,
+    highWaterMark: input.highWaterMark,
+    diamondStrength: input.diamondStrength,
+  });
+  if (!baseExit) return null;
+
+  const isSignalExit =
+    baseExit.reason.includes('动量信号消失') ||
+    baseExit.reason.includes('仅余蓝钻');
+  if (!isSignalExit) return baseExit;
+
+  if (
+    input.holdDays >= MOMENTUM_MIN_SIGNAL_EXIT_HOLD_DAYS &&
+    input.weakSignalDays >= MOMENTUM_SIGNAL_EXIT_CONFIRM_DAYS &&
+    input.ma5 != null &&
+    input.close < input.ma5
+  ) {
+    return baseExit;
+  }
+
+  return null;
 }
 
 function createMomentumExitTrade(
@@ -205,10 +272,12 @@ function createMomentumExitTrade(
   if (entryIndex < 0) return null;
 
   let highWaterMark = signal.entryPrice;
+  let weakSignalDays = 0;
   for (let index = entryIndex - 1; index >= 0; index -= 1) {
     const bar = bars[index];
     if (!bar?.close) continue;
 
+    const holdDays = entryIndex - index;
     highWaterMark = Math.max(highWaterMark, bar.close);
     const slice = bars.slice(index);
     const currentDiamond = detectDiamondSignal(
@@ -216,15 +285,26 @@ function createMomentumExitTrade(
       signal.name,
       slice,
     );
-    const exit = evaluateMomentumExit({
+    weakSignalDays =
+      currentDiamond?.strength === 'red' ? 0 : weakSignalDays + 1;
+
+    const exit = evaluateBacktestMomentumExit({
       avgCost: signal.entryPrice,
       close: bar.close,
+      ma5: ma5At(slice),
       ma20: ma20At(slice),
       highWaterMark,
       diamondStrength: currentDiamond?.strength ?? null,
+      holdDays,
+      weakSignalDays,
     });
 
-    if (!exit) continue;
+    const maxHoldExit =
+      holdDays >= MOMENTUM_MAX_HOLD_DAYS
+        ? { reason: `达到持有上限（${MOMENTUM_MAX_HOLD_DAYS} 日）` }
+        : null;
+    const effectiveExit = exit ?? maxHoldExit;
+    if (!effectiveExit) continue;
 
     return {
       symbol: signal.symbol,
@@ -235,14 +315,14 @@ function createMomentumExitTrade(
       entryPrice: signal.entryPrice,
       exitDate: bar.tradeDate,
       exitPrice: bar.close,
-      holdDays: entryIndex - index,
+      holdDays,
       returnPct: calcReturnPct(signal.entryPrice, bar.close),
-      exitReason: mapMomentumExitReason(exit.reason),
+      exitReason: mapMomentumExitReason(effectiveExit.reason),
       signal: {
         ...signal,
         metadata: {
           ...signal.metadata,
-          exitMemo: exit.reason,
+          exitMemo: effectiveExit.reason,
         },
       },
     };
@@ -308,18 +388,23 @@ export async function runDiamondBacktest(
     universe === 'retail-stock'
       ? listLocalStockDailyCsvSymbols()
           .filter(isRetailTradableStock)
-          .map((symbol) => ({ symbol }))
+          .map((symbol) => ({ symbol, name: getLocalStockName(symbol) ?? symbol }))
       : input.symbols;
   const benchmark = await buildStockBenchmark(dateRange, days).catch(() => undefined);
   const fullHistoryThreshold = addCalendarDays(todayDateKey(), -900);
   const needsFullLocalHistory = dateRange.endDate < fullHistoryThreshold;
+  const initialCapital =
+    input.initialCapital != null && Number.isFinite(input.initialCapital)
+      ? Math.max(1, input.initialCapital)
+      : 100_000;
 
   for (const symbol of universeSymbols) {
     const code = symbol.symbol.trim();
+    const displayName = symbol.name ?? getLocalStockName(code) ?? code;
     if (!/^\d{6}$/.test(code)) {
       symbols.push({
         symbol: code,
-        name: symbol.name ?? code,
+        name: displayName,
         assetType: symbol.assetType ?? 'stock',
         error: '证券代码必须为 6 位数字',
       });
@@ -329,7 +414,7 @@ export async function runDiamondBacktest(
     if (universe === 'manual' && !isRetailTradableStock(code)) {
       symbols.push({
         symbol: code,
-        name: symbol.name ?? code,
+        name: displayName,
         assetType: 'stock',
         error: '已排除科创板或非普通 A 股股票',
       });
@@ -342,7 +427,7 @@ export async function runDiamondBacktest(
         useLocalStockCsv && (universe === 'manual' || needsFullLocalHistory);
       const quoteDays = useFullLocalHistory ? LOCAL_DAILY_LOAD_ALL_DAYS : days;
       const data = await getDailyQuote(code, quoteDays);
-      const name = symbol.name ?? code;
+      const name = displayName;
       const rawBars = data.quotes.filter((bar) => bar.close != null && bar.close > 0);
       const scoped = scopeBarsToDateRange(rawBars, dateRange);
       const bars = scoped.bars;
@@ -394,7 +479,7 @@ export async function runDiamondBacktest(
     } catch (error) {
       symbols.push({
         symbol: code,
-        name: symbol.name ?? code,
+        name: displayName,
         assetType: symbol.assetType ?? inferAssetType(code),
         error: error instanceof Error ? error.message : String(error),
       });
@@ -405,6 +490,10 @@ export async function runDiamondBacktest(
     if (a.entryDate !== b.entryDate) return a.entryDate.localeCompare(b.entryDate);
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
+  });
+  const portfolioLedger = buildPortfolioLedger(sortedTrades, {
+    slots: 5,
+    initialCapital,
   });
 
   return {
@@ -441,8 +530,10 @@ export async function runDiamondBacktest(
       noSymbolOverlap: true,
       stockUniverse: universe,
       stockUniverseCount: universeSymbols.length,
+      initialCapital,
     },
-    equityCurve: buildPortfolioEquityCurve(sortedTrades, 5),
+    equityCurve: portfolioLedger.equityCurve,
+    portfolioSnapshots: portfolioLedger.snapshots,
     benchmark,
     notes:
       strategy === 'red-diamond-momentum'
@@ -451,7 +542,7 @@ export async function runDiamondBacktest(
               ? '股票池为本地全市场 A 股 CSV，已排除 688/689 科创板代码。'
               : '股票池为手动输入代码列表，688/689 科创板会被排除。',
             `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的红钻信号。`,
-            `股票策略：红钻 + 动量 checklist 入场；持有天数不预设，出场按 -${Math.round(MOMENTUM_STOP_LOSS_PCT * 100)}% 硬止损、跌破 MA20、从持仓高点回撤 ${Math.round(MOMENTUM_TRAILING_STOP_PCT * 100)}% 移动止盈、红/蓝钻信号减弱或消失动态决定；组合权益曲线按 5 个等权槽位滚动。`,
+            `股票策略：红钻 + 动量 checklist 入场；最多持有 ${MOMENTUM_MAX_HOLD_DAYS} 个交易日，期间按 -${Math.round(STOCK_BACKTEST_STOP_LOSS_PCT * 100)}% 硬止损和 +${Math.round(MOMENTUM_TAKE_PROFIT_PCT * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化；组合权益曲线按 5 个等权槽位滚动。`,
             benchmark
               ? `大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益。`
               : '大盘基准暂未生成，已尝试读取沪深300ETF日线。',

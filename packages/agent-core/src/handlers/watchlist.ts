@@ -1,4 +1,5 @@
 import { getDailyQuote, getStockBasic } from '../data/market/services.js';
+import { fetchIntradayQuote } from '../data/market/free/intraday-quote.js';
 import {
   detectDiamondSignal,
   scanDiamondSignalHistory,
@@ -23,6 +24,7 @@ import {
 } from '../data/watchlist/jobs.js';
 import { generateWeeklyReview } from '../data/watchlist/weekly-review.js';
 import { listScreeningSessions, getScreeningSession } from '../data/screening/store.js';
+import { todayDateKey } from '../data/backtest/date-range.js';
 
 type WatchlistListItem = Awaited<ReturnType<typeof listWatchlistItems>>[number];
 type LatestWatchlistSnapshot = Awaited<ReturnType<typeof listLatestSnapshots>>[number];
@@ -32,16 +34,31 @@ function calcVsEntryPct(close: number | null | undefined, entryPrice: number | n
   return Number((((close - entryPrice) / entryPrice) * 100).toFixed(2));
 }
 
+function todayIsoDateInShanghai() {
+  const key = todayDateKey();
+  return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+}
+
 async function buildLatestWatchlistMetrics(
   item: WatchlistListItem,
   snapshot?: LatestWatchlistSnapshot,
 ) {
-  const needsLiveFallback =
-    !snapshot || snapshot.pctChg == null || snapshot.vsEntryPct == null;
-
-  if (!needsLiveFallback) return snapshot;
-
   try {
+    const live = await fetchIntradayQuote(item.symbol);
+    if (live) {
+      return {
+        id: snapshot?.id ?? `live:${item.id}`,
+        watchlistId: item.id,
+        symbol: item.symbol,
+        tradeDate: todayDateKey(),
+        close: live.price,
+        pctChg: live.pctChg,
+        vsEntryPct: calcVsEntryPct(live.price, item.entryPrice) ?? snapshot?.vsEntryPct ?? null,
+        diamondStrength: snapshot?.diamondStrength ?? null,
+        snapshotAt: new Date().toISOString(),
+      };
+    }
+
     const quote = await getDailyQuote(item.symbol, 2);
     const latest = quote.quotes[0];
     const close = quote.latestClose ?? latest?.close ?? snapshot?.close ?? null;
@@ -85,16 +102,21 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
     const symbol = args[1];
     const name = args[2];
     const reason = args[3];
+    const sourceType = args[4] as WatchlistListItem['sourceType'] | undefined;
+    const sourceId = args[5];
     if (!symbol || !name) {
       throw new Error('Usage: add <symbol> <name> [reason]');
     }
+    const live = await fetchIntradayQuote(symbol).catch(() => null);
     const quote = await getDailyQuote(symbol, 2).catch(() => null);
     const item = await addWatchlistItem({
       symbol,
       name,
       reason,
-      entryPrice: quote?.latestClose ?? undefined,
-      sourceType: 'manual',
+      sourceType: sourceType ?? 'manual',
+      sourceId,
+      entryPrice: live?.price ?? quote?.latestClose ?? undefined,
+      entryDate: todayIsoDateInShanghai(),
     });
     return JSON.stringify(item);
   }

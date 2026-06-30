@@ -18,8 +18,29 @@ const ETF_QFQ_DIR = path.join(MARKET_CSV_DIR, 'etf', 'qfq-daily');
 const STOCK_QFQ_DIR = process.env.INVESTMENT_AGENT_STOCK_QFQ_DIR?.trim()
   ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_QFQ_DIR)
   : path.join(MARKET_CSV_DIR, 'stock', 'qfq-daily');
+const STOCK_NAME_META_PATH = process.env.INVESTMENT_AGENT_STOCK_NAME_CSV?.trim()
+  ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_NAME_CSV)
+  : path.join(MARKET_CSV_DIR, 'meta', 'stock-names.csv');
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const LOAD_ALL_DAYS = 100_000;
+const BUILTIN_STOCK_NAMES: ReadonlyArray<readonly [string, string]> = [
+  ['000001', '平安银行'],
+  ['001389', '广合科技'],
+  ['002129', 'TCL中环'],
+  ['002787', '华源控股'],
+  ['300024', '机器人'],
+  ['300162', '雷曼光电'],
+  ['300323', '华灿光电'],
+  ['300668', '杰恩设计'],
+  ['300750', '宁德时代'],
+  ['301349', '信德新材'],
+  ['301528', '多浦乐'],
+  ['600519', '贵州茅台'],
+  ['601398', '工商银行'],
+  ['603687', '大胜达'],
+  ['603800', '洪田股份'],
+  ['605098', '行动教育'],
+];
 
 type LocalCsvAssetType = 'etf' | 'stock';
 
@@ -50,6 +71,44 @@ export function listLocalStockDailyCsvSymbols(): string[] {
     .map((fileName) => fileName.match(/^(\d{6})_daily_qfq\.csv$/)?.[1])
     .filter((symbol): symbol is string => Boolean(symbol))
     .sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeStockSymbol(value: string | undefined): string | null {
+  const match = value?.trim().match(/\d{6}/);
+  return match?.[0] ?? null;
+}
+
+export function loadLocalStockNameMap(): Map<string, string> {
+  const builtinNames = new Map(BUILTIN_STOCK_NAMES);
+  if (!existsSync(STOCK_NAME_META_PATH)) return builtinNames;
+
+  const fileMtime = statSync(STOCK_NAME_META_PATH).mtimeMs;
+  const cacheKey = 'local-csv:stock-name-map';
+  const cachedEntry = getCached<{ mtime: number; names: Map<string, string> }>(cacheKey);
+  if (cachedEntry && cachedEntry.mtime === fileMtime) {
+    return cachedEntry.names;
+  }
+
+  const names = new Map(builtinNames);
+  const lines = readFileSync(STOCK_NAME_META_PATH, 'utf-8').split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim().replace(/^\uFEFF/, '');
+    if (!line) continue;
+    const [symbolValue, nameValue] = line.split(',');
+    const symbol = normalizeStockSymbol(symbolValue);
+    const name = nameValue?.trim();
+    if (!symbol || !name || symbol === 'symbol') continue;
+    names.set(symbol, name);
+  }
+
+  setCached(cacheKey, { mtime: fileMtime, names }, CACHE_TTL_MS);
+  return names;
+}
+
+export function getLocalStockName(symbol: string): string | undefined {
+  const normalized = normalizeStockSymbol(symbol);
+  if (!normalized) return undefined;
+  return loadLocalStockNameMap().get(normalized);
 }
 
 function parseNumber(value: string | undefined): number | null {

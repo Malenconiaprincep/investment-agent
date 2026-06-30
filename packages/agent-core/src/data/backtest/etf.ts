@@ -33,7 +33,7 @@ import {
   type EtfNewsFilterMode,
 } from './etf-news.js';
 import {
-  buildPortfolioEquityCurve,
+  buildPortfolioLedger,
   filterTradesByPortfolioRules,
 } from './portfolio.js';
 import type {
@@ -64,6 +64,7 @@ export type RunEtfBacktestInput = {
   newsFilter?: EtfNewsFilterMode;
   newsLookbackDays?: number;
   includeWaitPullback?: boolean;
+  initialCapital?: number;
 };
 
 const DEFAULT_DAYS = 250;
@@ -648,6 +649,10 @@ export async function runEtfTailRulesBacktest(
     noSymbolOverlap,
   });
   const portfolioSkippedCount = rawTrades.length - portfolioTrades.length;
+  const initialCapital =
+    input.initialCapital != null && Number.isFinite(input.initialCapital)
+      ? Math.max(1, input.initialCapital)
+      : 100_000;
 
   const sortedTrades = portfolioTrades.sort((a, b) => {
     if (a.entryDate !== b.entryDate) return a.entryDate.localeCompare(b.entryDate);
@@ -666,7 +671,12 @@ export async function runEtfTailRulesBacktest(
     rawSignalCount: rawTrades.length,
     newsBlockedCount,
     portfolioSkippedCount,
+    initialCapital,
   };
+  const portfolioLedger = buildPortfolioLedger(sortedTrades, {
+    slots: maxConcurrentPositions,
+    initialCapital,
+  });
 
   return {
     strategy: 'etf-tail-rules',
@@ -722,10 +732,8 @@ export async function runEtfTailRulesBacktest(
         predicate: () => false,
       },
     ]),
-    equityCurve: buildPortfolioEquityCurve(
-      sortedTrades,
-      maxConcurrentPositions,
-    ),
+    equityCurve: portfolioLedger.equityCurve,
+    portfolioSnapshots: portfolioLedger.snapshots,
     benchmark,
     symbolSummaries: buildSymbolSummaries(sortedTrades),
     config,

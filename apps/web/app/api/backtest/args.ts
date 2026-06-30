@@ -1,6 +1,7 @@
 export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): string[] {
   const strategy = searchParams.get('strategy') ?? 'etf-momentum';
   const resolvedStrategy = strategy === 'stock' ? 'diamond-momentum' : strategy;
+  const initialCapital = searchParams.get('initialCapital');
 
   if (resolvedStrategy === 'diamond' || resolvedStrategy === 'diamond-momentum') {
     const universe = searchParams.get('universe');
@@ -17,6 +18,7 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     const endDate = searchParams.get('endDate');
     if (startDate) args.push(`--from=${startDate}`);
     if (endDate) args.push(`--to=${endDate}`);
+    if (initialCapital) args.push(`--capital=${initialCapital}`);
     return args;
   }
 
@@ -40,6 +42,7 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     if (momentum) args.push(`--momentum=${momentum}`);
     if (rebalance) args.push(`--rebalance=${rebalance}`);
     if (trendMa) args.push(`--trend-ma=${trendMa}`);
+    if (initialCapital) args.push(`--capital=${initialCapital}`);
     return args;
   }
 
@@ -52,6 +55,7 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
   const endDate = searchParams.get('endDate');
   if (startDate) args.push(`--from=${startDate}`);
   if (endDate) args.push(`--to=${endDate}`);
+  if (initialCapital) args.push(`--capital=${initialCapital}`);
   if (searchParams.get('includeWaitPullback') === '1') {
     args.push('--include-wait-pullback');
   }

@@ -19,6 +19,13 @@ function shouldUseLocalMonitorExec(baseUrl: string): boolean {
   );
 }
 
+function shouldUseLocalWatchlistExec(baseUrl: string): boolean {
+  return (
+    process.env.AGENT_CORE_WATCHLIST_LOCAL_EXEC !== '0' &&
+    isLocalAgentCoreUrl(baseUrl)
+  );
+}
+
 export function getAgentCoreConfig(): AgentCoreConfig {
   const baseUrl = process.env.AGENT_CORE_URL?.trim().replace(/\/$/, '');
   if (!baseUrl) {
@@ -83,11 +90,7 @@ export async function runAgentCoreFeedback(args: string[]): Promise<string> {
   return callAgentCoreCli('feedback', args);
 }
 
-export async function runAgentCoreWatchlistJson(args: string[]): Promise<string> {
-  return callAgentCoreCli('watchlist', args);
-}
-
-async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
+async function runAgentCoreLocalCli(scriptName: string, args: string[]): Promise<string> {
   const { execFile } = await import('node:child_process');
   const { existsSync } = await import('node:fs');
   const { promisify } = await import('node:util');
@@ -113,7 +116,7 @@ async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
 
   const { stdout } = await execFileAsync(
     'pnpm',
-    ['exec', 'tsx', 'src/cli/monitor-json.ts', ...args],
+    ['exec', 'tsx', `src/cli/${scriptName}`, ...args],
     {
       cwd: agentCoreRoot,
       env: process.env,
@@ -123,12 +126,26 @@ async function runAgentCoreMonitorLocal(args: string[]): Promise<string> {
   return stdout;
 }
 
+export async function runAgentCoreWatchlistJson(args: string[]): Promise<string> {
+  const { baseUrl } = getAgentCoreConfig();
+  if (shouldUseLocalWatchlistExec(baseUrl)) {
+    try {
+      return await runAgentCoreLocalCli('watchlist-json.ts', args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`本地跟踪池执行失败: ${message}`);
+    }
+  }
+
+  return callAgentCoreCli('watchlist', args);
+}
+
 export async function runAgentCoreMonitorJson(args: string[]): Promise<string> {
   const { baseUrl } = getAgentCoreConfig();
 
   if (shouldUseLocalMonitorExec(baseUrl)) {
     try {
-      return await runAgentCoreMonitorLocal(args);
+      return await runAgentCoreLocalCli('monitor-json.ts', args);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`本地监控执行失败: ${message}`);

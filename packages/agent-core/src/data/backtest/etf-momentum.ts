@@ -21,6 +21,7 @@ import {
 import type {
   BacktestCurrentDecision,
   BacktestEquityPoint,
+  BacktestPortfolioSnapshot,
   BacktestRunResult,
   BacktestSignal,
   BacktestSymbolSummary,
@@ -41,6 +42,7 @@ export type RunEtfMomentumBacktestInput = {
   bullBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
+  initialCapital?: number;
 };
 
 type MomentumBar = {
@@ -571,12 +573,15 @@ function simulateDailyPortfolio(input: {
   bullBenchmarkSlotCount: number;
   cashFallbackInWeakRegime: boolean;
   exitOnTrendBreak: boolean;
+  initialCapital: number;
 }): {
   trades: BacktestTrade[];
   equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
+  portfolioSnapshots: BacktestPortfolioSnapshot[];
 } {
   const trades: BacktestTrade[] = [];
   const equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }> = [];
+  const portfolioSnapshots: BacktestPortfolioSnapshot[] = [];
   let cash = 1;
   let positions: SimPosition[] = [];
   let closedTrades = 0;
@@ -617,6 +622,66 @@ function simulateDailyPortfolio(input: {
       invested += markPositionValue(position, tradeDate);
     }
     return cash + invested;
+  };
+
+  const markPortfolioSnapshot = (tradeDate: string) => {
+    const positionValues = positions.map((position) => {
+      const marketValue = markPositionValue(position, tradeDate);
+      return { position, marketValue };
+    });
+    const invested = positionValues.reduce(
+      (sum, item) => sum + item.marketValue,
+      0,
+    );
+    const totalEquity = cash + invested;
+    const aggregatedPositions = new Map<string, BacktestPortfolioSnapshot['positions'][number]>();
+    for (const { position, marketValue } of positionValues) {
+      const key = `${position.symbol}-${position.entryDate}-${position.entryPrice}`;
+      const existing = aggregatedPositions.get(key);
+      const shares = position.shares * input.initialCapital;
+      const costAmount = position.grossBasis * input.initialCapital;
+      const scaledMarketValue = marketValue * input.initialCapital;
+      const returnPct =
+        position.grossBasis > 0
+          ? round(((marketValue - position.grossBasis) / position.grossBasis) * 100)
+          : null;
+      if (existing) {
+        existing.shares = round(existing.shares + shares, 2);
+        existing.costAmount = round(existing.costAmount + costAmount, 2);
+        existing.marketValue = round(existing.marketValue + scaledMarketValue, 2);
+        existing.weightPct = totalEquity > 0
+          ? round((existing.marketValue / (totalEquity * input.initialCapital)) * 100)
+          : 0;
+        existing.returnPct =
+          existing.costAmount > 0
+            ? round(((existing.marketValue - existing.costAmount) / existing.costAmount) * 100)
+            : returnPct;
+        continue;
+      }
+      aggregatedPositions.set(key, {
+        symbol: position.symbol,
+        name: position.name,
+        assetType: 'etf',
+        entryDate: position.entryDate,
+        entryPrice: position.entryPrice,
+        shares: round(shares, 2),
+        costAmount: round(costAmount, 2),
+        marketValue: round(scaledMarketValue, 2),
+        weightPct: totalEquity > 0 ? round((marketValue / totalEquity) * 100) : 0,
+        returnPct,
+        exitDate: null,
+      });
+    }
+
+    portfolioSnapshots.push({
+      tradeDate,
+      cash: round(cash * input.initialCapital, 2),
+      investedMarketValue: round(invested * input.initialCapital, 2),
+      totalValue: round(totalEquity * input.initialCapital, 2),
+      returnPct: round((totalEquity - 1) * 100),
+      closedTrades,
+      positions: [...aggregatedPositions.values()],
+    });
   };
 
   for (let dateIndex = 0; dateIndex < input.allDates.length; dateIndex += 1) {
@@ -799,6 +864,7 @@ function simulateDailyPortfolio(input: {
 
     const equity = markPortfolioEquity(tradeDate);
     equityPoints.push({ tradeDate, equity, closedTrades });
+    markPortfolioSnapshot(tradeDate);
   }
 
   const lastDate = input.allDates.at(-1);
@@ -806,7 +872,7 @@ function simulateDailyPortfolio(input: {
     closeAllPositions(lastDate, 'end_of_data');
   }
 
-  return { trades, equityPoints };
+  return { trades, equityPoints, portfolioSnapshots };
 }
 
 function buildMomentumEquityCurve(
@@ -1123,6 +1189,10 @@ export async function runEtfMomentumBacktest(
   );
   const cashFallbackInWeakRegime = input.cashFallbackInWeakRegime === true;
   const exitOnTrendBreak = input.exitOnTrendBreak === true;
+  const initialCapital =
+    input.initialCapital != null && Number.isFinite(input.initialCapital)
+      ? Math.max(1, input.initialCapital)
+      : 100_000;
 
   const dateRange = resolveBacktestDateRange({
     startDate: input.startDate,
@@ -1162,7 +1232,7 @@ export async function runEtfMomentumBacktest(
     .filter((date) => isTradeDateInRange(date, dateRange))
     .sort();
 
-  const { trades, equityPoints } = simulateDailyPortfolio({
+  const { trades, equityPoints, portfolioSnapshots } = simulateDailyPortfolio({
     allDates,
     histories,
     benchmarkHistory,
@@ -1182,6 +1252,7 @@ export async function runEtfMomentumBacktest(
     bullBenchmarkSlotCount,
     cashFallbackInWeakRegime,
     exitOnTrendBreak,
+    initialCapital,
   });
 
   const sortedTrades = trades.sort((a, b) => {
@@ -1214,6 +1285,7 @@ export async function runEtfMomentumBacktest(
       },
     ]),
     equityCurve: buildMomentumEquityCurve(equityPoints),
+    portfolioSnapshots,
     benchmark:
       benchmarkCurve.length > 0
         ? {
@@ -1256,6 +1328,7 @@ export async function runEtfMomentumBacktest(
       exitOnTrendBreak,
       stopLossPct: POSITION_STOP_LOSS_PCT,
       stopCooldownDays: STOP_COOLDOWN_DAYS,
+      initialCapital,
     },
     notes: [
       `ETF 动量轮动：默认每 ${rebalanceDays} 个交易日调仓。`,
