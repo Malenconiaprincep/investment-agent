@@ -10,6 +10,7 @@ import {
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import { isRetailTradableStock } from '../market/asset-type.js';
+import { sma, type OhlcvBar } from '../market/indicators.js';
 import { isLikelyLimitUp } from '../market/price-limit.js';
 import { getDailyQuote } from '../market/services.js';
 import { addWatchlistItem, listWatchlistItems } from '../watchlist/store.js';
@@ -55,6 +56,123 @@ const ALERT_EVENT_LABEL: Record<MonitorAlert['alertType'], string> = {
   watchlist_surge: '自选波动',
   theme_ignite: '主线资讯',
 };
+
+const STOCK_ENTRY_MIN_PRICE = 3;
+const STOCK_ENTRY_MIN_AVG_AMOUNT = 30_000_000;
+const STOCK_ENTRY_MAX_MA20_EXTENSION_PCT = 0.12;
+const STOCK_ENTRY_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT = 3;
+
+function isRiskyStockName(name: string): boolean {
+  const normalized = name.trim().toUpperCase();
+  return normalized.includes('ST') || /退/.test(normalized);
+}
+
+function avgTurnoverAmount(bars: OhlcvBar[], days = 5): number | null {
+  const amounts = bars
+    .slice(0, days)
+    .map((bar) => bar.amount)
+    .filter((amount): amount is number => amount != null && amount > 0);
+  if (amounts.length === 0) return null;
+  return amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+}
+
+async function evaluateStockMarketEntryGate(): Promise<{
+  passed: boolean;
+  reason: string;
+}> {
+  const benchmark = await getDailyQuote('510300', 90);
+  const bars = benchmark.quotes.filter(
+    (bar) => bar.close != null && bar.close > 0,
+  );
+  const closes = bars.map((bar) => bar.close as number);
+  const close = closes[0];
+  const ma20 = sma(closes, 20);
+  const ma60 = sma(closes, 60);
+  const prior20 = closes[20];
+  const prior60 = closes[60];
+  const momentum20Pct =
+    close != null && prior20 != null && prior20 > 0
+      ? Number((((close - prior20) / prior20) * 100).toFixed(2))
+      : null;
+  const momentum60Pct =
+    close != null && prior60 != null && prior60 > 0
+      ? Number((((close - prior60) / prior60) * 100).toFixed(2))
+      : null;
+
+  if (close == null || ma20 == null || momentum20Pct == null) {
+    return { passed: false, reason: '沪深300大盘状态不足，暂不自动买入' };
+  }
+  if (close < ma20 || momentum20Pct < 0) {
+    return {
+      passed: false,
+      reason: `沪深300未满足短期强势：MA20 ${ma20.toFixed(2)}，20日动量 ${momentum20Pct}%`,
+    };
+  }
+
+  const midBullish =
+    ma60 != null &&
+    close >= ma60 &&
+    momentum60Pct != null &&
+    momentum60Pct >= 0;
+  if (
+    !midBullish &&
+    momentum20Pct < STOCK_ENTRY_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT
+  ) {
+    return {
+      passed: false,
+      reason: `沪深300中期不强，20日动量 ${momentum20Pct}% 低于 ${STOCK_ENTRY_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT}%`,
+    };
+  }
+
+  return {
+    passed: true,
+    reason: midBullish
+      ? '沪深300短期/中期强势确认'
+      : `沪深300短期强势确认，20日动量 ${momentum20Pct}% 通过防守阈值`,
+  };
+}
+
+async function evaluateStockEntryStandard(input: {
+  symbol: string;
+  name: string;
+  bars: OhlcvBar[];
+  close: number | null | undefined;
+  ma20: number | null | undefined;
+}): Promise<{ passed: boolean; reason: string }> {
+  if (!isRetailTradableStock(input.symbol)) {
+    return { passed: false, reason: '非普通 A 股或科创板，跳过自动买入' };
+  }
+  if (isRiskyStockName(input.name)) {
+    return { passed: false, reason: `风险名称过滤：${input.name}` };
+  }
+  if (input.close == null || input.close <= 0) {
+    return { passed: false, reason: '缺少有效最新价格' };
+  }
+  if (input.close < STOCK_ENTRY_MIN_PRICE) {
+    return {
+      passed: false,
+      reason: `最新价 ${input.close.toFixed(2)} 低于 ${STOCK_ENTRY_MIN_PRICE} 元`,
+    };
+  }
+  const avgAmount = avgTurnoverAmount(input.bars, 5);
+  if (avgAmount != null && avgAmount < STOCK_ENTRY_MIN_AVG_AMOUNT) {
+    return {
+      passed: false,
+      reason: `近5日平均成交额 ${Math.round(avgAmount / 10_000)} 万低于 3000 万`,
+    };
+  }
+  if (input.ma20 != null && input.ma20 > 0) {
+    const extensionPct = (input.close - input.ma20) / input.ma20;
+    if (extensionPct > STOCK_ENTRY_MAX_MA20_EXTENSION_PCT) {
+      return {
+        passed: false,
+        reason: `距离 MA20 偏离 ${(extensionPct * 100).toFixed(1)}%，超过 12% 追高过滤`,
+      };
+    }
+  }
+
+  return evaluateStockMarketEntryGate();
+}
 
 function fmtPctPoint(v: number): string {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -229,14 +347,40 @@ export async function checkMomentumBuyReady(symbol: string, name: string) {
   const kline = await getDailyQuote(symbol, 60);
   const signal = await scanDiamondSignal(symbol, name, 60);
   const momentum = analyzeMomentum(symbol, name, kline.quotes, signal);
-  const ready =
+  const momentumReady =
     momentum?.action === 'buy' &&
     momentum.checklistScore >= MOMENTUM_MIN_CHECKLIST &&
     signal?.strength === 'red';
+  if (!momentumReady) {
+    return {
+      ready: false,
+      memo: momentum?.entryMemo ?? '',
+      price: kline.latestClose,
+      reason: '红钻 + 动量 checklist 尚未达标',
+    };
+  }
+
+  const entryGate = await evaluateStockEntryStandard({
+    symbol,
+    name,
+    bars: kline.quotes,
+    close: momentum.close,
+    ma20: momentum.ma20,
+  });
+  if (!entryGate.passed) {
+    return {
+      ready: false,
+      memo: momentum.entryMemo,
+      price: kline.latestClose,
+      reason: entryGate.reason,
+    };
+  }
+
   return {
-    ready: !!ready,
-    memo: momentum?.entryMemo ?? '',
+    ready: true,
+    memo: `${momentum.entryMemo} · 买入准入：${entryGate.reason}`,
     price: kline.latestClose,
+    reason: entryGate.reason,
   };
 }
 
@@ -563,17 +707,15 @@ async function maybeAutoBuy(input: {
   let momentumMemo = alert.summary;
   let momentumPrice: number | null = null;
 
-  if (!isPreMoveFast) {
-    try {
-      const momentum = await checkMomentumBuyReady(alert.symbol, alert.name);
-      momentumReady = momentum.ready;
-      momentumMemo = momentum.memo || alert.summary;
-      momentumPrice = momentum.price;
-    } catch {
-      return null;
-    }
-    if (!momentumReady) return null;
+  try {
+    const momentum = await checkMomentumBuyReady(alert.symbol, alert.name);
+    momentumReady = momentum.ready;
+    momentumMemo = momentum.memo || alert.summary;
+    momentumPrice = momentum.price;
+  } catch {
+    return null;
   }
+  if (!momentumReady) return null;
 
   try {
     const [summary, trades] = await Promise.all([

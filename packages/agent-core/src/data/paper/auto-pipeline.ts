@@ -8,8 +8,8 @@ import { getDailyQuote } from '../market/services.js';
 import {
   analyzeMomentum,
   evaluateMomentumExit,
-  MOMENTUM_MIN_CHECKLIST,
 } from './momentum.js';
+import { checkMomentumBuyReady } from './monitor-bridge.js';
 import {
   calcAutoBuyShares,
   executePaperTrade,
@@ -246,21 +246,16 @@ export async function runStockPaperAutoPipeline(options?: {
       try {
         const kline = await getDailyQuote(c.symbol, 60);
         const signal = await scanDiamondSignal(c.symbol, c.name, 60);
-        const momentum = analyzeMomentum(c.symbol, c.name, kline.quotes, signal);
         if (!signal) continue;
         if (signal.strength === 'red') red += 1;
         else blue += 1;
 
-        if (
-          screeningOutcome.passed &&
-          momentum?.action === 'buy' &&
-          momentum.checklistScore >= MOMENTUM_MIN_CHECKLIST &&
-          signal.strength === 'red'
-        ) {
+        const readiness = await checkMomentumBuyReady(c.symbol, c.name);
+        if (screeningOutcome.passed && readiness.ready) {
           buyCandidates.push({
             symbol: c.symbol,
             name: c.name,
-            memo: momentum.entryMemo,
+            memo: readiness.memo,
           });
         }
       } catch {
