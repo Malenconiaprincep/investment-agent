@@ -30,6 +30,29 @@ export function calcReturnPct(
   return round(((exitPrice - entryPrice) / entryPrice) * 100);
 }
 
+export function buildPricePath(
+  bars: OhlcvBar[],
+  entryDate: string,
+  exitDate: string | null,
+): Array<{ tradeDate: string; close: number }> {
+  const filtered = barsWithClose(bars);
+  const entryKey = entryDate.replace(/-/g, '');
+  const exitKey = (exitDate ?? entryDate).replace(/-/g, '');
+  const startKey = entryKey <= exitKey ? entryKey : exitKey;
+  const endKey = entryKey <= exitKey ? exitKey : entryKey;
+
+  return filtered
+    .filter((bar) => {
+      const key = bar.tradeDate.replace(/-/g, '');
+      return key >= startKey && key <= endKey && bar.close != null;
+    })
+    .map((bar) => ({
+      tradeDate: bar.tradeDate.replace(/-/g, ''),
+      close: bar.close as number,
+    }))
+    .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
+}
+
 export function createFixedHoldTrade(
   signal: BacktestSignal,
   bars: OhlcvBar[],
@@ -66,7 +89,13 @@ export function createFixedHoldTrade(
     holdDays: actualHoldDays,
     returnPct,
     exitReason: reachedTargetHold ? 'fixed_hold' : 'end_of_data',
-    signal,
+    signal: {
+      ...signal,
+      metadata: {
+        ...signal.metadata,
+        pricePath: buildPricePath(filtered, signal.tradeDate, exit.tradeDate),
+      },
+    },
   };
 }
 

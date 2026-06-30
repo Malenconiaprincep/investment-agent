@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BacktestEquityChart } from '@/components/charts/BacktestEquityChart';
 import { StockKlineChart } from '@/components/charts/StockKlineChart';
 import type { TradeMarker } from '@/components/charts/KlineChart';
@@ -322,6 +322,22 @@ function displayTradeName(trade: Pick<BacktestTrade, 'name' | 'symbol'>) {
   return trade.name && trade.name !== trade.symbol
     ? `${trade.name} (${trade.symbol})`
     : trade.symbol;
+}
+
+function displayHoldingName(position: Pick<BacktestPositionSnapshot, 'name' | 'symbol'>) {
+  return position.name && position.name !== position.symbol ? position.name : position.symbol;
+}
+
+function sortTradesOldestFirst(trades: BacktestTrade[]) {
+  return [...trades].sort((a, b) => {
+    const byEntryDate = a.entryDate.localeCompare(b.entryDate);
+    if (byEntryDate !== 0) return byEntryDate;
+    const bySymbol = a.symbol.localeCompare(b.symbol);
+    if (bySymbol !== 0) return bySymbol;
+    const byExitDate = (a.exitDate ?? '').localeCompare(b.exitDate ?? '');
+    if (byExitDate !== 0) return byExitDate;
+    return a.holdDays - b.holdDays;
+  });
 }
 
 function calcMaxDrawdownPct(points: BacktestEquityPoint[] | undefined): number | null {
@@ -934,15 +950,7 @@ function buildTradeMarkers(trade: BacktestTrade | undefined): TradeMarker[] {
 function StockStrategyReport({ result }: { result: BacktestResult }) {
   const [activePanel, setActivePanel] = useState<StockBacktestPanel>('overview');
   const [selectedTradeKey, setSelectedTradeKey] = useState<string | null>(null);
-  const sortedTrades = useMemo(
-    () =>
-      [...result.trades].sort((a, b) => {
-        const byDate = b.entryDate.localeCompare(a.entryDate);
-        if (byDate !== 0) return byDate;
-        return a.symbol.localeCompare(b.symbol);
-      }),
-    [result.trades],
-  );
+  const sortedTrades = useMemo(() => sortTradesOldestFirst(result.trades), [result.trades]);
   const selectedTradeIndex = selectedTradeKey
     ? sortedTrades.findIndex((trade, index) => tradeRowKey(trade, index) === selectedTradeKey)
     : 0;
@@ -1465,8 +1473,22 @@ function PortfolioHoldingsSection({
   snapshots: BacktestPortfolioSnapshot[] | undefined;
   initialCapital?: number;
 }) {
-  const ordered = [...(snapshots ?? [])].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
-  const latest = ordered[0];
+  const [page, setPage] = useState(0);
+  const pageSize = 30;
+  const ordered = useMemo(
+    () => [...(snapshots ?? [])].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate)),
+    [snapshots],
+  );
+  const latest = ordered[ordered.length - 1];
+  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * pageSize;
+  const pageEnd = Math.min(pageStart + pageSize, ordered.length);
+  const visibleSnapshots = ordered.slice(pageStart, pageEnd);
+
+  useEffect(() => {
+    setPage(0);
+  }, [snapshots]);
 
   if (!latest) {
     return (
@@ -1498,8 +1520,51 @@ function PortfolioHoldingsSection({
         <SummaryMetric label="账面收益" value={fmtPct(latest.returnPct)} tone={latest.returnPct} />
       </div>
 
+      <div className="portfolio-snapshot-toolbar">
+        <span>
+          按日期从旧到新 · 显示第 {pageStart + 1}-{pageEnd} 天 / 共 {ordered.length} 天
+        </span>
+        <div className="portfolio-snapshot-pagination" aria-label="每日持仓分页">
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={currentPage === 0}
+            onClick={() => setPage(0)}
+          >
+            首页
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={currentPage === 0}
+            onClick={() => setPage((value) => Math.max(0, value - 1))}
+          >
+            上一页
+          </button>
+          <span>
+            {currentPage + 1} / {pageCount}
+          </span>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+          >
+            下一页
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage(pageCount - 1)}
+          >
+            末页
+          </button>
+        </div>
+      </div>
+
       <div className="portfolio-snapshot-list">
-        {ordered.slice(0, 80).map((snapshot) => (
+        {visibleSnapshots.map((snapshot) => (
           <details className="portfolio-snapshot" key={snapshot.tradeDate}>
             <summary>
               <span>{fmtTradeDate(snapshot.tradeDate)}</span>
@@ -1528,7 +1593,7 @@ function PortfolioHoldingsSection({
                   <tbody>
                     {snapshot.positions.map((position) => (
                       <tr key={`${snapshot.tradeDate}-${position.symbol}-${position.entryDate}`}>
-                        <td>{displayTradeName(position)}</td>
+                        <td title={position.symbol}>{displayHoldingName(position)}</td>
                         <td>{position.assetType === 'etf' ? 'ETF' : '股票'}</td>
                         <td>{fmtTradeDate(position.entryDate)}</td>
                         <td>{fmtPrice(position.entryPrice)}</td>
@@ -1547,9 +1612,6 @@ function PortfolioHoldingsSection({
           </details>
         ))}
       </div>
-      {ordered.length > 80 && (
-        <p className="muted">仅展示最近 80 个快照，完整数据可通过 `/api/backtest` 获取。</p>
-      )}
     </section>
   );
 }
@@ -1563,6 +1625,8 @@ function TradeDetailsSection({
   selectedTradeKey?: string;
   onSelectTrade?: (trade: BacktestTrade, index: number) => void;
 }) {
+  const orderedTrades = useMemo(() => sortTradesOldestFirst(trades), [trades]);
+
   return (
     <section className="section pane-card">
       <h2 className="section-title">交易详情</h2>
@@ -1583,7 +1647,7 @@ function TradeDetailsSection({
             </tr>
           </thead>
           <tbody>
-            {trades.slice(0, 200).map((trade, index) => {
+            {orderedTrades.slice(0, 200).map((trade, index) => {
               const key = tradeRowKey(trade, index);
               return (
                 <tr
@@ -1616,7 +1680,7 @@ function TradeDetailsSection({
           </tbody>
         </table>
       </div>
-      {trades.length > 200 && (
+      {orderedTrades.length > 200 && (
         <p className="muted">仅展示前 200 笔，完整明细可通过 `/api/backtest` 获取。</p>
       )}
     </section>

@@ -13,6 +13,7 @@ import {
 } from '../market/local-csv/etf-daily.js';
 import {
   barsWithClose,
+  buildPricePath,
   buildTradeGroups,
   calcReturnPct,
   findBarIndex,
@@ -169,28 +170,30 @@ function createEtfStrategyTrade(
     exitPrice: number,
     exitReason: BacktestExitReason,
     exitMemo?: string,
-  ): BacktestTrade => ({
-    symbol: signal.symbol,
-    name: signal.name,
-    assetType: signal.assetType,
-    strategy: signal.strategy,
-    entryDate: signal.tradeDate,
-    entryPrice: signal.entryPrice,
-    exitDate: filtered[exitIndex].tradeDate,
-    exitPrice,
-    holdDays: entryIndex - exitIndex,
-    returnPct: calcReturnPct(signal.entryPrice, exitPrice),
-    exitReason,
-    signal: exitMemo
-      ? {
-          ...signal,
-          metadata: {
-            ...signal.metadata,
-            exitMemo,
-          },
-        }
-      : signal,
-  });
+  ): BacktestTrade => {
+    const exitDate = filtered[exitIndex].tradeDate;
+    return {
+      symbol: signal.symbol,
+      name: signal.name,
+      assetType: signal.assetType,
+      strategy: signal.strategy,
+      entryDate: signal.tradeDate,
+      entryPrice: signal.entryPrice,
+      exitDate,
+      exitPrice,
+      holdDays: entryIndex - exitIndex,
+      returnPct: calcReturnPct(signal.entryPrice, exitPrice),
+      exitReason,
+      signal: {
+        ...signal,
+        metadata: {
+          ...signal.metadata,
+          ...(exitMemo ? { exitMemo } : {}),
+          pricePath: buildPricePath(filtered, signal.tradeDate, exitDate),
+        },
+      },
+    };
+  };
 
   for (let index = entryIndex - minSettlement; index >= 0; index -= 1) {
     const bar = filtered[index];

@@ -3,6 +3,7 @@ import {
   scanDiamondSignalHistory,
   type DiamondSignalResult,
 } from '../market/diamond-signal.js';
+import { fetchIntradayQuotes } from '../market/free/intraday-quote.js';
 import { getDailyQuote } from '../market/services.js';
 import { inferAssetType, isRetailTradableStock } from '../market/asset-type.js';
 import {
@@ -21,6 +22,7 @@ import {
 } from '../paper/momentum.js';
 import {
   buildTradeGroups,
+  buildPricePath,
   calcReturnPct,
   createFixedHoldTrade,
   findBarIndex,
@@ -190,6 +192,36 @@ function toSignal(
   };
 }
 
+async function enrichTradeNames(trades: BacktestTrade[]): Promise<BacktestTrade[]> {
+  const missingNameSymbols = [
+    ...new Set(
+      trades
+        .filter((trade) => !trade.name || trade.name === trade.symbol)
+        .map((trade) => trade.symbol),
+    ),
+  ];
+  if (missingNameSymbols.length === 0) return trades;
+
+  const quotes = await fetchIntradayQuotes(missingNameSymbols).catch(() => new Map());
+  if (quotes.size === 0) return trades;
+
+  return trades.map((trade) => {
+    if (trade.name && trade.name !== trade.symbol) return trade;
+    const name = quotes.get(trade.symbol)?.name?.trim();
+    if (!name || name === trade.symbol) return trade;
+    return {
+      ...trade,
+      name,
+      signal: trade.signal
+        ? {
+            ...trade.signal,
+            name,
+          }
+        : trade.signal,
+    };
+  });
+}
+
 function ma20At(bars: OhlcvBar[]): number | null {
   const closes = bars
     .map((bar) => bar.close)
@@ -323,6 +355,7 @@ function createMomentumExitTrade(
         metadata: {
           ...signal.metadata,
           exitMemo: effectiveExit.reason,
+          pricePath: buildPricePath(bars, signal.tradeDate, bar.tradeDate),
         },
       },
     };
@@ -343,7 +376,13 @@ function createMomentumExitTrade(
     holdDays: Math.max(0, entryIndex),
     returnPct: calcReturnPct(signal.entryPrice, latest.close),
     exitReason: 'end_of_data',
-    signal,
+    signal: {
+      ...signal,
+      metadata: {
+        ...signal.metadata,
+        pricePath: buildPricePath(bars, signal.tradeDate, latest.tradeDate),
+      },
+    },
   };
 }
 
@@ -491,7 +530,8 @@ export async function runDiamondBacktest(
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
   });
-  const portfolioLedger = buildPortfolioLedger(sortedTrades, {
+  const namedTrades = await enrichTradeNames(sortedTrades);
+  const portfolioLedger = buildPortfolioLedger(namedTrades, {
     slots: 5,
     initialCapital,
   });
@@ -504,9 +544,9 @@ export async function runDiamondBacktest(
     endDate: formatTradeDateKey(dateRange.endDate),
     holdDays,
     symbols,
-    trades: sortedTrades,
-    metrics: summarizeTrades(sortedTrades),
-    groups: buildTradeGroups(sortedTrades, [
+    trades: namedTrades,
+    metrics: summarizeTrades(namedTrades),
+    groups: buildTradeGroups(namedTrades, [
       { key: 'all', label: '全部交易', predicate: () => true },
       { key: 'stock', label: '股票', predicate: (trade) => trade.assetType === 'stock' },
       ...(strategy === 'red-diamond-momentum'

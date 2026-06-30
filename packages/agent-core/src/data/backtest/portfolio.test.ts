@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterTradesByPortfolioRules } from './portfolio.js';
+import { buildPortfolioLedger, filterTradesByPortfolioRules } from './portfolio.js';
 import type { BacktestTrade } from './types.js';
 
 function trade(
@@ -49,5 +49,49 @@ describe('portfolio filter', () => {
       { maxConcurrent: 3, noSymbolOverlap: true },
     );
     expect(filtered).toHaveLength(3);
+  });
+});
+
+describe('portfolio ledger', () => {
+  it('marks open positions to market with the daily price path', () => {
+    const ledger = buildPortfolioLedger(
+      [
+        trade({
+          symbol: '000001',
+          entryDate: '20260101',
+          entryPrice: 10,
+          exitDate: '20260103',
+          exitPrice: 12,
+          returnPct: 20,
+          signal: {
+            symbol: '000001',
+            name: '平安银行',
+            assetType: 'stock',
+            strategy: 'red-diamond-momentum',
+            tradeDate: '20260101',
+            entryPrice: 10,
+            metadata: {
+              pricePath: [
+                { tradeDate: '20260101', close: 10 },
+                { tradeDate: '20260102', close: 11 },
+                { tradeDate: '20260103', close: 12 },
+              ],
+            },
+          },
+        }),
+      ],
+      { slots: 1, initialCapital: 100_000 },
+    );
+
+    expect(ledger.snapshots.map((snapshot) => snapshot.tradeDate)).toEqual([
+      '20260101',
+      '20260102',
+      '20260103',
+    ]);
+    expect(ledger.snapshots[1]?.totalValue).toBe(110_000);
+    expect(ledger.snapshots[1]?.returnPct).toBe(10);
+    expect(ledger.snapshots[1]?.positions[0]?.returnPct).toBe(10);
+    expect(ledger.snapshots[2]?.totalValue).toBe(120_000);
+    expect(ledger.snapshots[2]?.positions).toHaveLength(0);
   });
 });

@@ -9,6 +9,25 @@ function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
 }
 
+function readTradePricePath(trade: BacktestTrade): Map<string, number> {
+  const raw = trade.signal.metadata?.pricePath;
+  if (!Array.isArray(raw)) return new Map();
+
+  const prices = new Map<string, number>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as { tradeDate?: unknown; close?: unknown };
+    const tradeDate =
+      typeof row.tradeDate === 'string'
+        ? normalizeTradeDateKey(row.tradeDate)
+        : null;
+    const close = Number(row.close);
+    if (!tradeDate || !Number.isFinite(close) || close <= 0) continue;
+    prices.set(tradeDate, close);
+  }
+  return prices;
+}
+
 export type PortfolioFilterOptions = {
   maxConcurrent: number;
   noSymbolOverlap: boolean;
@@ -94,6 +113,7 @@ export function buildPortfolioLedger(
       valid.flatMap((trade) => [
         normalizeTradeDateKey(trade.entryDate),
         normalizeTradeDateKey(trade.exitDate as string),
+        ...readTradePricePath(trade).keys(),
       ]),
     ),
   ].sort();
@@ -112,6 +132,8 @@ export function buildPortfolioLedger(
     costAmount: number;
     shares: number;
     marketValue: number;
+    lastPrice: number;
+    priceByDate: Map<string, number>;
   }>();
   const points: BacktestEquityPoint[] = [];
   const snapshots: BacktestPortfolioSnapshot[] = [];
@@ -127,6 +149,9 @@ export function buildPortfolioLedger(
       });
     let investedMarketValue = 0;
     for (const position of positions) {
+      const markPrice = position.priceByDate.get(tradeDate) ?? position.lastPrice;
+      position.lastPrice = markPrice;
+      position.marketValue = position.shares * markPrice;
       investedMarketValue += position.marketValue;
     }
     const totalValue = cash + investedMarketValue;
@@ -144,9 +169,8 @@ export function buildPortfolioLedger(
       closedTrades,
       positions: positions.map((position) => {
         const tradeReturnPct =
-          position.trade.returnPct != null &&
-          normalizeTradeDateKey(position.trade.exitDate as string) <= tradeDate
-            ? position.trade.returnPct
+          position.trade.entryPrice > 0
+            ? round(((position.lastPrice - position.trade.entryPrice) / position.trade.entryPrice) * 100)
             : null;
         return {
           symbol: position.trade.symbol,
@@ -208,6 +232,8 @@ export function buildPortfolioLedger(
         costAmount,
         shares: costAmount / trade.entryPrice,
         marketValue: costAmount,
+        lastPrice: trade.entryPrice,
+        priceByDate: readTradePricePath(trade),
       });
       if (normalizeTradeDateKey(trade.exitDate as string) === date) {
         closePosition(trade);
