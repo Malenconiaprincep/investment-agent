@@ -7,6 +7,8 @@ import { getDailyQuote } from '../market/services.js';
 import { inferAssetType, isRetailTradableStock } from '../market/asset-type.js';
 import {
   hasLocalStockDailyCsv,
+  hasLocalEtfDailyCsv,
+  LOCAL_ETF_LOAD_ALL_DAYS,
   listLocalStockDailyCsvSymbols,
   LOCAL_DAILY_LOAD_ALL_DAYS,
 } from '../market/local-csv/etf-daily.js';
@@ -29,10 +31,13 @@ import {
   formatTradeDateKey,
   isTradeDateInRange,
   resolveBacktestDateRange,
+  addCalendarDays,
+  todayDateKey,
 } from './date-range.js';
 import { buildPortfolioEquityCurve } from './portfolio.js';
 import type {
   BacktestAssetType,
+  BacktestEquityPoint,
   BacktestExitReason,
   BacktestRunResult,
   BacktestSignal,
@@ -71,12 +76,85 @@ const MOMENTUM_EXIT_GROUPS: Array<{
   { key: 'exit-signal-lost', label: '信号消失', reason: 'signal_lost' },
   { key: 'exit-end-of-data', label: '跑到区间结束', reason: 'end_of_data' },
 ];
+const SIGNAL_WARMUP_BARS = 260;
 
 function normalizeHoldDays(holdDays: number[] | undefined): number[] {
   const values = holdDays?.length ? holdDays : DEFAULT_HOLD_DAYS;
   return [...new Set(values.map((value) => Math.max(0, Math.floor(value))))]
     .filter((value) => Number.isFinite(value))
     .sort((a, b) => a - b);
+}
+
+function scopeBarsToDateRange(
+  bars: OhlcvBar[],
+  dateRange: { startDate: string; endDate: string },
+): { bars: OhlcvBar[]; signalLookback: number } {
+  const endIndex = bars.findIndex(
+    (bar) => bar.tradeDate.replace(/-/g, '') <= dateRange.endDate,
+  );
+  if (endIndex < 0) return { bars: [], signalLookback: 0 };
+
+  const fromEnd = bars.slice(endIndex);
+  const firstBeforeStart = fromEnd.findIndex(
+    (bar) => bar.tradeDate.replace(/-/g, '') < dateRange.startDate,
+  );
+  const signalLookback = firstBeforeStart < 0 ? fromEnd.length : firstBeforeStart;
+  const sliceEnd =
+    firstBeforeStart < 0
+      ? fromEnd.length
+      : Math.min(fromEnd.length, firstBeforeStart + SIGNAL_WARMUP_BARS);
+
+  return {
+    bars: fromEnd.slice(0, sliceEnd),
+    signalLookback,
+  };
+}
+
+function round(value: number, digits = 2): number {
+  return Number(value.toFixed(digits));
+}
+
+function buildBenchmarkCurve(
+  bars: Array<{ tradeDate: string; close: number | null }>,
+  dateRange: { startDate: string; endDate: string },
+): BacktestEquityPoint[] {
+  const inRange = bars
+    .filter(
+      (bar): bar is { tradeDate: string; close: number } =>
+        bar.close != null && bar.close > 0 && isTradeDateInRange(bar.tradeDate, dateRange),
+    )
+    .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
+  const startClose = inRange[0]?.close;
+  if (!startClose || startClose <= 0) return [];
+
+  return inRange.map((bar) => {
+    const returnPct = round(((bar.close - startClose) / startClose) * 100);
+    return {
+      tradeDate: bar.tradeDate,
+      equity: round(100 + returnPct, 4),
+      returnPct,
+      closedTrades: 0,
+    };
+  });
+}
+
+async function buildStockBenchmark(
+  dateRange: { startDate: string; endDate: string },
+  days: number,
+): Promise<BacktestRunResult['benchmark'] | undefined> {
+  const quoteDays = hasLocalEtfDailyCsv('510300')
+    ? LOCAL_ETF_LOAD_ALL_DAYS
+    : Math.max(days, computeKlineDaysForRange(dateRange, 10));
+  const data = await getDailyQuote('510300', quoteDays);
+  const curve = buildBenchmarkCurve(data.quotes, dateRange);
+  if (curve.length === 0) return undefined;
+
+  return {
+    symbol: '510300',
+    name: '沪深300ETF',
+    curve,
+    finalReturnPct: curve.at(-1)?.returnPct ?? null,
+  };
 }
 
 function toSignal(
@@ -232,6 +310,9 @@ export async function runDiamondBacktest(
           .filter(isRetailTradableStock)
           .map((symbol) => ({ symbol }))
       : input.symbols;
+  const benchmark = await buildStockBenchmark(dateRange, days).catch(() => undefined);
+  const fullHistoryThreshold = addCalendarDays(todayDateKey(), -900);
+  const needsFullLocalHistory = dateRange.endDate < fullHistoryThreshold;
 
   for (const symbol of universeSymbols) {
     const code = symbol.symbol.trim();
@@ -257,16 +338,20 @@ export async function runDiamondBacktest(
 
     try {
       const useLocalStockCsv = hasLocalStockDailyCsv(code);
-      const useFullLocalHistory = useLocalStockCsv && universe === 'manual';
+      const useFullLocalHistory =
+        useLocalStockCsv && (universe === 'manual' || needsFullLocalHistory);
       const quoteDays = useFullLocalHistory ? LOCAL_DAILY_LOAD_ALL_DAYS : days;
       const data = await getDailyQuote(code, quoteDays);
       const name = symbol.name ?? code;
-      const bars = data.quotes.filter((bar) => bar.close != null && bar.close > 0);
+      const rawBars = data.quotes.filter((bar) => bar.close != null && bar.close > 0);
+      const scoped = scopeBarsToDateRange(rawBars, dateRange);
+      const bars = scoped.bars;
       const symbolLookback = input.lookback
         ? Math.min(bars.length, lookback)
-        : useFullLocalHistory
-          ? bars.length
-          : Math.min(bars.length, lookback);
+        : Math.min(bars.length, scoped.signalLookback);
+      if (bars.length === 0 || symbolLookback <= 0) {
+        continue;
+      }
       const signals = scanDiamondSignalHistory(code, name, bars, symbolLookback)
         .filter((signal) => signal.strength === 'red')
         .filter((signal) => isTradeDateInRange(signal.tradeDate, dateRange))
@@ -358,6 +443,7 @@ export async function runDiamondBacktest(
       stockUniverseCount: universeSymbols.length,
     },
     equityCurve: buildPortfolioEquityCurve(sortedTrades, 5),
+    benchmark,
     notes:
       strategy === 'red-diamond-momentum'
         ? [
@@ -366,6 +452,9 @@ export async function runDiamondBacktest(
               : '股票池为手动输入代码列表，688/689 科创板会被排除。',
             `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的红钻信号。`,
             `股票策略：红钻 + 动量 checklist 入场；持有天数不预设，出场按 -${Math.round(MOMENTUM_STOP_LOSS_PCT * 100)}% 硬止损、跌破 MA20、从持仓高点回撤 ${Math.round(MOMENTUM_TRAILING_STOP_PCT * 100)}% 移动止盈、红/蓝钻信号减弱或消失动态决定；组合权益曲线按 5 个等权槽位滚动。`,
+            benchmark
+              ? `大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益。`
+              : '大盘基准暂未生成，已尝试读取沪深300ETF日线。',
             'A 股本地前复权历史早期可能出现负价格，回测已剔除非正收盘价 K 线。',
           ]
         : [

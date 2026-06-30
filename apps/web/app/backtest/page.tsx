@@ -131,6 +131,19 @@ type BacktestResult = {
   notes: string[];
 };
 
+type BacktestProgress = {
+  stage: string;
+  message: string;
+  detail?: string;
+  percent: number;
+  elapsedMs: number;
+};
+
+type BacktestStreamEvent =
+  | ({ type: 'progress' } & BacktestProgress)
+  | { type: 'result'; result: BacktestResult }
+  | { type: 'error'; message: string };
+
 type BacktestPanel = 'overview' | 'current' | 'etfs' | 'trades' | 'notes';
 type StockBacktestPanel = 'overview' | 'chart' | 'groups' | 'trades' | 'notes';
 
@@ -219,6 +232,15 @@ function fmtTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function fmtElapsed(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return '0s';
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}m ${rest}s`;
 }
 
 function returnClass(value: number | null) {
@@ -332,6 +354,8 @@ export default function BacktestPage() {
   const [maxConcurrent, setMaxConcurrent] = useState('5');
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<BacktestProgress | null>(null);
+  const [progressLog, setProgressLog] = useState<BacktestProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
   const today = todayIsoDate();
   const activePresetDays = presetDaysForRange(startDate, endDate);
@@ -343,45 +367,118 @@ export default function BacktestPage() {
   );
   const resultSymbolCount = result?.config?.stockUniverseCount ?? result?.symbols.length ?? 0;
 
+  function buildBacktestParams() {
+    const params = new URLSearchParams({ strategy });
+    params.set('startDate', startDate);
+    params.set('endDate', endDate);
+    if (!usingEtfStrategy) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const calendarDays = Math.max(
+        1,
+        Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+      );
+      const klineDays = Math.ceil(calendarDays * 5 / 7) + 45;
+      params.set('days', String(klineDays));
+    }
+    if (!usingEtfStrategy && stockUniverse === 'manual') {
+      params.set('symbols', symbols);
+    } else if (!usingEtfStrategy) {
+      params.set('universe', 'retail-stock');
+    }
+    if (strategy === 'etf' && includeWaitPullback) {
+      params.set('includeWaitPullback', '1');
+    }
+    if (strategy === 'etf') {
+      params.set('exitMaxFail', exitMaxFail);
+      params.set('maxConcurrent', maxConcurrent);
+      params.set('newsFilter', newsFilter);
+    }
+    return params;
+  }
+
+  function handleProgressEvent(event: BacktestProgress) {
+    setProgress(event);
+    setProgressLog((items) => {
+      const prev = items[items.length - 1];
+      const shouldReplace = prev?.stage === event.stage && prev?.message === event.message;
+      const next = shouldReplace ? [...items.slice(0, -1), event] : [...items, event];
+      return next.slice(-6);
+    });
+  }
+
+  async function runBacktestFallback(params: URLSearchParams) {
+    const response = await fetch(`/api/backtest?${params.toString()}`);
+    const payload = (await response.json()) as BacktestResult & { error?: string };
+    if (!response.ok) throw new Error(payload.error ?? '回测失败');
+    setResult(payload);
+  }
+
+  async function readBacktestStream(response: Response, params: URLSearchParams) {
+    if (!response.ok || !response.body) {
+      await runBacktestFallback(params);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let receivedResult = false;
+
+    async function handleLine(line: string) {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const event = JSON.parse(trimmed) as BacktestStreamEvent;
+      if (event.type === 'progress') {
+        handleProgressEvent(event);
+        return;
+      }
+      if (event.type === 'result') {
+        setResult(event.result);
+        receivedResult = true;
+        return;
+      }
+      if (event.type === 'error') {
+        throw new Error(event.message);
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        await handleLine(line);
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) await handleLine(buffer);
+    if (!receivedResult) throw new Error('回测流提前结束');
+  }
+
   async function runBacktest() {
     setLoading(true);
     setError(null);
+    setResult(null);
+    setProgress({
+      stage: '开始回测',
+      message: '正在提交任务。',
+      percent: 1,
+      elapsedMs: 0,
+    });
+    setProgressLog([]);
+    const params = buildBacktestParams();
     try {
-      const params = new URLSearchParams({ strategy });
-      params.set('startDate', startDate);
-      params.set('endDate', endDate);
-      if (!usingEtfStrategy) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const calendarDays = Math.max(
-          1,
-          Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-        );
-        const klineDays = Math.ceil(calendarDays * 5 / 7) + 45;
-        params.set('days', String(klineDays));
-      }
-      if (!usingEtfStrategy && stockUniverse === 'manual') {
-        params.set('symbols', symbols);
-      } else if (!usingEtfStrategy) {
-        params.set('universe', 'retail-stock');
-      }
-      if (strategy === 'etf' && includeWaitPullback) {
-        params.set('includeWaitPullback', '1');
-      }
-      if (strategy === 'etf') {
-        params.set('exitMaxFail', exitMaxFail);
-        params.set('maxConcurrent', maxConcurrent);
-        params.set('newsFilter', newsFilter);
-      }
-
-      const response = await fetch(`/api/backtest?${params.toString()}`);
-      const payload = (await response.json()) as BacktestResult & { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? '回测失败');
-      setResult(payload);
+      const response = await fetch(`/api/backtest/stream?${params.toString()}`);
+      await readBacktestStream(response, params);
     } catch (err) {
       setError(err instanceof Error ? err.message : '回测失败');
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
@@ -604,6 +701,14 @@ export default function BacktestPage() {
 
       {error && <div className="error">{error}</div>}
 
+      {loading && (
+        <BacktestProgressPanel
+          progress={progress}
+          events={progressLog}
+          strategyName={activeStrategy.label}
+        />
+      )}
+
       {!result && !loading && !error && (
         <div className="empty-state">
           选择策略后点击“开始回测”。A 股默认扫描本地全市场普通股票，也可切到手动代码；ETF 回测直接使用 19 只内置 ETF 池。
@@ -662,6 +767,53 @@ export default function BacktestPage() {
         </>
       )}
     </main>
+  );
+}
+
+function BacktestProgressPanel({
+  progress,
+  events,
+  strategyName,
+}: {
+  progress: BacktestProgress | null;
+  events: BacktestProgress[];
+  strategyName: string;
+}) {
+  const percent = Math.min(100, Math.max(0, progress?.percent ?? 1));
+  const displayEvents = events.length > 0 ? events : progress ? [progress] : [];
+
+  return (
+    <section className="section pane-card backtest-progress-panel" aria-live="polite">
+      <div className="backtest-progress-head">
+        <div>
+          <span className="muted">动态回测</span>
+          <h2 className="section-title">{strategyName}</h2>
+        </div>
+        <strong>{percent}%</strong>
+      </div>
+      <div className="backtest-progress-track" aria-hidden>
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      <div className="backtest-progress-current">
+        <span className="backtest-progress-pulse" aria-hidden />
+        <div>
+          <strong>{progress?.stage ?? '准备中'}</strong>
+          <span>{progress?.message ?? '正在启动回测任务。'}</span>
+          {progress?.detail && <small>{progress.detail}</small>}
+        </div>
+        <time>{fmtElapsed(progress?.elapsedMs ?? 0)}</time>
+      </div>
+      <ol className="backtest-progress-log">
+        {displayEvents.map((event, index) => (
+          <li key={`${event.stage}-${event.percent}-${index}`}>
+            <span>{event.stage}</span>
+            <small>
+              {event.detail ?? event.message} · {event.percent}%
+            </small>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -741,6 +893,11 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
   const activeTradeKey =
     selectedTrade != null ? tradeRowKey(selectedTrade, activeTradeIndex) : null;
   const finalReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
+  const benchmarkReturn = result.benchmark?.finalReturnPct ?? null;
+  const excessReturn =
+    finalReturn != null && benchmarkReturn != null
+      ? Number((finalReturn - benchmarkReturn).toFixed(2))
+      : null;
   const annualReturn = calcAnnualReturnPct(result.equityCurve);
   const maxDrawdown = calcMaxDrawdownPct(result.equityCurve);
   const sharpe = calcSharpe(result.equityCurve);
@@ -789,6 +946,8 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
 
             <div className="overview-metric-grid">
               <SummaryMetric label="策略累计收益" value={fmtPct(finalReturn)} tone={finalReturn} />
+              <SummaryMetric label="大盘累计收益" value={fmtPct(benchmarkReturn)} tone={benchmarkReturn} />
+              <SummaryMetric label="超额收益" value={fmtPct(excessReturn)} tone={excessReturn} />
               <SummaryMetric label="股票池" value={`${universeCount} 只`} />
               <SummaryMetric label="策略年化收益" value={fmtPct(annualReturn)} tone={annualReturn} />
               <SummaryMetric label="最大回撤" value={fmtPct(maxDrawdown)} tone={maxDrawdown} inverse />

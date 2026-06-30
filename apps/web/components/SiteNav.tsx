@@ -54,7 +54,7 @@ export function SiteNav() {
     ? defaultNavPath(user.permissions, user.role)
     : '/research';
 
-  function handleNavClick(
+  function handleTabLinkClick(
     event: React.MouseEvent,
     href: string,
   ) {
@@ -70,48 +70,32 @@ export function SiteNav() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        {tabMode ? (
-          <button
-            type="button"
-            className="site-brand"
-            onClick={() => openOrSwitchTab(homeHref)}
-          >
-            <span className="site-brand-mark" aria-hidden>
-              IA
-            </span>
-            <span className="site-brand-text">投研助手</span>
-          </button>
-        ) : (
-          <Link href={homeHref} className="site-brand">
-            <span className="site-brand-mark" aria-hidden>
-              IA
-            </span>
-            <span className="site-brand-text">投研助手</span>
-          </Link>
-        )}
+        <Link
+          href={homeHref}
+          className="site-brand"
+          onClick={(event) => handleTabLinkClick(event, homeHref)}
+        >
+          <span className="site-brand-mark" aria-hidden>
+            IA
+          </span>
+          <span className="site-brand-text">投研助手</span>
+        </Link>
 
         <nav className="site-nav" aria-label="主导航">
           {visibleNav.map((item) => {
             const active = !tabMode && item.isActive(pathname);
-            if (tabMode) {
-              return (
-                <button
-                  key={item.href}
-                  type="button"
-                  className="site-nav-link site-nav-link--panel site-nav-link--tabAction"
-                  onClick={(event) => handleNavClick(event, item.href)}
-                  title="打开或切换 Tab；⌘/Ctrl + 点击新开"
-                >
-                  {item.label}
-                </button>
-              );
-            }
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`site-nav-link${active ? ' site-nav-link--active' : ''}`}
+                className={
+                  tabMode
+                    ? 'site-nav-link site-nav-link--panel site-nav-link--tabAction'
+                    : `site-nav-link${active ? ' site-nav-link--active' : ''}`
+                }
                 aria-current={active ? 'page' : undefined}
+                onClick={(event) => handleTabLinkClick(event, item.href)}
+                title={tabMode ? '打开或切换 Tab；⌘/Ctrl + 点击新开' : undefined}
               >
                 {item.label}
               </Link>

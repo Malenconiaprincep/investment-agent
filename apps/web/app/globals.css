@@ -1374,6 +1374,173 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.backtest-progress-panel {
+  overflow: hidden;
+}
+
+.backtest-progress-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.backtest-progress-head .section-title {
+  margin: 0.2rem 0 0;
+}
+
+.backtest-progress-head strong {
+  color: var(--accent);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.backtest-progress-track {
+  position: relative;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.backtest-progress-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.14),
+    transparent
+  );
+  animation: backtest-progress-sheen 1.6s ease-in-out infinite;
+}
+
+.backtest-progress-track span {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--success) 65%, var(--accent)));
+  transition: width 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.backtest-progress-current {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.backtest-progress-current > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.backtest-progress-current span,
+.backtest-progress-current small {
+  color: var(--muted);
+}
+
+.backtest-progress-current time {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.backtest-progress-pulse {
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: backtest-progress-pulse 1.25s ease-out infinite;
+}
+
+.backtest-progress-log {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backtest-progress-log li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  animation: backtest-progress-item 320ms ease-out both;
+}
+
+.backtest-progress-log li:first-child {
+  border-top: none;
+}
+
+.backtest-progress-log span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.backtest-progress-log small {
+  color: var(--muted);
+}
+
+@keyframes backtest-progress-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes backtest-progress-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0.75rem transparent;
+  }
+}
+
+@keyframes backtest-progress-item {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backtest-progress-track::after,
+  .backtest-progress-pulse,
+  .backtest-progress-log li {
+    animation: none;
+  }
+
+  .backtest-progress-track span {
+    transition: none;
+  }
+}
+
 .stock-backtest-chart-grid {
   display: grid;
   gap: 1rem;
