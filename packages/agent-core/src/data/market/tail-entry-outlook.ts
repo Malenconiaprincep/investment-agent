@@ -183,10 +183,20 @@ type EmListRow = {
   f12?: string;
   f14?: string;
   f2?: number;
-  f3?: number;
   /** 东财无数据时可能为 "-" 字符串 */
-  f62?: number | string;
+  f3?: unknown;
+  /** 东财无数据时可能为 "-" 字符串 */
+  f62?: unknown;
 };
+
+export function parseEmNumber(value: unknown, fallback = 0): number {
+  if (value == null || value === '' || value === '-') return fallback;
+  const n =
+    typeof value === 'number'
+      ? value
+      : Number(String(value).replace(/[%，,]/g, '').trim());
+  return Number.isFinite(n) ? n : fallback;
+}
 
 function parseEmMoneyFlow(value: unknown, scale: 'yi' | 'wan'): number {
   if (value == null || value === '' || value === '-') return 0;
@@ -238,7 +248,7 @@ function toConceptBoard(row: EmListRow): ConceptBoard | null {
   return {
     boardCode,
     name,
-    pctChg: Number(row.f3 ?? 0),
+    pctChg: parseEmNumber(row.f3),
     netInflowYi: parseEmMoneyFlow(row.f62, 'yi'),
   };
 }
@@ -249,7 +259,7 @@ function toStockPick(row: EmListRow): TailEntryStockPick | null {
   if (!/^\d{6}$/.test(symbol) || !name) return null;
   if (!isRetailTradableStock(symbol)) return null;
 
-  const pctChg = Number(row.f3 ?? 0);
+  const pctChg = parseEmNumber(row.f3);
   const netInflowWan = parseEmMoneyFlow(row.f62, 'wan');
 
   return enrichTailEntryStockPick({
