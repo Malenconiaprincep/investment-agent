@@ -7,10 +7,10 @@ export const BUCKET_LABELS: Record<PaperBucket, string> = {
   stock: '股票仓',
 };
 
-/** 双分仓初始资金：各 5 万，合计 10 万 */
+/** 双分仓初始资金：ETF / 股票各 10 万，收益独立统计 */
 export const BUCKET_INITIAL_CASH: Record<PaperBucket, number> = {
-  etf: 50_000,
-  stock: 50_000,
+  etf: 100_000,
+  stock: 100_000,
 };
 
 export const BUCKET_MAX_POSITIONS: Record<PaperBucket, number> = {
@@ -25,9 +25,6 @@ export const ETF_MOMENTUM_TOP_N = 4;
 export const ETF_MOMENTUM_REBALANCE_DAYS = 10;
 export const ETF_MOMENTUM_STOP_LOSS_PCT = -12;
 export const ETF_MOMENTUM_STOP_COOLDOWN_DAYS = 10;
-
-/** 模拟盘 ETF 首笔建仓：总可部署资金的 25%（轻仓试探，后续调仓日可补至策略仓位） */
-export const ETF_PAPER_PROBE_DEPLOY_PCT = 0.25;
 
 export function parsePaperBucket(value: string | null | undefined): PaperBucket | null {
   if (value === 'etf' || value === 'stock') return value;

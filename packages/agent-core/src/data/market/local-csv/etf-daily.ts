@@ -61,6 +61,10 @@ export function hasLocalEtfDailyCsv(symbol: string): boolean {
   return existsSync(etfCsvPath(symbol));
 }
 
+export function getLocalEtfDailyCsvPath(symbol: string): string {
+  return etfCsvPath(symbol);
+}
+
 export function hasLocalStockDailyCsv(symbol: string): boolean {
   return existsSync(stockCsvPath(symbol));
 }

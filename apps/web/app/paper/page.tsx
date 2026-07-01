@@ -408,13 +408,13 @@ export default function PaperTradingPage() {
         <h3 className="pane-card-title">分仓规则</h3>
         <ul className="paper-rules-list">
           <li>
-            <strong>总资金：</strong>10 万（ETF 仓 5 万 + 股票仓 5 万）
+            <strong>总资金：</strong>20 万（ETF 仓 10 万 + 股票仓 10 万）
           </li>
           <li>
             <strong>成交定价：</strong>买入按卖一、卖出按买一；盘口缺失时退回最新价
           </li>
           <li>
-            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · 首笔轻仓 25% · 调仓日可补至策略仓位 · Top4 动量 · 10 日调仓 · -12% 止损
+            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · 按 Top4 目标仓位建仓 · 10 日调仓 · -12% 止损
           </li>
           <li>
             <strong>股票仓：</strong>15:05 后 · 红钻 + Checklist ≥4 · 单票约 15% · 硬止损 -8% / MA20 / 移动止盈

@@ -18,22 +18,31 @@ function toTencentCode(symbol: string): string {
   return `${tencentPrefix(symbol)}${symbol.trim()}`;
 }
 
-export async function fetchDailyKlines(symbol: string, days: number) {
+export async function fetchDailyKlines(
+  symbol: string,
+  days: number,
+  options?: { forceRefresh?: boolean },
+) {
   const cacheKey = `tx:kline:${symbol}:${days}`;
-  const cached = getCached<ReturnType<typeof mapKlines>>(cacheKey);
+  const cached = options?.forceRefresh
+    ? undefined
+    : getCached<ReturnType<typeof mapKlines>>(cacheKey);
   if (cached) return { quotes: cached, cached: true as const };
 
   const txCode = toTencentCode(symbol);
-  return fetchDailyKlinesByTencentCode(txCode, days, symbol);
+  return fetchDailyKlinesByTencentCode(txCode, days, symbol, options);
 }
 
 export async function fetchDailyKlinesByTencentCode(
   txCode: string,
   days: number,
   displayCode = txCode,
+  options?: { forceRefresh?: boolean },
 ) {
   const cacheKey = `tx:kline:${txCode}:${days}`;
-  const cached = getCached<ReturnType<typeof mapKlines>>(cacheKey);
+  const cached = options?.forceRefresh
+    ? undefined
+    : getCached<ReturnType<typeof mapKlines>>(cacheKey);
   if (cached) return { quotes: cached, cached: true as const };
 
   const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${txCode},day,,,${days},qfq`;

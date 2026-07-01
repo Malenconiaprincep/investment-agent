@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseEtfDailyCsv, parseLocalDailyCsv } from './etf-daily.js';
+import { __privateEtfDailyUpdate } from './etf-daily-update.js';
 
 describe('parseEtfDailyCsv', () => {
   it('parses qfq daily csv into newest-first bars with amount', () => {
@@ -29,5 +30,59 @@ describe('parseLocalDailyCsv', () => {
     expect(rows[0]?.amount).toBe(4360000000);
     expect(rows[0]?.pctChg).toBe(-0.42);
     expect(rows[1]?.tradeDate).toBe('20240102');
+  });
+});
+
+describe('etf daily csv updater', () => {
+  it('merges fetched bars by date while preserving existing amount fields', () => {
+    const { mergeRows } = __privateEtfDailyUpdate;
+    const result = mergeRows({
+      symbol: '510300',
+      existing: [
+        {
+          tradeDate: '20260701',
+          symbol: '510300',
+          open: 4.9,
+          close: 5,
+          high: 5.01,
+          low: 4.88,
+          vol: 100,
+          amount: 12345,
+          amplitude: 2.6,
+          pctChg: 1,
+          change: 0.05,
+          turnover: 0.2,
+        },
+      ],
+      fetched: [
+        {
+          tradeDate: '20260701',
+          open: 4.91,
+          close: 5.01,
+          high: 5.02,
+          low: 4.89,
+          vol: 110,
+          amount: null,
+        },
+        {
+          tradeDate: '20260702',
+          open: 5.02,
+          close: 5.06,
+          high: 5.08,
+          low: 5,
+          vol: 120,
+          amount: null,
+        },
+      ],
+    });
+
+    expect(result.addedRows).toBe(1);
+    expect(result.updatedRows).toBe(1);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]?.amount).toBe(12345);
+    expect(result.rows[0]?.close).toBe(5.01);
+    expect(result.rows[1]?.tradeDate).toBe('20260702');
+    expect(result.rows[1]?.pctChg).toBe(1);
+    expect(result.rows[1]?.change).toBe(0.05);
   });
 });

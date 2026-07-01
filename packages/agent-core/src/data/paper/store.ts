@@ -917,6 +917,57 @@ export async function getPaperDualSummary() {
   };
 }
 
+export async function setPaperBucketCapital(input: {
+  bucket: PaperBucket;
+  targetEquity: number;
+  tradeDate?: string;
+}) {
+  const targetEquity = Number(input.targetEquity);
+  if (!Number.isFinite(targetEquity) || targetEquity <= 0) {
+    throw new Error('targetEquity must be a positive number');
+  }
+
+  const before = await getPaperAccountSummary(input.bucket);
+  if (before.marketValue > targetEquity) {
+    throw new Error(
+      `${input.bucket} 当前持仓市值 ${before.marketValue} 已超过目标资金 ${targetEquity}`,
+    );
+  }
+
+  const nextCash = Number((targetEquity - before.marketValue).toFixed(2));
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE paper_accounts SET cash = ?, initial_cash = ? WHERE id = ?`,
+    args: [nextCash, targetEquity, before.account.id],
+  });
+
+  const after = await getPaperAccountSummary(input.bucket);
+  const snapshot = await saveEquitySnapshot(
+    input.tradeDate ?? after.tradeDate,
+    input.bucket,
+  );
+
+  return {
+    bucket: input.bucket,
+    targetEquity,
+    before: {
+      initialCash: before.account.initialCash,
+      cash: before.account.cash,
+      marketValue: before.marketValue,
+      totalValue: before.totalValue,
+      returnPct: before.returnPct,
+    },
+    after: {
+      initialCash: after.account.initialCash,
+      cash: after.account.cash,
+      marketValue: after.marketValue,
+      totalValue: after.totalValue,
+      returnPct: after.returnPct,
+    },
+    snapshot,
+  };
+}
+
 export async function getPaperBucketState(
   bucket: PaperBucket,
 ): Promise<PaperBucketState> {

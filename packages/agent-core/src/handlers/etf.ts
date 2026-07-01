@@ -32,5 +32,31 @@ export async function dispatchEtf(args: string[]): Promise<string> {
     return JSON.stringify({ runs: await listEtfTailPickRuns(limit) });
   }
 
-  throw new Error('Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]');
+  if (command === 'update-daily-csv') {
+    const daysArg = args.find((item) => item.startsWith('--days='));
+    const symbolsArg = args.find((item) => item.startsWith('--symbols='));
+    const days = daysArg ? Number(daysArg.split('=')[1]) : undefined;
+    const symbols = symbolsArg
+      ? symbolsArg
+          .split('=')
+          .slice(1)
+          .join('=')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : undefined;
+    const { updateEtfDailyCsvPool } = await import(
+      '../data/market/local-csv/etf-daily-update.js'
+    );
+    return JSON.stringify(
+      await updateEtfDailyCsvPool({
+        ...(Number.isFinite(days) ? { days } : {}),
+        ...(symbols && symbols.length > 0 ? { symbols } : {}),
+      }),
+    );
+  }
+
+  throw new Error(
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880]',
+  );
 }

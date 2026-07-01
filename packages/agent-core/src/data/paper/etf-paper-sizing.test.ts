@@ -17,8 +17,8 @@ describe('etf paper sizing', () => {
     expect(counts.get('159915')).toBe(1);
   });
 
-  it('uses 25% probe budget on first entry instead of full slot stack', () => {
-    const probeBudget = calcEtfTargetBudget({
+  it('uses full target budget on first entry to match backtest allocation', () => {
+    const firstEntryBudget = calcEtfTargetBudget({
       totalEquity: 50_000,
       deployableScale: 1,
       slotCount: 4,
@@ -31,17 +31,17 @@ describe('etf paper sizing', () => {
       isProbeEntry: false,
     });
 
-    expect(probeBudget).toBe(12_500);
+    expect(firstEntryBudget).toBe(50_000);
     expect(fullBudget).toBe(50_000);
 
-    const probeShares = calcEtfPaperBuyShares({
+    const firstEntryShares = calcEtfPaperBuyShares({
       totalEquity: 50_000,
       deployableScale: 1,
       price: 5,
       slotCount: 4,
       isProbeEntry: true,
     });
-    expect(probeShares).toBe(2500);
+    expect(firstEntryShares).toBe(10000);
   });
 
   it('tops up toward full allocation on rebalance when already holding', () => {

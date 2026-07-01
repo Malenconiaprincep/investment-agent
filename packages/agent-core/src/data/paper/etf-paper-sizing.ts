@@ -1,7 +1,4 @@
-import {
-  ETF_MOMENTUM_TOP_N,
-  ETF_PAPER_PROBE_DEPLOY_PCT,
-} from './bucket.js';
+import { ETF_MOMENTUM_TOP_N } from './bucket.js';
 import { roundToLot } from './trading-calendar.js';
 
 export function countEtfTargetSlots(
@@ -21,11 +18,7 @@ export function calcEtfTargetBudget(input: {
   isProbeEntry: boolean;
 }): number {
   const deployable = input.totalEquity * input.deployableScale;
-  const fullBudget = (deployable / ETF_MOMENTUM_TOP_N) * input.slotCount;
-  if (input.isProbeEntry) {
-    return deployable * ETF_PAPER_PROBE_DEPLOY_PCT;
-  }
-  return fullBudget;
+  return (deployable / ETF_MOMENTUM_TOP_N) * input.slotCount;
 }
 
 export function calcEtfBuySharesFromBudget(budget: number, price: number): number {
@@ -38,11 +31,13 @@ export function calcEtfProbeTargetShares(input: {
   deployableScale: number;
   price: number;
 }): number {
+  // Legacy helper kept for the old fix-etf-probe command; target the full
+  // strategy allocation now that paper trading matches the backtest.
   return calcEtfPaperBuyShares({
     totalEquity: input.totalEquity,
     deployableScale: input.deployableScale,
     price: input.price,
-    slotCount: 1,
+    slotCount: ETF_MOMENTUM_TOP_N,
     isProbeEntry: true,
   });
 }

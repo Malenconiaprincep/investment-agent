@@ -62,7 +62,7 @@ function normalizeBucketSummary(
   const account =
     accountRaw && typeof accountRaw === 'object'
       ? (accountRaw as { cash: number; initialCash: number })
-      : { cash: 0, initialCash: fallbackBucket === 'etf' ? 50000 : 0 };
+      : { cash: 0, initialCash: 100000 };
 
   return {
     bucket: raw.bucket === 'etf' ? 'etf' : 'stock',
@@ -121,8 +121,8 @@ export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
 
   const etf: BucketSummary = {
     bucket: 'etf',
-    account: { cash: 50000, initialCash: 50000 },
-    totalValue: 50000,
+    account: { cash: 100000, initialCash: 100000 },
+    totalValue: 100000,
     marketValue: 0,
     returnPct: 0,
     tradeDate: stock.tradeDate,

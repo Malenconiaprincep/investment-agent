@@ -13,6 +13,7 @@ import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
+import { updateEtfDailyCsvPool } from '../market/local-csv/etf-daily-update.js';
 import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
@@ -183,6 +184,20 @@ const DAILY_TASKS: DailyTaskDef[] = [
       return result;
     },
   },
+  {
+    id: 'etf-daily-csv-update',
+    label: 'ETF 日线更新',
+    hour: 15,
+    minute: 30,
+    run: async () => {
+      const result = await updateEtfDailyCsvPool();
+      return {
+        skipped: result.errors === result.items.length,
+        reason: result.errors === result.items.length ? 'ETF 日线全部更新失败' : undefined,
+        summary: `新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只`,
+      };
+    },
+  },
 ];
 
 async function runStockIntradayMonitor(now = getBeijingNow()) {
@@ -314,6 +329,7 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
+    `15:30 ETF 日线更新`,
   ].join(' · ');
 
   console.log(`[daily-tasks] 已启动本机定时任务（北京时间）：${schedule}`);

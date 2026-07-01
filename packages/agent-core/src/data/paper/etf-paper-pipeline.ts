@@ -279,8 +279,8 @@ export async function runEtfPaperAutoPipeline(options?: {
       });
       const baseNote = isProbeEntry
         ? target.isBenchmarkFill
-          ? 'ETF 动量首笔轻仓（宽基槽位）'
-          : 'ETF 动量首笔轻仓'
+          ? 'ETF 动量建仓（宽基槽位）'
+          : 'ETF 动量建仓'
         : target.isBenchmarkFill
           ? 'ETF 动量调仓加仓（宽基槽位）'
           : 'ETF 动量调仓加仓';

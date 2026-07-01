@@ -3,8 +3,9 @@ import {
   executePaperTrade,
   listPaperTrades,
   listEquitySnapshots,
-  type PaperBucket,
+  setPaperBucketCapital,
 } from '../data/paper/store.js';
+import type { PaperBucket } from '../data/paper/bucket.js';
 
 function parsePaperArgs(args: string[]): { bucket?: PaperBucket; rest: string[] } {
   let bucket: PaperBucket | undefined;
@@ -37,6 +38,21 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   if (command === 'equity') {
     const limit = Number(rest[0] ?? 90);
     return JSON.stringify({ snapshots: await listEquitySnapshots(limit, bucket) });
+  }
+
+  if (command === 'set-capital') {
+    const targetEquity = Number(rest[0] ?? 100_000);
+    const buckets: PaperBucket[] = bucket ? [bucket] : ['etf', 'stock'];
+    return JSON.stringify({
+      results: await Promise.all(
+        buckets.map((item) =>
+          setPaperBucketCapital({
+            bucket: item,
+            targetEquity,
+          }),
+        ),
+      ),
+    });
   }
 
   if (command === 'status') {
@@ -107,6 +123,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|status|auto-run|stock-auto-run|etf-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock]|status|auto-run|stock-auto-run|etf-auto-run|fix-etf-probe|trade ...',
   );
 }
