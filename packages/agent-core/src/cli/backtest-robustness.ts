@@ -15,6 +15,7 @@ type Variant = {
   bullBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
+  maxPerTheme?: number | null;
 };
 
 type WindowSpec = {
@@ -47,6 +48,7 @@ type VariantSummary = {
   bullBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
+  maxPerTheme?: number | null;
   windows: number;
   positiveWindows: number;
   positiveWindowPct: number | null;
@@ -64,12 +66,22 @@ type VariantSummary = {
 
 const variants: Variant[] = [
   {
-    name: 'Default Top4/20/10/MA20 + Weak cap 70% + Bear cap 25% + Bull benchmark 8%',
+    name: 'Default Top4/20/10/MA20 + Weak cap 70% + Bear cap 25% + Bull benchmark 8% + Theme cap 2',
     topN: 4,
     momentumDays: 20,
     rebalanceDays: 10,
     trendMaDays: 20,
     weakRegimeMaxExposure: 0.7,
+    maxPerTheme: 2,
+  },
+  {
+    name: 'Default without theme cap',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    maxPerTheme: null,
   },
   {
     name: 'Default + weak cash fallback',
@@ -509,6 +521,7 @@ function summarizeVariant(
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
     cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
     exitOnTrendBreak: variant.exitOnTrendBreak,
+    maxPerTheme: variant.maxPerTheme,
     windows: results.length,
     positiveWindows,
     positiveWindowPct,
@@ -542,6 +555,7 @@ async function runWindow(
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
     cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
     exitOnTrendBreak: variant.exitOnTrendBreak,
+    maxPerTheme: variant.maxPerTheme,
   });
   const returnPct = result.equityCurve?.at(-1)?.returnPct ?? null;
   const benchmarkPct = result.benchmark?.finalReturnPct ?? null;

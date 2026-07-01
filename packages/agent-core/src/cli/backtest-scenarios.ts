@@ -21,6 +21,7 @@ type Variant = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  maxPerTheme?: number | null;
 };
 
 type BenchmarkBar = {
@@ -113,12 +114,22 @@ const scenarios: Scenario[] = [
 
 const variants: Variant[] = [
   {
-    name: '最终策略 Top4/20日动量/10日调仓/弱市70%+熊市25%+宽基8%',
+    name: '最终策略 Top4/20日动量/10日调仓/弱市70%+熊市25%+宽基8%+主题最多2只',
     topN: 4,
     momentumDays: 20,
     rebalanceDays: 10,
     trendMaDays: 20,
     weakRegimeMaxExposure: 0.7,
+    maxPerTheme: 2,
+  },
+  {
+    name: '对照：最终策略但不限制同主题',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    maxPerTheme: null,
   },
   {
     name: '上一轮默认 Top4/20日动量/10日调仓/熊市50%',
@@ -357,6 +368,7 @@ async function runScenario(scenario: Scenario, variant: Variant) {
     weakRegimeMaxExposure: variant.weakRegimeMaxExposure ?? null,
     bullBenchmarkSlotMomentumPct: variant.bullBenchmarkSlotMomentumPct,
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
+    maxPerTheme: variant.maxPerTheme,
   });
   const finalReturn = result.equityCurve?.at(-1)?.returnPct ?? null;
   const benchmarkReturn = result.benchmark?.finalReturnPct ?? null;

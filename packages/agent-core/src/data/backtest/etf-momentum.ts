@@ -43,6 +43,7 @@ export type RunEtfMomentumBacktestInput = {
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
   initialCapital?: number;
+  maxPerTheme?: number | null;
 };
 
 type MomentumBar = {
@@ -84,6 +85,30 @@ const WEAK_REGIME_MAX_EXPOSURE = 0.7;
 const BEAR_REGIME_MAX_EXPOSURE = 0.25;
 const BULL_BENCHMARK_SLOT_MOMENTUM_PCT = 8;
 const BULL_BENCHMARK_SLOT_COUNT = 1;
+const DEFAULT_MAX_PER_THEME = 2;
+
+const ETF_THEME_BY_SYMBOL: Record<string, string> = {
+  '512880': 'brokerage',
+  '512760': 'semiconductor',
+  '512010': 'healthcare',
+  '512660': 'defense',
+  '512800': 'banking',
+  '515790': 'solar',
+  '159530': 'robotics',
+  '159995': 'semiconductor',
+  '515980': 'ai',
+  '159781': 'new-energy-vehicle',
+  '516160': 'new-energy',
+  '159808': 'growth',
+  '159920': 'dividend',
+  '159941': 'nasdaq',
+  '513100': 'nasdaq',
+  '513050': 'china-internet',
+  '513500': 'sp500',
+  '513520': 'nikkei',
+  '510300': 'csi300',
+  '512480': 'semiconductor',
+};
 
 type SimPosition = {
   symbol: string;
@@ -311,6 +336,28 @@ function buildStopCooldownExclusions(
   return excluded;
 }
 
+function resolveEtfTheme(symbol: string): string {
+  return ETF_THEME_BY_SYMBOL[symbol] ?? symbol;
+}
+
+function filterPicksByTheme(
+  picks: MomentumPick[],
+  maxPerTheme: number | null | undefined,
+): MomentumPick[] {
+  if (maxPerTheme == null || maxPerTheme <= 0) return picks;
+
+  const counts = new Map<string, number>();
+  const filtered: MomentumPick[] = [];
+  for (const pick of picks) {
+    const theme = resolveEtfTheme(pick.history.symbol);
+    const count = counts.get(theme) ?? 0;
+    if (count >= maxPerTheme) continue;
+    counts.set(theme, count + 1);
+    filtered.push(pick);
+  }
+  return filtered;
+}
+
 function buyShares(input: {
   cash: number;
   price: number;
@@ -393,6 +440,7 @@ function resolveTargetSlots(input: {
   excludedSymbols?: Set<string>;
   allowBenchmarkFallback?: boolean;
   rotationContext?: EtfRotationContext | null;
+  maxPerTheme?: number | null;
 }): Array<{
   history: EtfHistory;
   pick?: MomentumPick;
@@ -408,7 +456,7 @@ function resolveTargetSlots(input: {
   const boostedScore = (pick: MomentumPick) =>
     pick.score + (rotation?.themeBoostBySymbol[pick.history.symbol] ?? 0);
 
-  const picks = input.histories
+  const rankedPicks = input.histories
     .filter((history) => history.symbol !== BENCHMARK_SYMBOL)
     .map((history) =>
       scoreMomentumPick({
@@ -423,7 +471,8 @@ function resolveTargetSlots(input: {
       (pick) =>
         !rotation?.newsBlockedSymbols.has(pick.history.symbol),
     )
-    .sort((a, b) => boostedScore(b) - boostedScore(a))
+    .sort((a, b) => boostedScore(b) - boostedScore(a));
+  const picks = filterPicksByTheme(rankedPicks, input.maxPerTheme)
     .slice(0, input.topN);
   const excludedSymbols = input.excludedSymbols ?? new Set<string>();
 
@@ -574,6 +623,7 @@ function simulateDailyPortfolio(input: {
   cashFallbackInWeakRegime: boolean;
   exitOnTrendBreak: boolean;
   initialCapital: number;
+  maxPerTheme?: number | null;
 }): {
   trades: BacktestTrade[];
   equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
@@ -823,6 +873,7 @@ function simulateDailyPortfolio(input: {
         reserveBenchmarkSlotCount,
         excludedSymbols,
         allowBenchmarkFallback: !(input.cashFallbackInWeakRegime && weakRegime),
+        maxPerTheme: input.maxPerTheme,
       });
       const totalEquity = cash;
       const deployable = totalEquity * regimeExposureScale;
@@ -934,6 +985,7 @@ function buildCurrentDecisions(input: {
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount: number;
   cashFallbackInWeakRegime?: boolean;
+  maxPerTheme?: number | null;
 }): BacktestCurrentDecision[] {
   const latestDate = [...new Set(input.histories.flatMap((item) => item.bars.map((bar) => bar.tradeDate)))]
     .sort()
@@ -970,8 +1022,9 @@ function buildCurrentDecisions(input: {
     )
     .filter((pick): pick is MomentumPick => pick != null)
     .sort((a, b) => b.score - a.score);
+  const rankedAfterThemeLimit = filterPicksByTheme(ranked, input.maxPerTheme);
   const selected = new Set(
-    ranked.slice(0, sectorSlotCount).map((pick) => pick.history.symbol),
+    rankedAfterThemeLimit.slice(0, sectorSlotCount).map((pick) => pick.history.symbol),
   );
   const weakRegime = isWeakRegime({
     benchmarkHistory: input.benchmarkHistory,
@@ -991,7 +1044,12 @@ function buildCurrentDecisions(input: {
     .map((history) => {
       const current = history.byDate.get(latestDate);
       const pick = ranked.find((item) => item.history.symbol === history.symbol);
+      const themeLimitedPick = rankedAfterThemeLimit.find(
+        (item) => item.history.symbol === history.symbol,
+      );
       const isSelected = selected.has(history.symbol);
+      const blockedByTheme =
+        pick != null && themeLimitedPick == null && !isSelected;
       return {
         symbol: history.symbol,
         name: history.name,
@@ -1007,7 +1065,9 @@ function buildCurrentDecisions(input: {
             ? []
             : [`未站上 MA${effectiveTrendMaDays} 或动量不足`],
         reason: pick
-          ? `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${effectiveTrendMaDays}，按排名${isSelected ? '进入前' + input.topN : '未进入前' + input.topN}。`
+          ? blockedByTheme
+            ? `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${effectiveTrendMaDays}，但同主题持仓已达上限。`
+            : `${input.momentumDays}日动量 ${pick.momentumPct.toFixed(2)}%，站上 MA${effectiveTrendMaDays}，按排名${isSelected ? '进入前' + input.topN : '未进入前' + input.topN}。`
           : history.symbol === BENCHMARK_SYMBOL && isSelected
             ? reserveBenchmarkSlotCount > 0
               ? `沪深300站上 MA${MARKET_REGIME_MA_DAYS} 且 ${input.momentumDays} 日动量达到宽基保留槽位阈值，保留 ${reserveBenchmarkSlotCount} 个基准槽位。`
@@ -1069,6 +1129,7 @@ export async function buildEtfMomentumLivePlan(input?: {
   tradeDate?: string;
   excludedSymbols?: Set<string>;
   rotationContext?: EtfRotationContext | null;
+  maxPerTheme?: number | null;
 }): Promise<EtfMomentumLivePlan> {
   const tradeDate = normalizeTradeDateKey(input?.tradeDate ?? formatTradeDateKey(todayDateKey()));
   const topN = DEFAULT_TOP_N;
@@ -1120,6 +1181,10 @@ export async function buildEtfMomentumLivePlan(input?: {
     excludedSymbols: input?.excludedSymbols ?? new Set<string>(),
     allowBenchmarkFallback: true,
     rotationContext: input?.rotationContext ?? null,
+    maxPerTheme:
+      input?.maxPerTheme === null
+        ? null
+        : input?.maxPerTheme ?? DEFAULT_MAX_PER_THEME,
   });
 
   const rotation = input?.rotationContext ?? null;
@@ -1193,6 +1258,12 @@ export async function runEtfMomentumBacktest(
     input.initialCapital != null && Number.isFinite(input.initialCapital)
       ? Math.max(1, input.initialCapital)
       : 100_000;
+  const maxPerTheme =
+    input.maxPerTheme === null
+      ? null
+      : input.maxPerTheme == null
+      ? DEFAULT_MAX_PER_THEME
+      : Math.max(1, Math.floor(input.maxPerTheme));
 
   const dateRange = resolveBacktestDateRange({
     startDate: input.startDate,
@@ -1253,6 +1324,7 @@ export async function runEtfMomentumBacktest(
     cashFallbackInWeakRegime,
     exitOnTrendBreak,
     initialCapital,
+    maxPerTheme,
   });
 
   const sortedTrades = trades.sort((a, b) => {
@@ -1305,6 +1377,7 @@ export async function runEtfMomentumBacktest(
       bullBenchmarkSlotMomentumPct,
       bullBenchmarkSlotCount,
       cashFallbackInWeakRegime,
+      maxPerTheme,
     }),
     config: {
       topN,
@@ -1328,11 +1401,15 @@ export async function runEtfMomentumBacktest(
       exitOnTrendBreak,
       stopLossPct: POSITION_STOP_LOSS_PCT,
       stopCooldownDays: STOP_COOLDOWN_DAYS,
+      maxPerTheme,
       initialCapital,
     },
     notes: [
       `ETF 动量轮动：默认每 ${rebalanceDays} 个交易日调仓。`,
       `选择 ${momentumDays} 日涨幅最高且站上 MA${trendMaDays} 的前 ${topN} 只 ETF 等权持有。`,
+      maxPerTheme != null
+        ? `同主题 ETF 最多持有 ${maxPerTheme} 只；多只芯片/半导体 ETF 同时入围时，仅保留动量排名靠前者。`
+        : '当前不限制同主题 ETF 数量；高度相关主题可能同时入选。',
       `沪深300 站上 MA${MARKET_REGIME_MA_DAYS} 时，单只 ETF 趋势过滤放宽至 MA${BULL_RELAXED_TREND_MA_DAYS}，减少 V 型反弹踏空。`,
       `动量标的不足 ${topN} 只时，剩余仓位用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底，避免空仓错过大盘反弹。`,
       `单个持仓从入场价下跌至 ${POSITION_STOP_LOSS_PCT}% 时按日线收盘止损；止损后 ${STOP_COOLDOWN_DAYS} 个交易日内不再买回同一 ETF，冷却挡掉的槽位只用基准兜底，不后补弱势动量。`,

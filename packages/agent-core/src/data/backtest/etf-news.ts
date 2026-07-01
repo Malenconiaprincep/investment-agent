@@ -71,13 +71,21 @@ const MACRO_BEARISH_PATTERNS: RegExp[] = [
 
 const ETF_NEWS_PROFILES: EtfNewsProfile[] = [
   { symbol: '512880', name: '证券ETF', keywords: ['证券', '券商', '投行', '金融'] },
-  { symbol: '512760', name: '科技ETF', keywords: ['科技', 'TMT', '电子', '通信'] },
+  {
+    symbol: '512760',
+    name: '芯片ETF国泰',
+    keywords: ['半导体', '芯片', '集成电路', '晶圆'],
+  },
   { symbol: '512010', name: '医药ETF', keywords: ['医药', '医疗', '生物', '创新药'] },
   { symbol: '512660', name: '军工ETF', keywords: ['军工', '国防', '航天', '航空'] },
   { symbol: '512800', name: '银行ETF', keywords: ['银行', '信贷', '息差', '金融'] },
   { symbol: '515790', name: '光伏ETF', keywords: ['光伏', '太阳能', '硅片', '组件'] },
   { symbol: '159530', name: '机器人ETF', keywords: ['机器人', '自动化', '智能制造'] },
-  { symbol: '159995', name: '券商ETF', keywords: ['券商', '证券', '投行'] },
+  {
+    symbol: '159995',
+    name: '芯片ETF华夏',
+    keywords: ['半导体', '芯片', '集成电路', '晶圆'],
+  },
   { symbol: '515980', name: '人工智能ETF', keywords: ['人工智能', 'AI', '算力', '大模型'] },
   {
     symbol: '159781',
@@ -103,7 +111,7 @@ const ETF_NEWS_PROFILES: EtfNewsProfile[] = [
   { symbol: '510300', name: '沪深300ETF', keywords: ['沪深300', '大盘', '蓝筹', 'A股'] },
   {
     symbol: '512480',
-    name: '国泰CES半导体ETF',
+    name: '半导体ETF国联安',
     keywords: ['半导体', '芯片', '集成电路', '晶圆'],
   },
 ];

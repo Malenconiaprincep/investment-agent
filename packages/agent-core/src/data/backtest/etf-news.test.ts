@@ -6,10 +6,11 @@ import {
   scoreNewsTitleForEtf,
   shouldBlockEtfEntryByNews,
 } from './etf-news.js';
+import { ETF_POOL_19 } from '../etf/pool.js';
 
 describe('etf news sentiment', () => {
   it('scores bullish semiconductor headline', () => {
-    const profile = getEtfNewsProfile('512480', '国泰CES半导体ETF');
+    const profile = getEtfNewsProfile('512480', '半导体ETF国联安');
     const scored = scoreNewsTitleForEtf(
       '半导体板块政策利好，龙头订单增长',
       profile,
@@ -61,5 +62,18 @@ describe('etf news sentiment', () => {
     );
     expect(scored.relevant).toBe(true);
     expect(scored.bearish).toBeGreaterThan(0);
+  });
+
+  it('keeps canonical ETF names aligned across pool and news profiles', () => {
+    const expectedNames = new Map([
+      ['512760', '芯片ETF国泰'],
+      ['159995', '芯片ETF华夏'],
+      ['512480', '半导体ETF国联安'],
+    ]);
+
+    for (const [symbol, name] of expectedNames) {
+      expect(ETF_POOL_19.find((item) => item.symbol === symbol)?.name).toBe(name);
+      expect(getEtfNewsProfile(symbol, 'fallback').name).toBe(name);
+    }
   });
 });

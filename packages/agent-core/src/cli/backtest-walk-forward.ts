@@ -15,6 +15,7 @@ type Variant = {
   bullBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
+  maxPerTheme?: number | null;
 };
 
 type WindowSpec = {
@@ -43,16 +44,26 @@ type SplitResult = {
 };
 
 const DEFAULT_VARIANT: Variant = {
-  name: 'Default Top4/20/10/MA20 + Weak cap 70% + Bear cap 25% + Bull benchmark 8%',
+  name: 'Default Top4/20/10/MA20 + Weak cap 70% + Bear cap 25% + Bull benchmark 8% + Theme cap 2',
   topN: 4,
   momentumDays: 20,
   rebalanceDays: 10,
   trendMaDays: 20,
   weakRegimeMaxExposure: 0.7,
+  maxPerTheme: 2,
 };
 
 const variants: Variant[] = [
   DEFAULT_VARIANT,
+  {
+    name: 'Default without theme cap',
+    topN: 4,
+    momentumDays: 20,
+    rebalanceDays: 10,
+    trendMaDays: 20,
+    weakRegimeMaxExposure: 0.7,
+    maxPerTheme: null,
+  },
   {
     name: 'Default + weak cash fallback',
     topN: 4,
@@ -403,6 +414,7 @@ async function runWindow(variant: Variant, window: WindowSpec): Promise<WindowRe
     variant.bullBenchmarkSlotCount ?? 1,
     variant.cashFallbackInWeakRegime ? 'weak-cash' : 'benchmark-fill',
     variant.exitOnTrendBreak ? 'trend-exit' : 'scheduled-exit',
+    variant.maxPerTheme == null ? 'theme-none' : `theme-${variant.maxPerTheme}`,
   ].join('|');
   const cached = resultCache.get(cacheKey);
   if (cached) return cached;
@@ -420,6 +432,7 @@ async function runWindow(variant: Variant, window: WindowSpec): Promise<WindowRe
     bullBenchmarkSlotCount: variant.bullBenchmarkSlotCount,
     cashFallbackInWeakRegime: variant.cashFallbackInWeakRegime,
     exitOnTrendBreak: variant.exitOnTrendBreak,
+    maxPerTheme: variant.maxPerTheme,
   }).then((result) => {
     const returnPct = result.equityCurve?.at(-1)?.returnPct ?? null;
     const benchmarkPct = result.benchmark?.finalReturnPct ?? null;

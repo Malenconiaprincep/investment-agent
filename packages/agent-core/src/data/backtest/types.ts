@@ -159,6 +159,7 @@ export type BacktestRunConfig = {
   exitOnTrendBreak?: boolean;
   stopLossPct?: number;
   stopCooldownDays?: number;
+  maxPerTheme?: number | null;
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
   initialCapital?: number;
