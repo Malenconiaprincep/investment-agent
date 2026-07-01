@@ -142,6 +142,16 @@ pnpm release:desktop v0.1.1-beta.1
 
 完整发布与官网下载页自动更新说明见 [docs/release-desktop.md](docs/release-desktop.md)。
 
+## 产品演进日志
+
+每次功能、策略、参数、评测或运行机制发生变化，都应新增一条 changeset：
+
+```text
+docs/changesets/YYYY-MM-DD-short-title.md
+```
+
+changeset 记录改动背景、影响范围、预期指标、验证结果、观察指标和回滚方案。每周复盘时，把 changeset 的预期和「工作总结」历史快照对照，判断系统是变好、变差还是需要继续观察。格式说明见 [docs/changesets/README.md](docs/changesets/README.md)。
+
 ## 本地桌面应用
 
 桌面版（Electron）打包命令：
@@ -198,6 +208,7 @@ investment-agent/
 │       └── scripts/            # 入库脚本
 ├── docs/
 │   ├── architecture.md         # 架构说明
+│   ├── changesets/             # 产品/策略/评测演进日志
 │   ├── phase1-learning.md      # Phase 1 学习笔记
 │   ├── phase2-learning.md      # Phase 2 学习笔记
 │   └── disclaimer.md           # 免责声明
