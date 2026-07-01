@@ -55,12 +55,21 @@ function isDue(task: DailyTaskDef, now: Date): boolean {
   return minutes >= dueMinutes;
 }
 
-const DAILY_TASKS: DailyTaskDef[] = [
-  {
-    id: 'screen-morning',
-    label: '智能选股',
-    hour: 9,
-    minute: 25,
+function createScreenTask(input: {
+  id: Extract<
+    ScheduledTaskId,
+    'screen-morning' | 'screen-midday' | 'screen-noon' | 'screen-afternoon'
+  >;
+  label: string;
+  hour: number;
+  minute: number;
+  lookbackDays: number;
+}): DailyTaskDef {
+  return {
+    id: input.id,
+    label: input.label,
+    hour: input.hour,
+    minute: input.minute,
     run: async () => {
       const outcome: {
         query?: string;
@@ -69,10 +78,11 @@ const DAILY_TASKS: DailyTaskDef[] = [
         sectorCount?: number;
         candidateCount?: number;
         elapsedMs?: number;
+        watchlistAdded?: number;
       } = {};
 
       await runSectorScreenStream(
-        { maxCandidates: 10, excludeSt: true, lookbackDays: 14 },
+        { maxCandidates: 10, excludeSt: true, lookbackDays: input.lookbackDays },
         (event) => {
           if (event.type === 'done') {
             outcome.query = event.query;
@@ -81,6 +91,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
             outcome.sectorCount = event.sectors.length;
             outcome.candidateCount = event.candidates.length;
             outcome.elapsedMs = event.elapsedMs;
+            outcome.watchlistAdded = event.watchlistSync?.added.length ?? 0;
           }
         },
       );
@@ -88,11 +99,42 @@ const DAILY_TASKS: DailyTaskDef[] = [
       return {
         skipped: outcome.passed === undefined,
         summary: outcome.sessionId
-          ? `记录 ${outcome.sessionId} · 候选 ${outcome.candidateCount ?? 0} 只`
+          ? `记录 ${outcome.sessionId} · 候选 ${outcome.candidateCount ?? 0} 只 · 入池 ${outcome.watchlistAdded ?? 0} 只`
           : undefined,
       };
     },
-  },
+  };
+}
+
+const DAILY_TASKS: DailyTaskDef[] = [
+  createScreenTask({
+    id: 'screen-morning',
+    label: '智能选股（早盘）',
+    hour: 9,
+    minute: 25,
+    lookbackDays: 14,
+  }),
+  createScreenTask({
+    id: 'screen-midday',
+    label: '智能选股（午间）',
+    hour: 11,
+    minute: 35,
+    lookbackDays: 7,
+  }),
+  createScreenTask({
+    id: 'screen-noon',
+    label: '智能选股（午后开盘前）',
+    hour: 12,
+    minute: 50,
+    lookbackDays: 3,
+  }),
+  createScreenTask({
+    id: 'screen-afternoon',
+    label: '智能选股（尾盘前）',
+    hour: 14,
+    minute: 35,
+    lookbackDays: 3,
+  }),
   {
     id: 'etf-morning-radar',
     label: 'ETF 早盘异动雷达',
@@ -262,7 +304,10 @@ export function startDailyTasksBackgroundWorker() {
     getStockIntradayMonitorIntervalMs() / 60_000 ||
     STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT;
   const schedule = [
-    `09:25 智能选股`,
+    `09:25 智能选股（早盘）`,
+    `11:35 智能选股（午间）`,
+    `12:50 智能选股（午后开盘前）`,
+    `14:35 智能选股（尾盘前）`,
     `09:35 ETF 早盘异动雷达`,
     `10:00 ETF 承接确认`,
     `14:45 ETF 尾盘推荐`,

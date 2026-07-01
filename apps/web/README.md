@@ -27,6 +27,7 @@ pnpm web:dev
 
 | 时间（北京时间） | 任务 | 说明 |
 |------------------|------|------|
+| **09:25 / 11:35 / 12:50 / 14:35** 工作日 | 智能选股 | 早盘、午间、午后开盘前、尾盘前复核候选，并自动补充跟踪池 |
 | **14:00** 工作日 | ETF 尾盘推荐 | 19 只池 8 条规则 |
 | **交易时段每 30 分钟** | ETF 模拟盘监听 | 条件满足即调仓/止损（`agent:serve` 内置） |
 | **交易时段每 15 分钟** | 股票实时信号扫描 | 自选/选股池红钻+动量达标 → 飞书推送 |
@@ -38,6 +39,10 @@ pnpm web:dev
 若不用常驻服务，用 `crontab -e`（见 `scripts/crontab.example`，把路径改成你的项目目录，系统时区 Asia/Shanghai）：
 
 ```cron
+25 9 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule morning >> /tmp/screen-cron.log 2>&1
+35 11 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule midday >> /tmp/screen-cron.log 2>&1
+50 12 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule noon >> /tmp/screen-cron.log 2>&1
+35 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule afternoon >> /tmp/screen-cron.log 2>&1
 0 14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm etf:tail-schedule >> /tmp/etf-tail.log 2>&1
 0,30 9-11,13-15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:etf-schedule >> /tmp/paper-etf.log 2>&1
 5 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm paper:stock-schedule >> /tmp/paper-stock.log 2>&1
@@ -46,6 +51,7 @@ pnpm web:dev
 手动立即试跑：
 
 ```bash
+pnpm screen:schedule morning
 pnpm etf:tail-schedule
 pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts etf-auto-run --force
 pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts stock-auto-run --force

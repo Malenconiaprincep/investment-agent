@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import type { WorkflowStreamEvent } from '@mastra/core/stream';
 import { saveScreeningSession } from '../data/screening/store.js';
+import { syncScreeningSessionToWatchlist } from '../data/screening/watchlist-sync.js';
 import { mastra } from '../mastra/index.js';
 import { disconnectIwencaiMcp } from '../mastra/mcp/iwencai.js';
 import type { SectorScreenWorkflowInput } from '../mastra/workflows/sector-screen-workflow.js';
@@ -130,6 +131,21 @@ export async function runSectorScreenStream(
       const output = result.result;
       const elapsedMs = Date.now() - startedAt;
       const saved = await saveScreeningSession({ ...output, elapsedMs });
+      const watchlistSync =
+        output.passed && !output.asOfDate
+          ? await syncScreeningSessionToWatchlist(saved).catch((error) => ({
+              screeningId: saved.id,
+              added: [],
+              skipped: [
+                {
+                  symbol: 'screening',
+                  name: '智能选股',
+                  reason: error instanceof Error ? error.message : String(error),
+                },
+              ],
+              ranAt: new Date().toISOString(),
+            }))
+          : null;
 
       onEvent({
         type: 'done',
@@ -149,11 +165,12 @@ export async function runSectorScreenStream(
         fetchErrors: output.fetchErrors ?? [],
         elapsedMs,
         sessionId: saved.id,
+        watchlistSync,
         tailEntryOutlook: output.tailEntryOutlook ?? null,
         tailEntryRun: output.tailEntryRun ?? null,
       });
 
-      return { ...output, sessionId: saved.id };
+      return { ...output, sessionId: saved.id, watchlistSync };
     } finally {
       unwatch();
       await disconnectIwencaiMcp().catch(() => {});

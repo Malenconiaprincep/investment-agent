@@ -12,6 +12,7 @@
     "eval:workflow": "pnpm --filter @investment-agent/agent-core eval:workflow",
     "eval:screen": "pnpm --filter @investment-agent/agent-core eval:screen",
     "screen": "pnpm --filter @investment-agent/agent-core screen",
+    "screen:schedule": "pnpm --filter @investment-agent/agent-core screen:schedule",
     "committee": "pnpm --filter @investment-agent/agent-core committee",
     "research": "pnpm --filter @investment-agent/agent-core research",
     "test": "pnpm --filter @investment-agent/agent-core test && pnpm --filter @investment-agent/web test",

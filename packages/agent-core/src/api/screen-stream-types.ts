@@ -78,6 +78,19 @@ export type TailEntryRunView = {
   ranAt: string;
 };
 
+export type ScreeningWatchlistSyncView = {
+  screeningId: string;
+  added: Array<{
+    symbol: string;
+    name: string;
+    assetType: 'stock' | 'etf';
+    grade: 'A' | 'B' | 'C';
+    reason: string;
+  }>;
+  skipped: Array<{ symbol: string; name: string; reason: string }>;
+  ranAt: string;
+};
+
 export type ScreenStreamEvent =
   | { type: 'step'; step: string; label: string }
   | { type: 'token'; text: string }
@@ -115,6 +128,7 @@ export type ScreenStreamEvent =
       screenedAt: string;
       elapsedMs: number;
       sessionId: string;
+      watchlistSync?: ScreeningWatchlistSyncView | null;
       asOfDate?: string;
       fetchErrors: string[];
       tailEntryOutlook?: TailEntryOutlookView | null;

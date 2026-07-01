@@ -1407,6 +1407,44 @@ a:hover {
   font-size: 0.8125rem;
 }
 
+.portfolio-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.portfolio-view-switch-button {
+  min-width: 3.5rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.portfolio-view-switch-button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.portfolio-view-switch-button--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: var(--accent-muted);
+}
+
 .portfolio-snapshot-pagination {
   display: flex;
   flex-wrap: wrap;
@@ -1440,13 +1478,17 @@ a:hover {
 
 .portfolio-snapshot summary {
   display: grid;
-  grid-template-columns: minmax(7rem, 1fr) repeat(4, minmax(6.5rem, auto));
+  grid-template-columns: minmax(7rem, 1fr) minmax(8rem, auto) minmax(5.75rem, auto) minmax(6.25rem, auto) minmax(7.5rem, auto) minmax(5.5rem, auto);
   gap: 0.75rem;
   align-items: center;
   padding: 0.75rem 0.875rem;
   color: var(--muted);
   cursor: pointer;
   list-style: none;
+}
+
+.portfolio-snapshot summary strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .portfolio-snapshot summary::-webkit-details-marker {
@@ -1466,15 +1508,256 @@ a:hover {
   border-top: 1px solid var(--border);
 }
 
+.portfolio-action-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.portfolio-action-summary--empty {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.portfolio-action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.portfolio-action-pill--buy {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.portfolio-action-pill--sell {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.portfolio-action-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.portfolio-action-panel h3 {
+  flex: 0 0 auto;
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.portfolio-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.portfolio-action-chip {
+  display: grid;
+  grid-template-columns: auto minmax(4rem, 1fr);
+  gap: 0.15rem 0.45rem;
+  min-width: min(100%, 13.5rem);
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.portfolio-action-chip strong {
+  align-self: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.portfolio-action-chip span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-action-chip small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.portfolio-action-chip--buy strong {
+  color: var(--success);
+}
+
+.portfolio-action-chip--sell strong {
+  color: var(--danger);
+}
+
 .portfolio-snapshot-empty {
   margin: 0;
   padding: 0.75rem 0.875rem;
   border-top: 1px solid var(--border);
 }
 
+.portfolio-calendar {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.portfolio-calendar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-calendar-head > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.portfolio-calendar-head strong {
+  font-size: 1rem;
+}
+
+.portfolio-calendar-head span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.portfolio-calendar-weekdays,
+.portfolio-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.portfolio-calendar-weekdays {
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.portfolio-calendar-weekdays span {
+  padding: 0.45rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.portfolio-calendar-grid {
+  gap: 1px;
+  background: var(--border);
+}
+
+.portfolio-calendar-blank,
+.portfolio-calendar-day {
+  min-height: 6.75rem;
+  background: var(--surface);
+}
+
+.portfolio-calendar-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.625rem;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+}
+
+.portfolio-calendar-day--trade {
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.portfolio-calendar-day--trade:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.portfolio-calendar-day--trade.text-up {
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.portfolio-calendar-day--trade.text-down {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.portfolio-calendar-day--empty {
+  opacity: 0.42;
+}
+
+.portfolio-calendar-date {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.portfolio-calendar-day strong {
+  color: inherit;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.portfolio-calendar-day small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.portfolio-calendar-day .portfolio-action-summary {
+  margin-top: auto;
+}
+
 @media (max-width: 860px) {
   .portfolio-snapshot summary {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .portfolio-action-panel {
+    flex-direction: column;
+  }
+
+  .portfolio-calendar-blank,
+  .portfolio-calendar-day {
+    min-height: 5.6rem;
+  }
+
+  .portfolio-calendar-day {
+    padding: 0.45rem;
+  }
+
+  .portfolio-calendar-day small,
+  .portfolio-calendar-day .portfolio-action-summary {
+    display: none;
   }
 }
 

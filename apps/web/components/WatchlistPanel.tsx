@@ -74,6 +74,7 @@ function watchLevel(item: WatchlistItem) {
   const diamond = item.latest?.diamondStrength;
   const today = item.latest?.pctChg;
   const sinceEntry = item.latest?.vsEntryPct;
+  const reason = item.reason ?? '';
 
   if (diamond === 'red') {
     return {
@@ -101,6 +102,20 @@ function watchLevel(item: WatchlistItem) {
       label: 'R 回撤',
       className: 'watchlist-level--risk',
       title: '自加入后回撤较大，优先复核入池逻辑或移出',
+    };
+  }
+  if (item.sourceType === 'screening' && reason.startsWith('A 重点')) {
+    return {
+      label: 'A 重点',
+      className: 'watchlist-level--warm',
+      title: '智能选股重点入池，等待新闻催化、红钻与动量确认',
+    };
+  }
+  if (item.sourceType === 'screening' && reason.startsWith('B 升温')) {
+    return {
+      label: 'B 升温',
+      className: 'watchlist-level--rise',
+      title: '智能选股升温入池，等待盘中催化和价格信号确认',
     };
   }
   if (item.sourceType === 'signal') {

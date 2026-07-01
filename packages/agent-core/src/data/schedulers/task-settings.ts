@@ -5,6 +5,9 @@ import { DATA_DIR } from '../../mastra/config/paths.js';
 export type ScheduledTaskId =
   | 'monitor-background'
   | 'screen-morning'
+  | 'screen-midday'
+  | 'screen-noon'
+  | 'screen-afternoon'
   | 'etf-morning-radar'
   | 'etf-morning-confirm'
   | 'etf-tail-pick'
@@ -35,9 +38,30 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
   },
   {
     id: 'screen-morning',
-    label: '智能选股',
+    label: '智能选股（早盘）',
     description: '开盘集合竞价结束后自动跑主线趋势选股并保存记录',
     scheduleText: '交易日 09:25',
+    defaultEnabled: true,
+  },
+  {
+    id: 'screen-midday',
+    label: '智能选股（午间）',
+    description: '午间复核热点候选池，自动补充跟踪池观察标的',
+    scheduleText: '交易日 11:35',
+    defaultEnabled: true,
+  },
+  {
+    id: 'screen-noon',
+    label: '智能选股（午后开盘前）',
+    description: '午后开盘前复核午间新闻发酵，补充跟踪池观察标的',
+    scheduleText: '交易日 12:50',
+    defaultEnabled: true,
+  },
+  {
+    id: 'screen-afternoon',
+    label: '智能选股（尾盘前）',
+    description: '尾盘前复核主线与 ETF 候选，供跟踪池和模拟盘后续监控',
+    scheduleText: '交易日 14:35',
     defaultEnabled: true,
   },
   {

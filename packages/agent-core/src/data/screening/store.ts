@@ -18,12 +18,26 @@ export type ScreeningSessionRecord = {
     name: string;
     thesis: string;
     dataSource: string;
+    assetType?: 'stock' | 'etf';
     diamond?: {
       strength: 'red' | 'blue';
       score: number;
       tradeDate: string;
       close: number;
       reasons: string[];
+    } | null;
+    factorScore?: {
+      total: number;
+      themeScore: number;
+      longTermScore: number;
+      trendReturnScore: number;
+      stabilityScore: number;
+      outlook: 'mainline-trend' | 'long-watch' | 'neutral' | 'weak';
+      outlookLabel: string;
+      matchedTheme: string | null;
+      ret20dPct: number | null;
+      ret60dPct: number | null;
+      ret120dPct: number | null;
     } | null;
   }>;
   rotationSummary: string;

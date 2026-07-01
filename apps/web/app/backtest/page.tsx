@@ -57,6 +57,44 @@ type BacktestPortfolioSnapshot = {
   positions: BacktestPositionSnapshot[];
 };
 
+type PortfolioSnapshotMode = 'list' | 'calendar';
+
+type PortfolioSnapshotAction = {
+  action: 'buy' | 'sell';
+  symbol: string;
+  name: string;
+  assetType: 'stock' | 'etf';
+  price: number | null;
+  shares: number | null;
+  amount: number | null;
+  returnPct?: number | null;
+  reason?: string;
+};
+
+type PortfolioSnapshotView = BacktestPortfolioSnapshot & {
+  dateKey: string;
+  dailyReturnPct: number | null;
+  actions: PortfolioSnapshotAction[];
+  buyCount: number;
+  sellCount: number;
+};
+
+type PortfolioCalendarCell = {
+  day: number;
+  dateKey: string;
+  snapshot?: PortfolioSnapshotView;
+};
+
+type PortfolioCalendarMonth = {
+  key: string;
+  label: string;
+  blanks: number;
+  cells: PortfolioCalendarCell[];
+  tradeDays: number;
+  upDays: number;
+  downDays: number;
+};
+
 type BacktestBenchmark = {
   symbol: string;
   name: string;
@@ -253,9 +291,14 @@ function fmtPrice(value: number | null) {
   return value.toFixed(value >= 10 ? 2 : 3);
 }
 
+function tradeDateKey(value: string | null | undefined) {
+  return value?.replace(/\D/g, '').slice(0, 8) ?? '';
+}
+
 function fmtTradeDate(value: string | null) {
-  if (!value || value.length < 8) return '—';
-  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+  const key = tradeDateKey(value);
+  if (key.length !== 8) return '—';
+  return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
 }
 
 function fmtTime(value: string) {
@@ -338,6 +381,124 @@ function sortTradesOldestFirst(trades: BacktestTrade[]) {
     if (byExitDate !== 0) return byExitDate;
     return a.holdDays - b.holdDays;
   });
+}
+
+function buildPortfolioSnapshotViews(
+  snapshots: BacktestPortfolioSnapshot[] | undefined,
+  trades: BacktestTrade[],
+): PortfolioSnapshotView[] {
+  const sellsByDate = new Map<string, BacktestTrade[]>();
+  for (const trade of trades) {
+    const key = tradeDateKey(trade.exitDate);
+    if (!key) continue;
+    const list = sellsByDate.get(key) ?? [];
+    list.push(trade);
+    sellsByDate.set(key, list);
+  }
+
+  const ordered = [...(snapshots ?? [])].sort((a, b) =>
+    tradeDateKey(a.tradeDate).localeCompare(tradeDateKey(b.tradeDate)),
+  );
+
+  return ordered.map((snapshot, index) => {
+    const dateKey = tradeDateKey(snapshot.tradeDate);
+    const previous = ordered[index - 1];
+    const dailyReturnPct =
+      previous && previous.totalValue > 0
+        ? ((snapshot.totalValue - previous.totalValue) / previous.totalValue) * 100
+        : 0;
+    const buys: PortfolioSnapshotAction[] = snapshot.positions
+      .filter((position) => tradeDateKey(position.entryDate) === dateKey)
+      .map((position) => ({
+        action: 'buy' as const,
+        symbol: position.symbol,
+        name: position.name,
+        assetType: position.assetType,
+        price: position.entryPrice,
+        shares: position.shares,
+        amount: position.costAmount,
+      }));
+    const sells: PortfolioSnapshotAction[] = (sellsByDate.get(dateKey) ?? []).map((trade) => ({
+      action: 'sell' as const,
+      symbol: trade.symbol,
+      name: trade.name,
+      assetType: trade.assetType,
+      price: trade.exitPrice,
+      shares: null,
+      amount: null,
+      returnPct: trade.returnPct,
+      reason: trade.exitReason,
+    }));
+
+    return {
+      ...snapshot,
+      dateKey,
+      dailyReturnPct,
+      actions: [...buys, ...sells],
+      buyCount: buys.length,
+      sellCount: sells.length,
+    };
+  });
+}
+
+function monthKeyFromDateKey(dateKey: string) {
+  return dateKey.slice(0, 6);
+}
+
+function buildDateKey(year: number, monthIndex: number, day: number) {
+  return `${year}${String(monthIndex + 1).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+}
+
+function monthLabel(monthKey: string) {
+  if (monthKey.length !== 6) return monthKey;
+  return `${monthKey.slice(0, 4)} 年 ${Number(monthKey.slice(4, 6))} 月`;
+}
+
+function mondayFirstWeekday(date: Date) {
+  return (date.getDay() + 6) % 7;
+}
+
+function buildPortfolioCalendarMonths(views: PortfolioSnapshotView[]): PortfolioCalendarMonth[] {
+  if (views.length === 0) return [];
+  const byDate = new Map(views.map((view) => [view.dateKey, view]));
+  const months: PortfolioCalendarMonth[] = [];
+  const firstKey = monthKeyFromDateKey(views[0].dateKey);
+  const lastKey = monthKeyFromDateKey(views[views.length - 1].dateKey);
+  let year = Number(firstKey.slice(0, 4));
+  let monthIndex = Number(firstKey.slice(4, 6)) - 1;
+  const lastYear = Number(lastKey.slice(0, 4));
+  const lastMonthIndex = Number(lastKey.slice(4, 6)) - 1;
+
+  while (year < lastYear || (year === lastYear && monthIndex <= lastMonthIndex)) {
+    const key = `${year}${String(monthIndex + 1).padStart(2, '0')}`;
+    const dayCount = new Date(year, monthIndex + 1, 0).getDate();
+    const blanks = mondayFirstWeekday(new Date(year, monthIndex, 1));
+    const cells = Array.from({ length: dayCount }, (_, index) => {
+      const day = index + 1;
+      const dateKey = buildDateKey(year, monthIndex, day);
+      return { day, dateKey, snapshot: byDate.get(dateKey) };
+    });
+    const monthSnapshots = cells
+      .map((cell) => cell.snapshot)
+      .filter((snapshot): snapshot is PortfolioSnapshotView => Boolean(snapshot));
+    months.push({
+      key,
+      label: monthLabel(key),
+      blanks,
+      cells,
+      tradeDays: monthSnapshots.length,
+      upDays: monthSnapshots.filter((snapshot) => (snapshot.dailyReturnPct ?? 0) > 0).length,
+      downDays: monthSnapshots.filter((snapshot) => (snapshot.dailyReturnPct ?? 0) < 0).length,
+    });
+
+    monthIndex += 1;
+    if (monthIndex > 11) {
+      monthIndex = 0;
+      year += 1;
+    }
+  }
+
+  return months;
 }
 
 function calcMaxDrawdownPct(points: BacktestEquityPoint[] | undefined): number | null {
@@ -1200,6 +1361,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
         {activePanel === 'holdings' && (
           <PortfolioHoldingsSection
             snapshots={result.portfolioSnapshots}
+            trades={result.trades}
             initialCapital={result.config?.initialCapital}
           />
         )}
@@ -1366,6 +1528,7 @@ function EtfStrategyReport({ result }: { result: BacktestResult }) {
         {activePanel === 'holdings' && (
           <PortfolioHoldingsSection
             snapshots={result.portfolioSnapshots}
+            trades={result.trades}
             initialCapital={result.config?.initialCapital}
           />
         )}
@@ -1522,27 +1685,48 @@ function PerformanceGroupTable({ groups }: { groups: BacktestGroup[] }) {
 
 function PortfolioHoldingsSection({
   snapshots,
+  trades,
   initialCapital,
 }: {
   snapshots: BacktestPortfolioSnapshot[] | undefined;
+  trades: BacktestTrade[];
   initialCapital?: number;
 }) {
   const [page, setPage] = useState(0);
+  const [mode, setMode] = useState<PortfolioSnapshotMode>('list');
+  const [calendarMonthIndex, setCalendarMonthIndex] = useState(0);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const pageSize = 30;
   const ordered = useMemo(
-    () => [...(snapshots ?? [])].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate)),
-    [snapshots],
+    () => buildPortfolioSnapshotViews(snapshots, trades),
+    [snapshots, trades],
   );
+  const months = useMemo(() => buildPortfolioCalendarMonths(ordered), [ordered]);
   const latest = ordered[ordered.length - 1];
   const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const pageStart = currentPage * pageSize;
   const pageEnd = Math.min(pageStart + pageSize, ordered.length);
   const visibleSnapshots = ordered.slice(pageStart, pageEnd);
+  const currentMonthIndex = Math.min(calendarMonthIndex, Math.max(0, months.length - 1));
+  const currentMonth = months[currentMonthIndex];
 
   useEffect(() => {
     setPage(0);
-  }, [snapshots]);
+    setExpandedDate(ordered[0]?.dateKey ?? null);
+  }, [ordered]);
+
+  useEffect(() => {
+    setCalendarMonthIndex(Math.max(0, months.length - 1));
+  }, [months.length]);
+
+  function jumpToDate(dateKey: string) {
+    const index = ordered.findIndex((snapshot) => snapshot.dateKey === dateKey);
+    if (index < 0) return;
+    setPage(Math.floor(index / pageSize));
+    setExpandedDate(dateKey);
+    setMode('list');
+  }
 
   if (!latest) {
     return (
@@ -1559,114 +1743,255 @@ function PortfolioHoldingsSection({
         <div>
           <h2 className="section-title">每日持仓</h2>
           <p className="muted">
-            按初始资金 {fmtMoney(initialCapital ?? null)} 元换算股数/份额；日终卖出的仓位已转为现金，普通交易持仓期按占用资金展示。
+            买入/卖出按交易日标记；日收益按相邻交易日总资产变化计算，累计收益沿用回测净值。
           </p>
         </div>
-        <strong className={returnClass(latest.returnPct)}>
-          总资产 {fmtMoney(latest.totalValue)} 元
-        </strong>
+        <div className="portfolio-view-switch" aria-label="每日持仓视图">
+          <button
+            type="button"
+            className={mode === 'list' ? 'portfolio-view-switch-button portfolio-view-switch-button--active' : 'portfolio-view-switch-button'}
+            onClick={() => setMode('list')}
+          >
+            明细
+          </button>
+          <button
+            type="button"
+            className={mode === 'calendar' ? 'portfolio-view-switch-button portfolio-view-switch-button--active' : 'portfolio-view-switch-button'}
+            onClick={() => setMode('calendar')}
+          >
+            日历
+          </button>
+        </div>
       </div>
 
       <div className="overview-metric-grid overview-metric-grid--compact">
         <SummaryMetric label="初始资金" value={`${fmtMoney(initialCapital ?? null)} 元`} />
-        <SummaryMetric label="最新现金" value={`${fmtMoney(latest.cash)} 元`} />
-        <SummaryMetric label="持仓市值" value={`${fmtMoney(latest.investedMarketValue)} 元`} />
-        <SummaryMetric label="账面收益" value={fmtPct(latest.returnPct)} tone={latest.returnPct} />
+        <SummaryMetric label="最新总资产" value={`${fmtMoney(latest.totalValue)} 元`} tone={latest.returnPct} />
+        <SummaryMetric label="最新日收益" value={fmtPct(latest.dailyReturnPct)} tone={latest.dailyReturnPct} />
+        <SummaryMetric label="累计收益" value={fmtPct(latest.returnPct)} tone={latest.returnPct} />
       </div>
 
-      <div className="portfolio-snapshot-toolbar">
-        <span>
-          按日期从旧到新 · 显示第 {pageStart + 1}-{pageEnd} 天 / 共 {ordered.length} 天
-        </span>
-        <div className="portfolio-snapshot-pagination" aria-label="每日持仓分页">
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={currentPage === 0}
-            onClick={() => setPage(0)}
-          >
-            首页
-          </button>
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={currentPage === 0}
-            onClick={() => setPage((value) => Math.max(0, value - 1))}
-          >
-            上一页
-          </button>
-          <span>
-            {currentPage + 1} / {pageCount}
-          </span>
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={currentPage >= pageCount - 1}
-            onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
-          >
-            下一页
-          </button>
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={currentPage >= pageCount - 1}
-            onClick={() => setPage(pageCount - 1)}
-          >
-            末页
-          </button>
-        </div>
-      </div>
-
-      <div className="portfolio-snapshot-list">
-        {visibleSnapshots.map((snapshot) => (
-          <details className="portfolio-snapshot" key={snapshot.tradeDate}>
-            <summary>
-              <span>{fmtTradeDate(snapshot.tradeDate)}</span>
-              <span>总资产 {fmtMoney(snapshot.totalValue)} 元</span>
-              <span>现金 {fmtMoney(snapshot.cash)} 元</span>
-              <strong className={returnClass(snapshot.returnPct)}>
-                {fmtPct(snapshot.returnPct)}
-              </strong>
-              <span>{snapshot.positions.length} 个持仓</span>
-            </summary>
-            {snapshot.positions.length > 0 ? (
-              <div className="table-scroll-wrap">
-                <table className="candidate-table portfolio-position-table">
-                  <thead>
-                    <tr>
-                      <th>名称</th>
-                      <th>类型</th>
-                      <th>买入日</th>
-                      <th>买入价</th>
-                      <th>股数/份额</th>
-                      <th>成本</th>
-                      <th>市值/占用</th>
-                      <th>权重</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.positions.map((position) => (
-                      <tr key={`${snapshot.tradeDate}-${position.symbol}-${position.entryDate}`}>
-                        <td title={position.symbol}>{displayHoldingName(position)}</td>
-                        <td>{position.assetType === 'etf' ? 'ETF' : '股票'}</td>
-                        <td>{fmtTradeDate(position.entryDate)}</td>
-                        <td>{fmtPrice(position.entryPrice)}</td>
-                        <td>{fmtNumber(position.shares, 2)}</td>
-                        <td>{fmtMoney(position.costAmount)} 元</td>
-                        <td>{fmtMoney(position.marketValue)} 元</td>
-                        <td>{fmtNumber(position.weightPct)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="muted portfolio-snapshot-empty">当日无持仓，资金全部为空仓现金。</p>
+      {mode === 'calendar' && currentMonth && (
+        <div className="portfolio-calendar">
+          <div className="portfolio-calendar-head">
+            <div>
+              <strong>{currentMonth.label}</strong>
+              <span>
+                {currentMonth.tradeDays} 个交易日 · 上涨 {currentMonth.upDays} 天 · 下跌 {currentMonth.downDays} 天
+              </span>
+            </div>
+            <div className="portfolio-snapshot-pagination" aria-label="收益日历月份分页">
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentMonthIndex === 0}
+                onClick={() => setCalendarMonthIndex((value) => Math.max(0, value - 1))}
+              >
+                上月
+              </button>
+              <span>
+                {currentMonthIndex + 1} / {months.length}
+              </span>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentMonthIndex >= months.length - 1}
+                onClick={() => setCalendarMonthIndex((value) => Math.min(months.length - 1, value + 1))}
+              >
+                下月
+              </button>
+            </div>
+          </div>
+          <div className="portfolio-calendar-weekdays" aria-hidden="true">
+            {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+          <div className="portfolio-calendar-grid">
+            {Array.from({ length: currentMonth.blanks }, (_, index) => (
+              <div className="portfolio-calendar-blank" key={`blank-${currentMonth.key}-${index}`} />
+            ))}
+            {currentMonth.cells.map((cell) =>
+              cell.snapshot ? (
+                <button
+                  type="button"
+                  className={`portfolio-calendar-day portfolio-calendar-day--trade ${returnClass(cell.snapshot.dailyReturnPct)}`}
+                  key={cell.dateKey}
+                  onClick={() => jumpToDate(cell.dateKey)}
+                >
+                  <span className="portfolio-calendar-date">{cell.day}</span>
+                  <strong>{fmtPct(cell.snapshot.dailyReturnPct)}</strong>
+                  <small>累计 {fmtPct(cell.snapshot.returnPct)}</small>
+                  <PortfolioActionSummary snapshot={cell.snapshot} compact />
+                </button>
+              ) : (
+                <div className="portfolio-calendar-day portfolio-calendar-day--empty" key={cell.dateKey}>
+                  <span className="portfolio-calendar-date">{cell.day}</span>
+                </div>
+              ),
             )}
-          </details>
-        ))}
-      </div>
+          </div>
+        </div>
+      )}
+
+      {mode === 'list' && (
+        <>
+          <div className="portfolio-snapshot-toolbar">
+            <span>
+              按日期从旧到新 · 显示第 {pageStart + 1}-{pageEnd} 天 / 共 {ordered.length} 天
+            </span>
+            <div className="portfolio-snapshot-pagination" aria-label="每日持仓分页">
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage === 0}
+                onClick={() => setPage(0)}
+              >
+                首页
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage === 0}
+                onClick={() => setPage((value) => Math.max(0, value - 1))}
+              >
+                上一页
+              </button>
+              <span>
+                {currentPage + 1} / {pageCount}
+              </span>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+              >
+                下一页
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => setPage(pageCount - 1)}
+              >
+                末页
+              </button>
+            </div>
+          </div>
+
+          <div className="portfolio-snapshot-list">
+            {visibleSnapshots.map((snapshot) => (
+              <details
+                className="portfolio-snapshot"
+                key={snapshot.tradeDate}
+                open={expandedDate === snapshot.dateKey}
+              >
+                <summary
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setExpandedDate((value) => (value === snapshot.dateKey ? null : snapshot.dateKey));
+                  }}
+                >
+                  <span>{fmtTradeDate(snapshot.tradeDate)}</span>
+                  <span>总资产 {fmtMoney(snapshot.totalValue)} 元</span>
+                  <strong className={returnClass(snapshot.dailyReturnPct)}>
+                    日 {fmtPct(snapshot.dailyReturnPct)}
+                  </strong>
+                  <strong className={returnClass(snapshot.returnPct)}>
+                    累计 {fmtPct(snapshot.returnPct)}
+                  </strong>
+                  <PortfolioActionSummary snapshot={snapshot} />
+                  <span>{snapshot.positions.length} 个持仓</span>
+                </summary>
+                {snapshot.actions.length > 0 && (
+                  <div className="portfolio-action-panel">
+                    <h3>当日交易</h3>
+                    <div className="portfolio-action-list">
+                      {snapshot.actions.map((action, actionIndex) => (
+                        <PortfolioActionChip
+                          action={action}
+                          key={`${snapshot.dateKey}-${action.action}-${action.symbol}-${actionIndex}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {snapshot.positions.length > 0 ? (
+                  <div className="table-scroll-wrap">
+                    <table className="candidate-table portfolio-position-table">
+                      <thead>
+                        <tr>
+                          <th>名称</th>
+                          <th>类型</th>
+                          <th>买入日</th>
+                          <th>买入价</th>
+                          <th>股数/份额</th>
+                          <th>成本</th>
+                          <th>市值/占用</th>
+                          <th>权重</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {snapshot.positions.map((position) => (
+                          <tr key={`${snapshot.tradeDate}-${position.symbol}-${position.entryDate}`}>
+                            <td title={position.symbol}>{displayHoldingName(position)}</td>
+                            <td>{position.assetType === 'etf' ? 'ETF' : '股票'}</td>
+                            <td>{fmtTradeDate(position.entryDate)}</td>
+                            <td>{fmtPrice(position.entryPrice)}</td>
+                            <td>{fmtNumber(position.shares, 2)}</td>
+                            <td>{fmtMoney(position.costAmount)} 元</td>
+                            <td>{fmtMoney(position.marketValue)} 元</td>
+                            <td>{fmtNumber(position.weightPct)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="muted portfolio-snapshot-empty">当日无持仓，资金全部为空仓现金。</p>
+                )}
+              </details>
+            ))}
+          </div>
+        </>
+      )}
     </section>
+  );
+}
+
+function PortfolioActionSummary({
+  snapshot,
+  compact = false,
+}: {
+  snapshot: Pick<PortfolioSnapshotView, 'buyCount' | 'sellCount'>;
+  compact?: boolean;
+}) {
+  if (snapshot.buyCount === 0 && snapshot.sellCount === 0) {
+    return compact ? <span className="portfolio-action-summary portfolio-action-summary--empty">无交易</span> : <span>无交易</span>;
+  }
+
+  return (
+    <span className="portfolio-action-summary">
+      {snapshot.buyCount > 0 && <span className="portfolio-action-pill portfolio-action-pill--buy">买 {snapshot.buyCount}</span>}
+      {snapshot.sellCount > 0 && <span className="portfolio-action-pill portfolio-action-pill--sell">卖 {snapshot.sellCount}</span>}
+    </span>
+  );
+}
+
+function PortfolioActionChip({ action }: { action: PortfolioSnapshotAction }) {
+  return (
+    <div className={`portfolio-action-chip portfolio-action-chip--${action.action}`}>
+      <strong>{action.action === 'buy' ? '买入' : '卖出'}</strong>
+      <span title={action.symbol}>
+        {action.name && action.name !== action.symbol ? action.name : action.symbol}
+      </span>
+      <small>
+        {action.assetType === 'etf' ? 'ETF' : '股票'} · {fmtPrice(action.price)}
+        {action.action === 'buy' && action.amount != null ? ` · ${fmtMoney(action.amount)} 元` : ''}
+        {action.action === 'sell' && action.returnPct != null ? ` · ${fmtPct(action.returnPct)}` : ''}
+        {action.reason ? ` · ${fmtExitReason(action.reason)}` : ''}
+      </small>
+    </div>
   );
 }
 

@@ -169,6 +169,7 @@ function watchLevel(item: WatchlistItem): WatchLevel {
   const diamond = item.latest?.diamondStrength;
   const today = item.latest?.pctChg;
   const sinceEntry = item.latest?.vsEntryPct;
+  const reason = item.reason ?? '';
 
   if (diamond === 'red') {
     return {
@@ -200,6 +201,22 @@ function watchLevel(item: WatchlistItem): WatchLevel {
       label: 'R 回撤',
       className: 'watchlist-level--risk',
       status: '优先复核',
+    };
+  }
+  if (item.sourceType === 'screening' && reason.startsWith('A 重点')) {
+    return {
+      key: 'warm',
+      label: 'A 重点',
+      className: 'watchlist-level--warm',
+      status: '重点观察',
+    };
+  }
+  if (item.sourceType === 'screening' && reason.startsWith('B 升温')) {
+    return {
+      key: 'rise',
+      label: 'B 升温',
+      className: 'watchlist-level--rise',
+      status: '等待催化',
     };
   }
   if (item.sourceType === 'manual') {
