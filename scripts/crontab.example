@@ -19,5 +19,8 @@
 # 跟踪池日快照
 35 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm watchlist:snapshot >> /tmp/watchlist.log 2>&1
 
+# 工作总结快照 — 收盘后沉淀系统评分历史
+40 15 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm --filter @investment-agent/agent-core exec tsx src/cli/work-summary-json.ts latest >> /tmp/work-summary.log 2>&1
+
 # 消息雷达轮询（交易时段，每 15 分钟）
 */15 9-11,13-14 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm monitor:poll >> /tmp/monitor.log 2>&1

@@ -50,6 +50,12 @@ export const NAV_ITEMS: NavItem[] = [
     isActive: (pathname) =>
       pathname === '/backtest' || pathname.startsWith('/backtest/'),
   },
+  {
+    href: '/work-summary',
+    label: '工作总结',
+    isActive: (pathname) =>
+      pathname === '/work-summary' || pathname.startsWith('/work-summary/'),
+  },
 ];
 
 export function filterNavItems(

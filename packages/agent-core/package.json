@@ -43,6 +43,7 @@
     "paper:schedule": "tsx src/cli/scheduled-paper.ts",
     "paper:etf-schedule": "tsx src/cli/scheduled-paper.ts etf",
     "paper:stock-schedule": "tsx src/cli/scheduled-paper.ts stock",
+    "work-summary": "tsx src/cli/work-summary-json.ts",
     "feishu:status": "tsx src/cli/feishu-notify.ts status",
     "feishu:auth-test": "tsx src/cli/feishu-notify.ts auth-test",
     "feishu:chats": "tsx src/cli/feishu-notify.ts chats",

@@ -10,7 +10,8 @@ export type ScheduledTaskId =
   | 'etf-tail-pick'
   | 'stock-paper'
   | 'etf-paper-monitor'
-  | 'stock-intraday-monitor';
+  | 'stock-intraday-monitor'
+  | 'work-summary-snapshot';
 
 export type ScheduledTaskStatus = {
   id: ScheduledTaskId;
@@ -79,6 +80,13 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     label: '股票模拟盘选股',
     description: '收盘后运行股票模拟盘自动选股流程',
     scheduleText: '交易日 15:05',
+    defaultEnabled: true,
+  },
+  {
+    id: 'work-summary-snapshot',
+    label: '工作总结快照',
+    description: '收盘后汇总信号、监控、模拟盘、回测和 Eval，保存系统评分历史',
+    scheduleText: '交易日 15:40',
     defaultEnabled: true,
   },
 ];

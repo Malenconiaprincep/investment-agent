@@ -177,6 +177,10 @@ export async function runAgentCoreEtfJson(args: string[]): Promise<string> {
   return callAgentCoreCli('etf', args);
 }
 
+export async function runAgentCoreWorkSummaryJson(args: string[]): Promise<string> {
+  return callAgentCoreCli('work-summary', args);
+}
+
 function shouldUseLocalBacktestExec(baseUrl: string): boolean {
   if (!isLocalAgentCoreUrl(baseUrl)) return false;
   const flag = process.env.AGENT_CORE_BACKTEST_LOCAL_EXEC?.trim();
