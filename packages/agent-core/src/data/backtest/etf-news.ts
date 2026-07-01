@@ -99,6 +99,7 @@ const ETF_NEWS_PROFILES: EtfNewsProfile[] = [
     keywords: ['中概', '互联网', '港股', '阿里', '腾讯'],
   },
   { symbol: '513500', name: '标普500ETF', keywords: ['标普', '美股', '500'] },
+  { symbol: '513520', name: '日经ETF华夏', keywords: ['日经', '日本', '日股', '海外'] },
   { symbol: '510300', name: '沪深300ETF', keywords: ['沪深300', '大盘', '蓝筹', 'A股'] },
   {
     symbol: '512480',

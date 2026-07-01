@@ -22,6 +22,7 @@ export const ETF_POOL_19: EtfPoolItem[] = [
   { exchangeCode: 'sh513100', symbol: '513100', name: '纳指科技ETF' },
   { exchangeCode: 'sh513050', symbol: '513050', name: '中概互联ETF' },
   { exchangeCode: 'sh513500', symbol: '513500', name: '标普500ETF' },
+  { exchangeCode: 'sh513520', symbol: '513520', name: '日经ETF华夏' },
   { exchangeCode: 'sh510300', symbol: '510300', name: '沪深300ETF' },
   { exchangeCode: 'sh512480', symbol: '512480', name: '国泰CES半导体ETF' },
 ];
