@@ -63,13 +63,30 @@ pnpm ingest
 
 ### 5. 本地启动服务
 
-本项目当前按本地自用设计：先启动 `agent-core` HTTP 服务，再启动 Next.js Web UI。最简单方式：
+本项目当前按本地自用设计：先启动 `agent-core` HTTP 服务，再启动 Next.js Web UI。日常开发推荐用 daemon 后台常驻，这样关闭终端或切换任务也不会影响服务：
 
 ```bash
-pnpm dev:all
+pnpm daemon:start
 ```
 
-也可以拆开两个终端运行：
+常用管理命令：
+
+```bash
+pnpm daemon:status       # 查看 agent-core / web 是否在跑
+pnpm daemon:restart      # 修改代码后重启两个服务
+pnpm daemon:logs         # 查看最近日志
+pnpm daemon:logs -- -f   # 持续跟随日志
+pnpm daemon:stop         # 停止后台服务
+```
+
+也可以只操作单个服务：
+
+```bash
+pnpm daemon restart agent
+pnpm daemon restart web
+```
+
+如果需要看前台输出，也可以拆开两个终端运行：
 
 ```bash
 pnpm agent:serve

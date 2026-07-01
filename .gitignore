@@ -41,6 +41,7 @@ packages/agent-core/data/market-csv/**
 
 # Logs
 *.log
+.daemon/
 npm-debug.log*
 pnpm-debug.log*
 
