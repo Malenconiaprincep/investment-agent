@@ -386,11 +386,13 @@ async function enrichTradeNames(
   if (missingNameSymbols.length === 0) return trades;
 
   const quotes = await fetchIntradayQuotes(missingNameSymbols).catch(() => new Map());
-  if (quotes.size === 0) return trades;
 
   return trades.map((trade) => {
-    const name = quotes.get(trade.symbol)?.name?.trim();
+    const apiName = quotes.get(trade.symbol)?.name?.trim();
+    const localName = getLocalStockName(trade.symbol);
+    const name = apiName || localName;
     if (!name || (!options.refreshExisting && name === trade.symbol)) return trade;
+    if (!options.refreshExisting && trade.name && trade.name !== trade.symbol) return trade;
     return {
       ...trade,
       name,

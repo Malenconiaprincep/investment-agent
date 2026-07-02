@@ -18,9 +18,16 @@ const ETF_QFQ_DIR = path.join(MARKET_CSV_DIR, 'etf', 'qfq-daily');
 const STOCK_QFQ_DIR = process.env.INVESTMENT_AGENT_STOCK_QFQ_DIR?.trim()
   ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_QFQ_DIR)
   : path.join(MARKET_CSV_DIR, 'stock', 'qfq-daily');
-const STOCK_NAME_META_PATH = process.env.INVESTMENT_AGENT_STOCK_NAME_CSV?.trim()
+const STOCK_META_DIR = path.join(MARKET_CSV_DIR, 'meta');
+const STOCK_NAME_LEGACY_PATH = process.env.INVESTMENT_AGENT_STOCK_NAME_CSV?.trim()
   ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_NAME_CSV)
-  : path.join(MARKET_CSV_DIR, 'meta', 'stock-names.csv');
+  : path.join(STOCK_META_DIR, 'stock-names.csv');
+const STOCK_LIST_LISTED_PATH = process.env.INVESTMENT_AGENT_STOCK_LIST_CSV?.trim()
+  ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_LIST_CSV)
+  : path.join(STOCK_META_DIR, 'stock-list-listed.csv');
+const STOCK_LIST_DELISTED_PATH = process.env.INVESTMENT_AGENT_STOCK_DELISTED_CSV?.trim()
+  ? path.resolve(process.env.INVESTMENT_AGENT_STOCK_DELISTED_CSV)
+  : path.join(STOCK_META_DIR, 'stock-list-delisted.csv');
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const LOAD_ALL_DAYS = 100_000;
 const BUILTIN_STOCK_NAMES: ReadonlyArray<readonly [string, string]> = [
@@ -94,30 +101,75 @@ function normalizeStockSymbol(value: string | undefined): string | null {
   return match?.[0] ?? null;
 }
 
+type StockNameCsvFormat = 'tushare' | 'simple';
+
+function detectStockNameCsvFormat(headerLine: string): StockNameCsvFormat {
+  const header = headerLine.trim().replace(/^\uFEFF/, '');
+  if (header.includes('股票代码') && header.includes('股票名称')) return 'tushare';
+  return 'simple';
+}
+
+function parseStockNameCsvLine(
+  line: string,
+  format: StockNameCsvFormat,
+): { symbol: string; name: string } | null {
+  const trimmed = line.trim().replace(/^\uFEFF/, '');
+  if (!trimmed) return null;
+  const cols = trimmed.split(',');
+  const symbolValue = format === 'tushare' ? cols[1] : cols[0];
+  const nameValue = format === 'tushare' ? cols[2] : cols[1];
+  const symbol = normalizeStockSymbol(symbolValue);
+  const name = nameValue?.trim();
+  if (!symbol || !name || symbol === 'symbol' || name === '股票名称') return null;
+  return { symbol, name };
+}
+
+function mergeStockNamesFromCsvFile(
+  names: Map<string, string>,
+  filePath: string,
+): void {
+  if (!existsSync(filePath)) return;
+  const lines = readFileSync(filePath, 'utf-8').split(/\r?\n/);
+  const format = detectStockNameCsvFormat(lines[0] ?? '');
+  for (const rawLine of lines.slice(1)) {
+    const parsed = parseStockNameCsvLine(rawLine, format);
+    if (parsed) names.set(parsed.symbol, parsed.name);
+  }
+}
+
+function stockNameSourceMtimeKey(filePaths: string[]): string {
+  return filePaths
+    .filter((filePath) => existsSync(filePath))
+    .map((filePath) => `${filePath}:${statSync(filePath).mtimeMs}`)
+    .join('|');
+}
+
+function defaultStockNameSourcePaths(): string[] {
+  if (process.env.INVESTMENT_AGENT_STOCK_NAME_CSV?.trim()) {
+    return [STOCK_NAME_LEGACY_PATH];
+  }
+  return [STOCK_LIST_LISTED_PATH, STOCK_LIST_DELISTED_PATH, STOCK_NAME_LEGACY_PATH];
+}
+
 export function loadLocalStockNameMap(): Map<string, string> {
   const builtinNames = new Map(BUILTIN_STOCK_NAMES);
-  if (!existsSync(STOCK_NAME_META_PATH)) return builtinNames;
+  const sourcePaths = defaultStockNameSourcePaths();
+  const existingPaths = sourcePaths.filter((filePath) => existsSync(filePath));
+  if (existingPaths.length === 0) return builtinNames;
 
-  const fileMtime = statSync(STOCK_NAME_META_PATH).mtimeMs;
+  const mtimeKey = stockNameSourceMtimeKey(existingPaths);
   const cacheKey = 'local-csv:stock-name-map';
-  const cachedEntry = getCached<{ mtime: number; names: Map<string, string> }>(cacheKey);
-  if (cachedEntry && cachedEntry.mtime === fileMtime) {
+  const cachedEntry = getCached<{ mtimeKey: string; names: Map<string, string> }>(cacheKey);
+  if (cachedEntry && cachedEntry.mtimeKey === mtimeKey) {
     return cachedEntry.names;
   }
 
   const names = new Map(builtinNames);
-  const lines = readFileSync(STOCK_NAME_META_PATH, 'utf-8').split(/\r?\n/);
-  for (const rawLine of lines) {
-    const line = rawLine.trim().replace(/^\uFEFF/, '');
-    if (!line) continue;
-    const [symbolValue, nameValue] = line.split(',');
-    const symbol = normalizeStockSymbol(symbolValue);
-    const name = nameValue?.trim();
-    if (!symbol || !name || symbol === 'symbol') continue;
-    names.set(symbol, name);
+  for (const filePath of existingPaths) {
+    mergeStockNamesFromCsvFile(names, filePath);
   }
 
-  setCached(cacheKey, { mtime: fileMtime, names }, CACHE_TTL_MS);
+  setCached(cacheKey, { mtimeKey, names }, CACHE_TTL_MS);
   return names;
 }
 

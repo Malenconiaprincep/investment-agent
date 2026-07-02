@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { parseEtfDailyCsv, parseLocalDailyCsv } from './etf-daily.js';
+import {
+  getLocalStockName,
+  loadLocalStockNameMap,
+  parseEtfDailyCsv,
+  parseLocalDailyCsv,
+} from './etf-daily.js';
 import { __privateEtfDailyUpdate } from './etf-daily-update.js';
+
+describe('loadLocalStockNameMap', () => {
+  it('resolves listed and delisted stock names from local meta csv files', () => {
+    const names = loadLocalStockNameMap();
+    expect(names.get('000798')).toBe('中水渔业');
+    expect(names.get('000001')).toBe('平安银行');
+    expect(names.get('000005')).toBe('ST星源(退)');
+    expect(getLocalStockName('600519')).toBe('贵州茅台');
+  });
+});
 
 describe('parseEtfDailyCsv', () => {
   it('parses qfq daily csv into newest-first bars with amount', () => {

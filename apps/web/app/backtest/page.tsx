@@ -1695,7 +1695,7 @@ function PortfolioHoldingsSection({
   const [page, setPage] = useState(0);
   const [mode, setMode] = useState<PortfolioSnapshotMode>('list');
   const [calendarMonthIndex, setCalendarMonthIndex] = useState(0);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(() => new Set());
   const pageSize = 100;
   const ordered = useMemo(
     () => buildPortfolioSnapshotViews(snapshots, trades),
@@ -1714,18 +1714,30 @@ function PortfolioHoldingsSection({
 
   useEffect(() => {
     setPage(0);
-    setExpandedDate(listOrdered[0]?.dateKey ?? null);
   }, [listOrdered]);
 
   useEffect(() => {
     setCalendarMonthIndex(Math.max(0, months.length - 1));
   }, [months.length]);
 
+  function toggleSnapshot(dateKey: string) {
+    setCollapsedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      return next;
+    });
+  }
+
   function jumpToDate(dateKey: string) {
     const index = listOrdered.findIndex((snapshot) => snapshot.dateKey === dateKey);
     if (index < 0) return;
     setPage(Math.floor(index / pageSize));
-    setExpandedDate(dateKey);
+    setCollapsedDates((prev) => {
+      const next = new Set(prev);
+      next.delete(dateKey);
+      return next;
+    });
     setMode('list');
   }
 
@@ -1744,7 +1756,7 @@ function PortfolioHoldingsSection({
         <div>
           <h2 className="section-title">每日持仓</h2>
           <p className="muted">
-            买入/卖出按交易日标记；日收益按相邻交易日总资产变化计算，累计收益沿用回测净值。
+            买入/卖出按交易日标记；日收益按相邻交易日总资产变化计算，累计收益沿用回测净值；持仓收益率按当日收盘价相对买入价计算。
           </p>
         </div>
         <div className="portfolio-view-switch" aria-label="每日持仓视图">
@@ -1885,12 +1897,12 @@ function PortfolioHoldingsSection({
               <details
                 className="portfolio-snapshot"
                 key={snapshot.tradeDate}
-                open={expandedDate === snapshot.dateKey}
+                open={!collapsedDates.has(snapshot.dateKey)}
               >
                 <summary
                   onClick={(event) => {
                     event.preventDefault();
-                    setExpandedDate((value) => (value === snapshot.dateKey ? null : snapshot.dateKey));
+                    toggleSnapshot(snapshot.dateKey);
                   }}
                 >
                   <span>{fmtTradeDate(snapshot.tradeDate)}</span>
@@ -1929,6 +1941,7 @@ function PortfolioHoldingsSection({
                           <th>股数/份额</th>
                           <th>成本</th>
                           <th>市值/占用</th>
+                          <th>收益率</th>
                           <th>权重</th>
                         </tr>
                       </thead>
@@ -1942,6 +1955,9 @@ function PortfolioHoldingsSection({
                             <td>{fmtNumber(position.shares, 2)}</td>
                             <td>{fmtMoney(position.costAmount)} 元</td>
                             <td>{fmtMoney(position.marketValue)} 元</td>
+                            <td className={returnClass(position.returnPct)}>
+                              {fmtPct(position.returnPct)}
+                            </td>
                             <td>{fmtNumber(position.weightPct)}%</td>
                           </tr>
                         ))}
