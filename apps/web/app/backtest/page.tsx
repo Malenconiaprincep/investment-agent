@@ -1696,32 +1696,33 @@ function PortfolioHoldingsSection({
   const [mode, setMode] = useState<PortfolioSnapshotMode>('list');
   const [calendarMonthIndex, setCalendarMonthIndex] = useState(0);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const pageSize = 30;
+  const pageSize = 100;
   const ordered = useMemo(
     () => buildPortfolioSnapshotViews(snapshots, trades),
     [snapshots, trades],
   );
+  const listOrdered = useMemo(() => [...ordered].reverse(), [ordered]);
   const months = useMemo(() => buildPortfolioCalendarMonths(ordered), [ordered]);
   const latest = ordered[ordered.length - 1];
-  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(listOrdered.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const pageStart = currentPage * pageSize;
-  const pageEnd = Math.min(pageStart + pageSize, ordered.length);
-  const visibleSnapshots = ordered.slice(pageStart, pageEnd);
+  const pageEnd = Math.min(pageStart + pageSize, listOrdered.length);
+  const visibleSnapshots = listOrdered.slice(pageStart, pageEnd);
   const currentMonthIndex = Math.min(calendarMonthIndex, Math.max(0, months.length - 1));
   const currentMonth = months[currentMonthIndex];
 
   useEffect(() => {
     setPage(0);
-    setExpandedDate(ordered[0]?.dateKey ?? null);
-  }, [ordered]);
+    setExpandedDate(listOrdered[0]?.dateKey ?? null);
+  }, [listOrdered]);
 
   useEffect(() => {
     setCalendarMonthIndex(Math.max(0, months.length - 1));
   }, [months.length]);
 
   function jumpToDate(dateKey: string) {
-    const index = ordered.findIndex((snapshot) => snapshot.dateKey === dateKey);
+    const index = listOrdered.findIndex((snapshot) => snapshot.dateKey === dateKey);
     if (index < 0) return;
     setPage(Math.floor(index / pageSize));
     setExpandedDate(dateKey);
@@ -1838,7 +1839,7 @@ function PortfolioHoldingsSection({
         <>
           <div className="portfolio-snapshot-toolbar">
             <span>
-              按日期从旧到新 · 显示第 {pageStart + 1}-{pageEnd} 天 / 共 {ordered.length} 天
+              按日期从新到旧 · 显示第 {pageStart + 1}-{pageEnd} 天 / 共 {listOrdered.length} 天
             </span>
             <div className="portfolio-snapshot-pagination" aria-label="每日持仓分页">
               <button
