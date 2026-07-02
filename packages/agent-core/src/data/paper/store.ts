@@ -1,6 +1,7 @@
 import { formatTradeDateKey } from '../backtest/date-range.js';
 import { createClient, type Client } from '@libsql/client';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
+import { isEtfSymbol } from '../market/asset-type.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import {
   BUCKET_INITIAL_CASH,

@@ -34,6 +34,13 @@ import {
 } from './task-settings.js';
 import { appendScheduledTaskLog } from './scheduled-task-log.js';
 import {
+  createDailyTaskDueCheck,
+  getMinuteOfDay,
+  isDailyTaskDueInWindow,
+  type DailyTaskDueCursor,
+  type DailyTaskDueWindow,
+} from './daily-task-due.js';
+import {
   ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT,
   formatTradeDate,
   getBeijingNow,
@@ -57,6 +64,7 @@ let lastEtfPaperRunMs = 0;
 let lastStockIntradayRunMs = 0;
 let lastStockBacktestNewsExitRunMs = 0;
 let lastStockBacktestExitRunMs = 0;
+let lastDailyTaskDueCursor: DailyTaskDueCursor | null = null;
 const SCREEN_LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 const DAILY_CSV_LOG_PATH = path.join(DATA_DIR, 'daily-csv-update.log');
 
@@ -188,13 +196,6 @@ function appendDailyCsvUpdateLog(input: {
     })}\n`,
     'utf-8',
   );
-}
-
-function isDue(task: DailyTaskDef, now: Date): boolean {
-  if (!isWeekday(now)) return false;
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const dueMinutes = task.hour * 60 + task.minute;
-  return minutes >= dueMinutes;
 }
 
 function createScreenTask(input: {
@@ -605,8 +606,26 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
   }
 }
 
-async function runDueTasks(now = getBeijingNow()) {
+async function runDueTasks(
+  now = getBeijingNow(),
+  options?: { catchUpFixedTasks?: boolean },
+) {
   const tradeDate = formatTradeDate(now);
+  const dueCheck = createDailyTaskDueCheck({
+    now,
+    tradeDate,
+    isTradingDay: isWeekday(now),
+    previous: lastDailyTaskDueCursor,
+  });
+  lastDailyTaskDueCursor = dueCheck.cursor;
+  const fixedTaskDueWindow: DailyTaskDueWindow | null =
+    options?.catchUpFixedTasks && isWeekday(now)
+      ? {
+          tradeDate,
+          afterMinuteOfDay: -1,
+          throughMinuteOfDay: getMinuteOfDay(now),
+        }
+      : dueCheck.window;
 
   await runEtfPaperMonitor(now);
   await tickStockBacktestPaperExitMonitor(now);
@@ -614,7 +633,12 @@ async function runDueTasks(now = getBeijingNow()) {
 
   for (const task of DAILY_TASKS) {
     const key = taskKey(task.id, tradeDate);
-    if (completedKeys.has(key) || !isDue(task, now)) continue;
+    if (
+      completedKeys.has(key) ||
+      !isDailyTaskDueInWindow(task, fixedTaskDueWindow)
+    ) {
+      continue;
+    }
 
     if (!isScheduledTaskEnabled(task.id)) {
       completedKeys.add(key);
@@ -719,6 +743,7 @@ export function resetDailyTasksForTests() {
   lastEtfPaperRunMs = 0;
   lastStockIntradayRunMs = 0;
   lastStockBacktestNewsExitRunMs = 0;
+  lastDailyTaskDueCursor = null;
   if (timer) {
     clearInterval(timer);
     timer = null;
@@ -731,5 +756,6 @@ export async function runDailyTasksNow() {
   completedKeys.clear();
   lastEtfPaperRunMs = 0;
   lastStockIntradayRunMs = 0;
-  await runDueTasks(getBeijingNow());
+  lastDailyTaskDueCursor = null;
+  await runDueTasks(getBeijingNow(), { catchUpFixedTasks: true });
 }
