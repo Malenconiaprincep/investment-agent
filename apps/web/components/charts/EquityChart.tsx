@@ -21,8 +21,27 @@ type EquityChartProps = {
   height?: number;
 };
 
+function normalizeTradeDate(value: string): string {
+  const key = value.trim().replace(/-/g, '').slice(0, 8);
+  if (key.length !== 8) return value.trim();
+  return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+}
+
 function toUtcTimestamp(tradeDate: string): UTCTimestamp {
-  return Math.floor(new Date(`${tradeDate}T00:00:00Z`).getTime() / 1000) as UTCTimestamp;
+  const normalized = normalizeTradeDate(tradeDate);
+  return Math.floor(new Date(`${normalized}T00:00:00Z`).getTime() / 1000) as UTCTimestamp;
+}
+
+function toSeriesData(points: EquityPoint[]) {
+  const byTime = new Map<number, number>();
+  for (const point of points) {
+    const time = toUtcTimestamp(point.tradeDate);
+    if (!Number.isFinite(time)) continue;
+    byTime.set(time, point.totalValue);
+  }
+  return [...byTime.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
 }
 
 export function EquityChart({ points, height = 280 }: EquityChartProps) {
@@ -74,12 +93,7 @@ export function EquityChart({ points, height = 280 }: EquityChartProps) {
 
   useEffect(() => {
     if (!seriesRef.current || points.length === 0) return;
-    seriesRef.current.setData(
-      points.map((p) => ({
-        time: toUtcTimestamp(p.tradeDate),
-        value: p.totalValue,
-      })),
-    );
+    seriesRef.current.setData(toSeriesData(points));
     chartRef.current?.timeScale().fitContent();
   }, [points]);
 

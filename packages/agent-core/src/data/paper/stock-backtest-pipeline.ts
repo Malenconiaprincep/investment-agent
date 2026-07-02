@@ -6,22 +6,17 @@ import {
 } from '../backtest/diamond.js';
 import { isRetailTradableStock } from '../market/asset-type.js';
 import { getDailyQuote } from '../market/services.js';
-import { scanDiamondSignal } from '../market/diamond-signal.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import type { StockBacktestPaperBucket } from './bucket.js';
 import { BUCKET_LABELS } from './bucket.js';
 import { checkMarketDataFreshness } from './market-data-freshness.js';
-import {
-  analyzeMomentum,
-  evaluateMomentumExit,
-} from './momentum.js';
+import { autoSellStrategyExits } from './stock-backtest-exit.js';
 import {
   calcAutoBuyShares,
   executePaperTrade,
   finishAutoRun,
   getLatestAutoRun,
   getPaperAccountSummary,
-  getPositionMeta,
   listPaperPositions,
   saveEquitySnapshot,
   startAutoRun,
@@ -76,62 +71,14 @@ async function refreshPositionMarks(
 async function autoSellExits(
   bucket: StockBacktestPaperBucket,
   tradeDate: string,
-): Promise<NonNullable<StockBacktestPaperResult['trades']>['sells']> {
-  const sells: NonNullable<StockBacktestPaperResult['trades']>['sells'] = [];
-  const positions = await listPaperPositions(bucket);
-
-  for (const pos of positions) {
-    try {
-      const kline = await getDailyQuote(pos.symbol, 60);
-      const signal = await scanDiamondSignal(pos.symbol, pos.name, 60);
-      const momentum = analyzeMomentum(pos.symbol, pos.name, kline.quotes, signal);
-      const close = momentum?.close ?? kline.latestClose;
-      if (close == null) continue;
-
-      const meta = await getPositionMeta(pos.symbol, bucket);
-      const exit = evaluateMomentumExit({
-        avgCost: pos.avgCost,
-        close,
-        ma20: momentum?.ma20 ?? null,
-        highWaterMark: meta?.highWaterMark ?? null,
-        diamondStrength: signal?.strength ?? null,
-      });
-      if (!exit) continue;
-
-      const summary = await getPaperAccountSummary(bucket);
-      const held = summary.positions.find((p) => p.symbol === pos.symbol);
-      const available = held?.availableShares ?? 0;
-      if (available < 100) continue;
-
-      const execution = await resolvePaperExecutionPrice(pos.symbol, 'sell');
-      const shares = Math.floor(available / 100) * 100;
-      await executePaperTrade({
-        bucket,
-        symbol: pos.symbol,
-        name: pos.name,
-        side: 'sell',
-        shares,
-        price: execution.price,
-        tradeDate,
-        source: 'auto',
-        note: `回测策略出场：${exit.reason} · 成交价=${execution.priceSource}`,
-        skipSessionCheck: true,
-        useOrderBookPrice: false,
-      });
-
-      sells.push({
-        symbol: pos.symbol,
-        name: pos.name,
-        shares,
-        price: execution.price,
-        reason: exit.reason,
-      });
-    } catch {
-      // skip per symbol
-    }
-  }
-
-  return sells;
+  options: { requireSession?: boolean; useLivePrice?: boolean } = {},
+) {
+  return autoSellStrategyExits({
+    bucket,
+    tradeDate,
+    requireSession: options.requireSession ?? false,
+    useLivePrice: options.useLivePrice ?? false,
+  });
 }
 
 async function autoBuyCandidates(input: {
@@ -250,6 +197,15 @@ async function runStockBacktestBucketPipeline(input: {
 
     const entryTradeDate =
       input.mode === 'preopen' ? tradeDate : getExpectedMarketDataDate(now);
+
+    const exitSells =
+      input.bucket === 'stock-backtest-news'
+        ? []
+        : await autoSellExits(input.bucket, tradeDate, {
+            requireSession: false,
+            useLivePrice: false,
+          });
+
     const scan = await scanStockStrategyEntriesForDate({
       entryTradeDate,
       mode: input.mode,
@@ -261,7 +217,6 @@ async function runStockBacktestBucketPipeline(input: {
       candidates: scan.candidates.length,
     };
 
-    const sells = await autoSellExits(input.bucket, tradeDate);
     const buys = await autoBuyCandidates({
       bucket: input.bucket,
       tradeDate,
@@ -269,7 +224,16 @@ async function runStockBacktestBucketPipeline(input: {
       useOrderBook: input.mode === 'preopen',
     });
 
-    result.trades = { buys, sells };
+    result.trades = {
+      buys,
+      sells: exitSells.map(({ symbol, name, shares, price, reason }) => ({
+        symbol,
+        name,
+        shares,
+        price,
+        reason,
+      })),
+    };
     const equity = await saveEquitySnapshot(tradeDate, input.bucket);
     result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
 

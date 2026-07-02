@@ -605,6 +605,64 @@ function evaluateBacktestMomentumExit(input: {
   return null;
 }
 
+export function evaluateStockStrategyPaperExit(input: {
+  avgCost: number;
+  close: number;
+  ma5: number | null;
+  ma20: number | null;
+  highWaterMark: number | null;
+  diamondStrength: 'red' | 'blue' | null;
+  holdDays: number;
+  weakSignalDays: number;
+}): { reason: string } | null {
+  const exit = evaluateBacktestMomentumExit({
+    ...input,
+    stopLossPct: STOCK_BACKTEST_STOP_LOSS_PCT,
+    takeProfitPct: MOMENTUM_TAKE_PROFIT_PCT,
+    maxHoldDays: MOMENTUM_MAX_HOLD_DAYS,
+  });
+  if (exit) return exit;
+  if (input.holdDays >= MOMENTUM_MAX_HOLD_DAYS) {
+    return { reason: `达到持有上限（${MOMENTUM_MAX_HOLD_DAYS} 日）` };
+  }
+  return null;
+}
+
+export function calcStockStrategyHoldMetrics(input: {
+  symbol: string;
+  name: string;
+  bars: OhlcvBar[];
+  entryTradeDate: string;
+  asOfTradeDate: string;
+}): {
+  holdDays: number;
+  weakSignalDays: number;
+  ma5: number | null;
+  ma20: number | null;
+  diamondStrength: 'red' | 'blue' | null;
+} | null {
+  const entryIndex = findBarIndex(input.bars, input.entryTradeDate);
+  const asOfIndex = findBarIndex(input.bars, input.asOfTradeDate);
+  if (entryIndex < 0 || asOfIndex < 0 || asOfIndex > entryIndex) return null;
+
+  const windowBars = input.bars.slice(asOfIndex);
+  let weakSignalDays = 0;
+  for (let index = asOfIndex; index <= entryIndex; index += 1) {
+    const diamond = detectDiamondSignal(input.symbol, input.name, input.bars.slice(index));
+    if (diamond?.strength === 'red') break;
+    weakSignalDays += 1;
+  }
+
+  const latestDiamond = detectDiamondSignal(input.symbol, input.name, windowBars);
+  return {
+    holdDays: entryIndex - asOfIndex,
+    weakSignalDays,
+    ma5: ma5At(windowBars),
+    ma20: ma20At(windowBars),
+    diamondStrength: latestDiamond?.strength ?? null,
+  };
+}
+
 function createMomentumExitTrade(
   signal: BacktestSignal,
   bars: OhlcvBar[],

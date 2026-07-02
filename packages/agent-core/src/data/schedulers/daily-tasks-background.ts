@@ -17,8 +17,8 @@ import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import {
   runStockBacktestNewsPaperPipeline,
-  runStockBacktestPaperPipeline,
 } from '../paper/stock-backtest-pipeline.js';
+import { runStockBacktestPaperExitMonitor } from '../paper/stock-backtest-exit.js';
 import { checkMarketDataFreshness } from '../paper/market-data-freshness.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
@@ -54,6 +54,8 @@ type DailyTaskDef = {
 const completedKeys = new Set<string>();
 let lastEtfPaperRunMs = 0;
 let lastStockIntradayRunMs = 0;
+let lastStockBacktestNewsExitRunMs = 0;
+let lastStockBacktestExitRunMs = 0;
 const SCREEN_LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 const DAILY_CSV_LOG_PATH = path.join(DATA_DIR, 'daily-csv-update.log');
 
@@ -325,22 +327,11 @@ const DAILY_TASKS: DailyTaskDef[] = [
   },
   {
     id: 'stock-backtest-news-paper',
-    label: '回测策略+新闻模拟盘',
+    label: '回测策略+新闻模拟盘买入',
     hour: 8,
     minute: 0,
     run: async () => {
       const result = await runStockBacktestNewsPaperPipeline();
-      await notifyStockBacktestPaper(result);
-      return result;
-    },
-  },
-  {
-    id: 'stock-backtest-paper',
-    label: '回测策略模拟盘',
-    hour: 16,
-    minute: 0,
-    run: async () => {
-      const result = await runStockBacktestPaperPipeline();
       await notifyStockBacktestPaper(result);
       return result;
     },
@@ -384,10 +375,6 @@ const DAILY_TASKS: DailyTaskDef[] = [
         elapsedMs: Date.parse(finishedAt) - Date.parse(startedAt),
         result,
       });
-      if (result.errors < result.items.length) {
-        const backtestResult = await runStockBacktestPaperPipeline({ force: true });
-        await notifyStockBacktestPaper(backtestResult);
-      }
       return {
         skipped: result.items.length === 0 || result.errors === result.items.length,
         reason:
@@ -401,6 +388,41 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
 ];
+
+async function runStockBacktestPaperExitMonitor(now = getBeijingNow()) {
+  if (!isScheduledTaskEnabled('stock-backtest-exit-monitor')) return;
+  if (!isTradingSession(now)) return;
+
+  const intervalMs = getStockIntradayMonitorIntervalMs();
+  const nowMs = now.getTime();
+  if (
+    lastStockBacktestNewsExitRunMs > 0 &&
+    nowMs - lastStockBacktestNewsExitRunMs < intervalMs
+  ) {
+    return;
+  }
+
+  lastStockBacktestNewsExitRunMs = nowMs;
+  const label = '回测策略分仓出场监控';
+
+  try {
+    const result = await runStockBacktestPaperExitMonitor();
+    if (result.skipped) {
+      logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      return;
+    }
+    if (result.sells.length > 0) {
+      logInfo(
+        `${label} 完成：卖出 ${result.sells.length} 笔（${result.sells.map((s) => `${s.bucket}:${s.symbol}`).join('、')}）`,
+      );
+    }
+  } catch (error) {
+    lastStockBacktestNewsExitRunMs = 0;
+    const message = error instanceof Error ? error.message : String(error);
+    logError(`${label} 失败：${message}`);
+    await notifyDailyTaskFailure(label, message);
+  }
+}
 
 async function runStockIntradayMonitor(now = getBeijingNow()) {
   if (!isScheduledTaskEnabled('stock-intraday-monitor')) return;
@@ -478,6 +500,7 @@ async function runDueTasks(now = getBeijingNow()) {
   const tradeDate = formatTradeDate(now);
 
   await runEtfPaperMonitor(now);
+  await runStockBacktestPaperExitMonitor(now);
   await runStockIntradayMonitor(now);
 
   for (const task of DAILY_TASKS) {
@@ -525,8 +548,8 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
-    `08:00 行情数据提醒 / 回测策略+新闻模拟盘`,
-    `16:00 回测策略模拟盘（数据就绪后）`,
+    `08:00 行情数据提醒 / 回测+新闻仓买入`,
+    `交易时段 回测策略分仓出场监控（策略仓+新闻仓）`,
     `15:30 ETF 日线更新`,
     `15:32 股票日线更新`,
   ].join(' · ');
@@ -545,6 +568,7 @@ export function resetDailyTasksForTests() {
   completedKeys.clear();
   lastEtfPaperRunMs = 0;
   lastStockIntradayRunMs = 0;
+  lastStockBacktestNewsExitRunMs = 0;
   if (timer) {
     clearInterval(timer);
     timer = null;

@@ -15,8 +15,8 @@ export type ScheduledTaskId =
   | 'stock-daily-csv-update'
   | 'stock-paper'
   | 'market-data-reminder'
-  | 'stock-backtest-paper'
   | 'stock-backtest-news-paper'
+  | 'stock-backtest-exit-monitor'
   | 'etf-paper-monitor'
   | 'stock-intraday-monitor'
   | 'work-summary-snapshot';
@@ -134,16 +134,16 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
   },
   {
     id: 'stock-backtest-news-paper',
-    label: '回测策略+新闻模拟盘',
-    description: '8 点按回测 T+2 策略扫描全市场，叠加新闻过滤后写入独立分仓',
+    label: '回测策略+新闻模拟盘买入',
+    description: '8 点按回测 T+2 策略扫描全市场，叠加新闻过滤后买入（卖出由盘中监控处理）',
     scheduleText: '交易日 08:00',
     defaultEnabled: true,
   },
   {
-    id: 'stock-backtest-paper',
-    label: '回测策略模拟盘',
-    description: '数据更新后按回测 T+2 策略扫描全市场并写入独立分仓（纯策略，无额外新闻关）',
-    scheduleText: '交易日 16:00 / CSV 更新后',
+    id: 'stock-backtest-exit-monitor',
+    label: '回测策略分仓出场监控',
+    description: '交易时段监控策略仓与新闻仓的止盈/止损/持有到期等出场条件并自动卖出',
+    scheduleText: '交易日 9:30–15:00 轮询',
     defaultEnabled: true,
   },
   {

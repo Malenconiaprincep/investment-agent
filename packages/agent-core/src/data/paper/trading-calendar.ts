@@ -49,10 +49,11 @@ export function isPreMarketMorningWindow(date: Date = getBeijingNow()): boolean 
   return minutes >= 7 * 60 && minutes < 9 * 60 + 30;
 }
 
-export const STOCK_BACKTEST_NEWS_SCHEDULE_LABEL = '每个交易日 08:00 回测策略+新闻模拟买入';
+export const STOCK_BACKTEST_EXIT_SCHEDULE_LABEL =
+  '每个交易日 9:30–15:00 监控回测策略仓与新闻仓出场（止盈/止损/持有到期等）';
 
 export const STOCK_BACKTEST_CLOSE_SCHEDULE_LABEL =
-  '每个交易日数据更新后运行回测策略模拟买入（通常 16:00 检查）';
+  '回测策略仓：数据更新后手动执行 stock-backtest-auto-run';
 
 export const MARKET_DATA_REMINDER_SCHEDULE_LABEL =
   '每个交易日提醒更新大盘/个股日线 CSV（数据未就绪时不跑回测策略仓）';

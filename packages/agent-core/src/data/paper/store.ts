@@ -1,3 +1,4 @@
+import { formatTradeDateKey } from '../backtest/date-range.js';
 import { createClient, type Client } from '@libsql/client';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
@@ -18,9 +19,8 @@ import {
 import { resolvePaperMarkPrices } from './mark-price.js';
 import { calcStopLoss } from './momentum.js';
 import {
-  getPaperSettlementRule,
-  settlementRuleLabel,
-  usesT1Settlement,
+  getSellableCutoffTradeDate,
+  bucketSettlementRuleLabel,
 } from './settlement.js';
 
 export type PaperAccount = {
@@ -54,7 +54,7 @@ export type PaperPosition = {
   frozenShares: number;
   latestPrice: number | null;
   markPriceSource?: 'intraday' | 'daily' | null;
-  settlementRule?: 't0' | 't1';
+  settlementRule?: 't0' | 't1' | 't2';
   marketValue: number | null;
   pnlPct: number | null;
   stopLoss: number | null;
@@ -301,6 +301,57 @@ async function migrateBucketSchema(db: Client): Promise<void> {
       ],
     });
   }
+  await repairLegacyEquitySnapshots(db);
+}
+
+function maxReasonableEquity(bucket: PaperBucket): number {
+  return BUCKET_INITIAL_CASH[bucket] * 1.5;
+}
+
+function sanitizeLegacyEquitySnapshot(snapshot: PaperEquitySnapshot): PaperEquitySnapshot {
+  const bucketInitial = BUCKET_INITIAL_CASH[snapshot.bucket];
+  const maxReasonable = maxReasonableEquity(snapshot.bucket);
+  if (snapshot.totalValue <= maxReasonable) return snapshot;
+
+  const denominator = 1 + snapshot.returnPct / 100;
+  const impliedInitial =
+    Number.isFinite(denominator) && denominator > 0
+      ? snapshot.totalValue / denominator
+      : snapshot.totalValue;
+  if (impliedInitial <= maxReasonable) return snapshot;
+
+  const scale = bucketInitial / impliedInitial;
+  return {
+    ...snapshot,
+    totalValue: Number((snapshot.totalValue * scale).toFixed(2)),
+    cash: Number((snapshot.cash * scale).toFixed(2)),
+    marketValue: Number((snapshot.marketValue * scale).toFixed(2)),
+  };
+}
+
+async function repairLegacyEquitySnapshots(db: Client): Promise<void> {
+  const rows = await db.execute(`SELECT * FROM paper_equity_snapshots`);
+  for (const row of rows.rows) {
+    const r = row as Record<string, unknown>;
+    const snapshot: PaperEquitySnapshot = {
+      id: String(r.id),
+      bucket: resolvePaperBucket(r.bucket != null ? String(r.bucket) : 'stock'),
+      tradeDate: formatTradeDateKey(String(r.trade_date)),
+      totalValue: Number(r.total_value),
+      cash: Number(r.cash),
+      marketValue: Number(r.market_value),
+      returnPct: Number(r.return_pct),
+      createdAt: String(r.created_at),
+    };
+    const fixed = sanitizeLegacyEquitySnapshot(snapshot);
+    if (fixed.totalValue === snapshot.totalValue) continue;
+    await db.execute({
+      sql: `UPDATE paper_equity_snapshots
+            SET total_value = ?, cash = ?, market_value = ?
+            WHERE id = ?`,
+      args: [fixed.totalValue, fixed.cash, fixed.marketValue, snapshot.id],
+    });
+  }
 }
 
 async function backfillLotsFromTrades(db: Client) {
@@ -439,7 +490,8 @@ export async function getAvailableShares(
   const pos = await getPosition(symbol, bucket);
   if (!pos) return 0;
 
-  if (!usesT1Settlement(symbol)) {
+  const cutoff = getSellableCutoffTradeDate({ bucket, symbol, tradeDate });
+  if (cutoff == null) {
     return pos.shares;
   }
 
@@ -447,8 +499,8 @@ export async function getAvailableShares(
   const result = await db.execute({
     sql: `SELECT COALESCE(SUM(remaining_shares), 0) AS total
           FROM paper_lots
-          WHERE bucket = ? AND symbol = ? AND buy_date < ? AND remaining_shares > 0`,
-    args: [bucket, symbol, tradeDate],
+          WHERE bucket = ? AND symbol = ? AND buy_date <= ? AND remaining_shares > 0`,
+    args: [bucket, symbol, cutoff],
   });
   return Number((result.rows[0] as Record<string, unknown>).total);
 }
@@ -462,8 +514,9 @@ async function deductLots(
 ): Promise<void> {
   const db = await getDb();
   let remaining = shares;
-  const allowTodayLots = forceAllLots || !usesT1Settlement(symbol);
-  const lots = allowTodayLots
+  const cutoff = getSellableCutoffTradeDate({ bucket, symbol, tradeDate });
+  const allowAllLots = forceAllLots || cutoff == null;
+  const lots = allowAllLots
     ? await db.execute({
         sql: `SELECT * FROM paper_lots
               WHERE bucket = ? AND symbol = ? AND remaining_shares > 0
@@ -472,9 +525,9 @@ async function deductLots(
       })
     : await db.execute({
         sql: `SELECT * FROM paper_lots
-              WHERE bucket = ? AND symbol = ? AND buy_date < ? AND remaining_shares > 0
+              WHERE bucket = ? AND symbol = ? AND buy_date <= ? AND remaining_shares > 0
               ORDER BY buy_date ASC, created_at ASC`,
-        args: [bucket, symbol, tradeDate],
+        args: [bucket, symbol, cutoff],
       });
 
   for (const row of lots.rows) {
@@ -490,7 +543,7 @@ async function deductLots(
   }
 
   if (remaining > 0) {
-    throw new Error(`${settlementRuleLabel(symbol)} 可卖数量不足`);
+    throw new Error(`${bucketSettlementRuleLabel(bucket, symbol)} 可卖数量不足`);
   }
 }
 
@@ -713,12 +766,12 @@ export async function executePaperTrade(input: {
     }
     const available = await getAvailableShares(input.symbol, tradeDate, bucket);
     if (!input.skipT1Check && shares > available) {
-      const rule = settlementRuleLabel(input.symbol);
+      const rule = bucketSettlementRuleLabel(bucket, input.symbol);
       const frozen = pos.shares - available;
       throw new Error(
-        rule === 'T+1'
-          ? `${rule} 限制：今日可卖 ${available} 股（共 ${pos.shares} 股，${frozen} 股当日买入冻结）`
-          : `${rule} 可卖数量不足：请求 ${shares} 股，当前可卖 ${available} 股`,
+        rule === 'T+0'
+          ? `${rule} 可卖数量不足：请求 ${shares} 股，当前可卖 ${available} 股`
+          : `${rule} 限制：今日可卖 ${available} 股（共 ${pos.shares} 股，${frozen} 股尚未满足可卖条件）`,
       );
     }
 
@@ -873,7 +926,11 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
       frozenShares: pos.shares - availableShares,
       latestPrice,
       markPriceSource: mark?.source ?? null,
-      settlementRule: getPaperSettlementRule(pos.symbol),
+      settlementRule: isEtfSymbol(pos.symbol)
+        ? 't0'
+        : bucket === 'stock-backtest'
+          ? 't2'
+          : 't1',
       marketValue: mv,
       pnlPct,
       stopLoss: meta?.stopLoss ?? calcStopLoss(pos.avgCost),
@@ -1040,6 +1097,7 @@ export async function saveEquitySnapshot(
   tradeDate = formatTradeDate(),
   bucket: PaperBucket = 'stock',
 ): Promise<PaperEquitySnapshot> {
+  const normalizedTradeDate = formatTradeDateKey(tradeDate);
   const summary = await getPaperAccountSummary(bucket);
   const db = await getDb();
   const id = crypto.randomUUID();
@@ -1057,7 +1115,7 @@ export async function saveEquitySnapshot(
     args: [
       id,
       bucket,
-      tradeDate,
+      normalizedTradeDate,
       summary.totalValue,
       summary.account.cash,
       summary.marketValue,
@@ -1069,7 +1127,7 @@ export async function saveEquitySnapshot(
   return {
     id,
     bucket,
-    tradeDate,
+    tradeDate: normalizedTradeDate,
     totalValue: summary.totalValue,
     cash: summary.account.cash,
     marketValue: summary.marketValue,
@@ -1092,19 +1150,35 @@ export async function listEquitySnapshots(
         sql: `SELECT * FROM paper_equity_snapshots ORDER BY trade_date ASC LIMIT ?`,
         args: [limit],
       });
-  return result.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    return {
-      id: String(r.id),
-      bucket: resolvePaperBucket(r.bucket != null ? String(r.bucket) : 'stock'),
-      tradeDate: String(r.trade_date),
-      totalValue: Number(r.total_value),
-      cash: Number(r.cash),
-      marketValue: Number(r.market_value),
-      returnPct: Number(r.return_pct),
-      createdAt: String(r.created_at),
-    };
-  });
+  return result.rows
+    .map((row) => {
+      const r = row as Record<string, unknown>;
+      return sanitizeLegacyEquitySnapshot({
+        id: String(r.id),
+        bucket: resolvePaperBucket(r.bucket != null ? String(r.bucket) : 'stock'),
+        tradeDate: formatTradeDateKey(String(r.trade_date)),
+        totalValue: Number(r.total_value),
+        cash: Number(r.cash),
+        marketValue: Number(r.market_value),
+        returnPct: Number(r.return_pct),
+        createdAt: String(r.created_at),
+      });
+    })
+    .reduce<PaperEquitySnapshot[]>((acc, snapshot) => {
+      const index = acc.findIndex(
+        (item) =>
+          item.bucket === snapshot.bucket && item.tradeDate === snapshot.tradeDate,
+      );
+      if (index < 0) {
+        acc.push(snapshot);
+        return acc;
+      }
+      if (snapshot.createdAt >= acc[index].createdAt) {
+        acc[index] = snapshot;
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
 }
 
 export async function startAutoRun(

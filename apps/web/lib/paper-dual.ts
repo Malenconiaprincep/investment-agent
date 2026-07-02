@@ -21,7 +21,7 @@ export type BucketSummary = {
     frozenShares: number;
     latestPrice: number | null;
     markPriceSource?: 'intraday' | 'daily' | null;
-    settlementRule?: 't0' | 't1';
+    settlementRule?: 't0' | 't1' | 't2';
     marketValue: number | null;
     pnlPct: number | null;
     stopLoss: number | null;

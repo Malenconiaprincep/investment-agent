@@ -64,33 +64,71 @@ function formatTradeNote(note: string | null) {
   return note;
 }
 
+function normalizeEquityTradeDate(value: string): string {
+  const key = value.trim().replace(/-/g, '').slice(0, 8);
+  if (key.length !== 8) return value.trim();
+  return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+}
+
+const BUCKET_INITIAL_CASH = 100_000;
+
+function pointInitialCash(point: Pick<EquityPoint, 'totalValue' | 'returnPct'>): number {
+  const denominator = 1 + point.returnPct / 100;
+  if (!Number.isFinite(denominator) || denominator <= 0) return point.totalValue;
+  return point.totalValue / denominator;
+}
+
 function mergeEquityCurves(curves: EquityPoint[][]): EquityPoint[] {
-  const byDate = new Map<string, { totalValue: number; initialCash: number }>();
-  for (const points of curves) {
-    for (const point of points) {
-      const initialCash = point.totalValue / (1 + point.returnPct / 100);
-      const prev = byDate.get(point.tradeDate);
-      if (prev) {
-        prev.totalValue += point.totalValue;
-        prev.initialCash += initialCash;
+  const normalizedCurves = curves.map((points) =>
+    [...points]
+      .map((point) => ({
+        tradeDate: normalizeEquityTradeDate(point.tradeDate),
+        totalValue: point.totalValue,
+        returnPct: point.returnPct,
+      }))
+      .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate)),
+  );
+
+  const allDates = new Set<string>();
+  for (const points of normalizedCurves) {
+    for (const point of points) allDates.add(point.tradeDate);
+  }
+  const timeline = [...allDates].sort();
+  if (timeline.length === 0) return [];
+
+  const indices = normalizedCurves.map(() => 0);
+  const lastKnown = normalizedCurves.map<EquityPoint | null>(() => null);
+
+  return timeline.map((tradeDate) => {
+    let totalValue = 0;
+    let initialCash = 0;
+
+    for (let i = 0; i < normalizedCurves.length; i++) {
+      const points = normalizedCurves[i];
+      while (indices[i] < points.length && points[indices[i]].tradeDate <= tradeDate) {
+        lastKnown[i] = points[indices[i]];
+        indices[i] += 1;
+      }
+
+      const point = lastKnown[i];
+      if (point) {
+        totalValue += point.totalValue;
+        initialCash += pointInitialCash(point);
       } else {
-        byDate.set(point.tradeDate, {
-          totalValue: point.totalValue,
-          initialCash,
-        });
+        totalValue += BUCKET_INITIAL_CASH;
+        initialCash += BUCKET_INITIAL_CASH;
       }
     }
-  }
-  return [...byDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([tradeDate, v]) => ({
+
+    return {
       tradeDate,
-      totalValue: Number(v.totalValue.toFixed(2)),
+      totalValue: Number(totalValue.toFixed(2)),
       returnPct:
-        v.initialCash > 0
-          ? Number((((v.totalValue - v.initialCash) / v.initialCash) * 100).toFixed(2))
+        initialCash > 0
+          ? Number((((totalValue - initialCash) / initialCash) * 100).toFixed(2))
           : 0,
-    }));
+    };
+  });
 }
 
 function bucketLabel(bucket: PaperBucket) {
@@ -375,8 +413,13 @@ export default function PaperTradingPage() {
                             {'settlementRule' in p && p.settlementRule === 't0' && (
                               <span className="paper-settlement-tag">T+0</span>
                             )}
+                            {'settlementRule' in p && p.settlementRule === 't2' && (
+                              <span className="paper-settlement-tag paper-settlement-tag--t1">
+                                T+2
+                              </span>
+                            )}
                             {'settlementRule' in p &&
-                              p.settlementRule === 't1' &&
+                              (p.settlementRule === 't1' || p.settlementRule === 't2') &&
                               p.frozenShares > 0 && (
                                 <span className="paper-settlement-tag paper-settlement-tag--t1">
                                   冻 {p.frozenShares}
@@ -432,13 +475,13 @@ export default function PaperTradingPage() {
             <strong>股票仓（雷达）：</strong>消息雷达/跟踪池 · 红钻 + Checklist · 与回测策略仓隔离
           </li>
           <li>
-            <strong>回测策略仓：</strong>数据更新后全市场 T+2 扫描（纯策略，无额外新闻关）
+            <strong>回测策略仓：</strong>数据更新后手动执行脚本买入 · 交易时段自动监控出场
           </li>
           <li>
-            <strong>回测+新闻仓：</strong>每个交易日 08:00 · 同策略 + 新闻利空过滤
+            <strong>回测+新闻仓：</strong>08:00 自动买入 · 交易时段自动监控出场（规则同上）
           </li>
           <li>
-            <strong>交收规则：</strong>ETF 仓 T+0 · 各股票仓 T+1
+            <strong>交收规则：</strong>ETF 仓 T+0 · 雷达/新闻仓 T+1 · 回测策略仓 T+2
           </li>
         </ul>
         {view && (
