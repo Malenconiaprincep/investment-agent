@@ -21,7 +21,7 @@ function toTencentCode(symbol: string): string {
 export async function fetchDailyKlines(
   symbol: string,
   days: number,
-  options?: { forceRefresh?: boolean },
+  options?: { forceRefresh?: boolean; timeoutMs?: number; retries?: number },
 ) {
   const cacheKey = `tx:kline:${symbol}:${days}`;
   const cached = options?.forceRefresh
@@ -37,7 +37,7 @@ export async function fetchDailyKlinesByTencentCode(
   txCode: string,
   days: number,
   displayCode = txCode,
-  options?: { forceRefresh?: boolean },
+  options?: { forceRefresh?: boolean; timeoutMs?: number; retries?: number },
 ) {
   const cacheKey = `tx:kline:${txCode}:${days}`;
   const cached = options?.forceRefresh
@@ -49,6 +49,8 @@ export async function fetchDailyKlinesByTencentCode(
 
   const response = await safeFetch(url, undefined, {
     allowedHosts: ['web.ifzq.gtimg.cn'],
+    retries: options?.retries,
+    timeoutMs: options?.timeoutMs,
   });
   const json = (await response.json()) as KlineResponse;
 

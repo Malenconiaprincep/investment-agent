@@ -263,11 +263,19 @@ function resolveRetryCount(input?: number): number {
   );
 }
 
+function resolveTimeoutMs(input?: number): number {
+  return Math.max(
+    1_000,
+    Math.floor(input ?? envNumber('DAILY_CSV_UPDATE_TIMEOUT_MS') ?? 5_000),
+  );
+}
+
 async function fetchDailyKlinesWithRetry(input: {
   symbol: string;
   days: number;
   retryCount: number;
   retryDelayMs: number;
+  timeoutMs: number;
 }): Promise<Awaited<ReturnType<typeof fetchDailyKlines>> & { attempts: number }> {
   let lastError: unknown;
   const maxAttempts = input.retryCount + 1;
@@ -276,6 +284,8 @@ async function fetchDailyKlinesWithRetry(input: {
     try {
       const result = await fetchDailyKlines(input.symbol, input.days, {
         forceRefresh: true,
+        retries: 0,
+        timeoutMs: input.timeoutMs,
       });
       return { ...result, attempts: attempt };
     } catch (error) {
@@ -377,6 +387,7 @@ export async function updateDailyCsvPool(options: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  timeoutMs?: number;
 }): Promise<DailyCsvUpdateResult> {
   const days = Math.max(5, Math.floor(options.days ?? 30));
   const maxSymbols =
@@ -387,6 +398,7 @@ export async function updateDailyCsvPool(options: {
   const symbols = await resolveSymbols({ ...options, maxSymbols });
   const delayMs = resolveDelayMs(options.assetType, options.delayMs);
   const retryCount = resolveRetryCount(options.retryCount);
+  const timeoutMs = resolveTimeoutMs(options.timeoutMs);
   const items: DailyCsvUpdateItem[] = [];
 
   for (const [index, symbol] of symbols.entries()) {
@@ -412,6 +424,7 @@ export async function updateDailyCsvPool(options: {
         days,
         retryCount,
         retryDelayMs: delayMs,
+        timeoutMs,
       });
       item.attempts = attempts;
       const merged = mergeRows({
@@ -454,6 +467,7 @@ export async function updateEtfDailyCsvPool(options?: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  timeoutMs?: number;
 }): Promise<EtfDailyUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'etf',
@@ -469,6 +483,7 @@ export async function updateStockDailyCsvPool(options?: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  timeoutMs?: number;
 }): Promise<DailyCsvUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'stock',

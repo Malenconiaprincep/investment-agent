@@ -49,7 +49,7 @@ export async function dispatchEtf(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N]|update-stock-daily-csv [--days=N] [--symbols=600519,300750] [--include-local|--no-include-local] [--include-active|--no-include-active] [--max=N] [--delay-ms=N] [--retries=N]',
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]|update-stock-daily-csv [--days=N] [--symbols=600519,300750] [--include-local|--no-include-local] [--include-active|--no-include-active] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]',
   );
 }
 
@@ -76,6 +76,7 @@ function parseDailyCsvArgs(args: string[]): {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  timeoutMs?: number;
 } {
   const options: {
     days?: number;
@@ -85,6 +86,7 @@ function parseDailyCsvArgs(args: string[]): {
     maxSymbols?: number;
     delayMs?: number;
     retryCount?: number;
+    timeoutMs?: number;
   } = {};
 
   const days = parseNumberArg(args, 'days');
@@ -105,6 +107,8 @@ function parseDailyCsvArgs(args: string[]): {
   if (delayMs != null) options.delayMs = delayMs;
   const retryCount = parseNumberArg(args, 'retries');
   if (retryCount != null) options.retryCount = retryCount;
+  const timeoutMs = parseNumberArg(args, 'timeout-ms');
+  if (timeoutMs != null) options.timeoutMs = timeoutMs;
 
   return options;
 }
