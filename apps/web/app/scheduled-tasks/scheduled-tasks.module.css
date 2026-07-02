@@ -1,0 +1,105 @@
+.pageActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.toolbar {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 12rem;
+}
+
+.filter span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.filter select {
+  width: 100%;
+}
+
+.stats {
+  font-size: 0.8125rem;
+}
+
+.groupDate {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.logList {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.logRow {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.logMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.logMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.logDetail {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.statusCompleted {
+  color: #8fd19e;
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.statusSkipped,
+.statusDisabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.statusFailed {
+  color: #ffb4ab;
+  background: rgba(244, 67, 54, 0.12);
+}
+
+.logRowFailed {
+  border-color: color-mix(in srgb, #f44336 35%, var(--border));
+}

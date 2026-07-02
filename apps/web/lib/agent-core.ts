@@ -328,3 +328,49 @@ export async function patchAgentCoreScheduledTask(
   const data = (await response.json()) as { tasks?: ScheduledTaskStatus[] };
   return data.tasks ?? [];
 }
+
+export type ScheduledTaskLogEntry = {
+  taskId: string;
+  label: string;
+  tradeDate: string;
+  ranAt: string;
+  ranAtBeijing: string;
+  status: 'completed' | 'skipped' | 'failed' | 'disabled';
+  reason?: string;
+  summary?: string;
+  elapsedMs?: number;
+  source: 'background-worker';
+};
+
+export async function fetchAgentCoreScheduledTaskLogs(input?: {
+  limit?: number;
+  tradeDate?: string;
+  taskId?: string;
+}): Promise<{
+  logs: ScheduledTaskLogEntry[];
+  tradeDates: string[];
+}> {
+  const { baseUrl } = getAgentCoreConfig();
+  const params = new URLSearchParams();
+  if (input?.limit) params.set('limit', String(input.limit));
+  if (input?.tradeDate) params.set('tradeDate', input.tradeDate);
+  if (input?.taskId) params.set('taskId', input.taskId);
+  const query = params.toString();
+  const response = await fetch(
+    `${baseUrl}/scheduler/logs${query ? `?${query}` : ''}`,
+    {
+      headers: buildHeaders('application/json'),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  const data = (await response.json()) as {
+    logs?: ScheduledTaskLogEntry[];
+    tradeDates?: string[];
+  };
+  return {
+    logs: data.logs ?? [],
+    tradeDates: data.tradeDates ?? [],
+  };
+}

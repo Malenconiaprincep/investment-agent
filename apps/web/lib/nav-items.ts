@@ -1,9 +1,12 @@
 import type { AppPermission, AppRole } from '@/lib/permissions';
+import type { AppPlan } from '@/lib/plan-permissions';
+import { canUseScheduledTasks } from '@/lib/scheduled-tasks-shared';
 
 export type NavItem = {
   href: string;
   label: string;
   permission?: AppPermission;
+  scheduledTasksOnly?: boolean;
   isActive: (pathname: string) => boolean;
 };
 
@@ -56,16 +59,31 @@ export const NAV_ITEMS: NavItem[] = [
     isActive: (pathname) =>
       pathname === '/work-summary' || pathname.startsWith('/work-summary/'),
   },
+  {
+    href: '/scheduled-tasks',
+    label: '任务日志',
+    scheduledTasksOnly: true,
+    isActive: (pathname) =>
+      pathname === '/scheduled-tasks' || pathname.startsWith('/scheduled-tasks/'),
+  },
 ];
 
 export function filterNavItems(
   permissions: AppPermission[],
   role?: AppRole,
+  plan?: AppPlan,
 ): NavItem[] {
-  if (role === 'admin') return NAV_ITEMS;
-  return NAV_ITEMS.filter(
-    (item) => !item.permission || permissions.includes(item.permission),
-  );
+  const items =
+    role === 'admin'
+      ? NAV_ITEMS
+      : NAV_ITEMS.filter(
+          (item) => !item.permission || permissions.includes(item.permission),
+        );
+
+  return items.filter((item) => {
+    if (!item.scheduledTasksOnly) return true;
+    return canUseScheduledTasks({ role, plan });
+  });
 }
 
 export function primaryNavPath(): string {
@@ -75,8 +93,9 @@ export function primaryNavPath(): string {
 export function defaultNavPath(
   permissions: AppPermission[],
   role?: AppRole,
+  plan?: AppPlan,
 ): string {
-  return filterNavItems(permissions, role)[0]?.href ?? primaryNavPath();
+  return filterNavItems(permissions, role, plan)[0]?.href ?? primaryNavPath();
 }
 
 export function resolveDefaultTabPath(pathname: string): string {
@@ -96,6 +115,9 @@ export function navLabelForPath(pathname: string): string {
   const normalized = pathname.split('?')[0]?.split('#')[0] ?? pathname;
   if (normalized === '/settings' || normalized.startsWith('/settings/')) {
     return '设置';
+  }
+  if (normalized === '/scheduled-tasks' || normalized.startsWith('/scheduled-tasks/')) {
+    return '任务日志';
   }
   if (normalized === '/admin/users' || normalized.startsWith('/admin/')) {
     return '用户管理';

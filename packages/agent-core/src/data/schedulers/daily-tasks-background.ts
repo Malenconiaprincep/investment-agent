@@ -32,6 +32,7 @@ import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
 } from './task-settings.js';
+import { appendScheduledTaskLog } from './scheduled-task-log.js';
 import {
   ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT,
   formatTradeDate,
@@ -86,6 +87,29 @@ function logInfo(message: string) {
 
 function logError(message: string) {
   console.error(`[daily-tasks ${formatBeijingLogTime()}] ${message}`);
+}
+
+function recordTaskLog(input: {
+  taskId: ScheduledTaskId;
+  label: string;
+  tradeDate: string;
+  status: 'completed' | 'skipped' | 'failed' | 'disabled';
+  reason?: string;
+  summary?: string;
+  elapsedMs?: number;
+  startedAt?: string;
+}) {
+  appendScheduledTaskLog({
+    taskId: input.taskId,
+    label: input.label,
+    tradeDate: input.tradeDate,
+    status: input.status,
+    reason: input.reason,
+    summary: input.summary,
+    elapsedMs: input.elapsedMs,
+    source: 'background-worker',
+    ranAt: input.startedAt,
+  });
 }
 
 function appendScreenTaskLog(
@@ -389,7 +413,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
   },
 ];
 
-async function runStockBacktestPaperExitMonitor(now = getBeijingNow()) {
+async function tickStockBacktestPaperExitMonitor(now = getBeijingNow()) {
   if (!isScheduledTaskEnabled('stock-backtest-exit-monitor')) return;
   if (!isTradingSession(now)) return;
 
@@ -403,23 +427,53 @@ async function runStockBacktestPaperExitMonitor(now = getBeijingNow()) {
   }
 
   lastStockBacktestNewsExitRunMs = nowMs;
+  const tradeDate = formatTradeDate(now);
   const label = '回测策略分仓出场监控';
+  const startedAt = new Date().toISOString();
 
   try {
     const result = await runStockBacktestPaperExitMonitor();
     if (result.skipped) {
       logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      recordTaskLog({
+        taskId: 'stock-backtest-exit-monitor',
+        label,
+        tradeDate,
+        status: 'skipped',
+        reason: result.reason ?? '非执行窗口',
+        startedAt,
+      });
       return;
     }
+    const summary =
+      result.sells.length > 0
+        ? `卖出 ${result.sells.length} 笔（${result.sells.map((s) => `${s.bucket}:${s.symbol}`).join('、')}）`
+        : '无出场信号';
     if (result.sells.length > 0) {
-      logInfo(
-        `${label} 完成：卖出 ${result.sells.length} 笔（${result.sells.map((s) => `${s.bucket}:${s.symbol}`).join('、')}）`,
-      );
+      logInfo(`${label} 完成：${summary}`);
     }
+    recordTaskLog({
+      taskId: 'stock-backtest-exit-monitor',
+      label,
+      tradeDate,
+      status: 'completed',
+      summary,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
   } catch (error) {
     lastStockBacktestNewsExitRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
     logError(`${label} 失败：${message}`);
+    recordTaskLog({
+      taskId: 'stock-backtest-exit-monitor',
+      label,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
     await notifyDailyTaskFailure(label, message);
   }
 }
@@ -437,6 +491,7 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
   lastStockIntradayRunMs = nowMs;
   const tradeDate = formatTradeDate(now);
   const label = '股票实时信号扫描';
+  const startedAt = new Date().toISOString();
 
   try {
     const result = await runStockIntradayScan({
@@ -445,6 +500,14 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
     });
     if (result.skipped) {
       logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      recordTaskLog({
+        taskId: 'stock-intraday-monitor',
+        label,
+        tradeDate,
+        status: 'skipped',
+        reason: result.reason ?? '非执行窗口',
+        startedAt,
+      });
       return;
     }
 
@@ -453,13 +516,30 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
       candidates: result.candidates,
     });
 
-    logInfo(
-      `${label} 完成：扫描 ${result.scanned} 只，达标 ${result.candidates.length} 只${pushed > 0 ? `，飞书推送 ${pushed} 只` : ''}`,
-    );
+    const summary = `扫描 ${result.scanned} 只，达标 ${result.candidates.length} 只${pushed > 0 ? `，飞书推送 ${pushed} 只` : ''}`;
+    logInfo(`${label} 完成：${summary}`);
+    recordTaskLog({
+      taskId: 'stock-intraday-monitor',
+      label,
+      tradeDate,
+      status: 'completed',
+      summary,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
   } catch (error) {
     lastStockIntradayRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
     logError(`${label} 失败：${message}`);
+    recordTaskLog({
+      taskId: 'stock-intraday-monitor',
+      label,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
     await notifyDailyTaskFailure(label, message);
   }
 }
@@ -473,11 +553,21 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
   if (lastEtfPaperRunMs > 0 && nowMs - lastEtfPaperRunMs < intervalMs) return;
 
   lastEtfPaperRunMs = nowMs;
+  const tradeDate = formatTradeDate(now);
+  const label = 'ETF 模拟盘监听';
+  const startedAt = new Date().toISOString();
   try {
     const result = await runEtfPaperAutoPipeline();
-    const label = 'ETF 模拟盘监听';
     if (result.skipped) {
       logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      recordTaskLog({
+        taskId: 'etf-paper-monitor',
+        label,
+        tradeDate,
+        status: 'skipped',
+        reason: result.reason ?? '非执行窗口',
+        startedAt,
+      });
       return;
     }
     await notifyEtfPaperMonitor(result);
@@ -487,11 +577,30 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
     if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
     if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
     if (result.reason) parts.push(result.reason);
-    logInfo(`${label} 完成${parts.length > 0 ? `：${parts.join(' · ')}` : ''}`);
+    const summary = parts.length > 0 ? parts.join(' · ') : '无信号';
+    logInfo(`${label} 完成${parts.length > 0 ? `：${summary}` : ''}`);
+    recordTaskLog({
+      taskId: 'etf-paper-monitor',
+      label,
+      tradeDate,
+      status: 'completed',
+      summary,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
   } catch (error) {
     lastEtfPaperRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
-    logError(`ETF 模拟盘监听 失败：${message}`);
+    logError(`${label} 失败：${message}`);
+    recordTaskLog({
+      taskId: 'etf-paper-monitor',
+      label,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
     await notifyDailyTaskFailure('ETF 模拟盘监听', message);
   }
 }
@@ -500,26 +609,67 @@ async function runDueTasks(now = getBeijingNow()) {
   const tradeDate = formatTradeDate(now);
 
   await runEtfPaperMonitor(now);
-  await runStockBacktestPaperExitMonitor(now);
+  await tickStockBacktestPaperExitMonitor(now);
   await runStockIntradayMonitor(now);
 
   for (const task of DAILY_TASKS) {
     const key = taskKey(task.id, tradeDate);
     if (completedKeys.has(key) || !isDue(task, now)) continue;
-    if (!isScheduledTaskEnabled(task.id)) continue;
+
+    if (!isScheduledTaskEnabled(task.id)) {
+      completedKeys.add(key);
+      logInfo(`${task.label} 已关闭，跳过`);
+      recordTaskLog({
+        taskId: task.id,
+        label: task.label,
+        tradeDate,
+        status: 'disabled',
+        reason: '任务已在设置中关闭',
+      });
+      continue;
+    }
 
     completedKeys.add(key);
+    const startedAt = new Date().toISOString();
     try {
       const result = await task.run();
       if (result.skipped) {
         logInfo(`${task.label} 跳过：${result.reason ?? '非执行窗口'}`);
+        recordTaskLog({
+          taskId: task.id,
+          label: task.label,
+          tradeDate,
+          status: 'skipped',
+          reason: result.reason ?? '非执行窗口',
+          summary: result.summary,
+          elapsedMs: Date.now() - Date.parse(startedAt),
+          startedAt,
+        });
       } else {
         logInfo(`${task.label} 完成${result.summary ? `：${result.summary}` : ''}`);
+        recordTaskLog({
+          taskId: task.id,
+          label: task.label,
+          tradeDate,
+          status: 'completed',
+          summary: result.summary,
+          elapsedMs: Date.now() - Date.parse(startedAt),
+          startedAt,
+        });
       }
     } catch (error) {
       completedKeys.delete(key);
       const message = error instanceof Error ? error.message : String(error);
       logError(`${task.label} 失败：${message}`);
+      recordTaskLog({
+        taskId: task.id,
+        label: task.label,
+        tradeDate,
+        status: 'failed',
+        reason: message,
+        elapsedMs: Date.now() - Date.parse(startedAt),
+        startedAt,
+      });
       await notifyDailyTaskFailure(task.label, message);
     }
   }

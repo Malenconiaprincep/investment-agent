@@ -9,6 +9,7 @@ import { purgeExpiredWatchlistItems } from '../watchlist/retention.js';
 import { runMonitorPollManaged } from './engine.js';
 import { purgeExpiredMonitorData } from './store.js';
 import { isScheduledTaskEnabled } from '../schedulers/task-settings.js';
+import { appendScheduledTaskLog } from '../schedulers/scheduled-task-log.js';
 
 let started = false;
 let timer: NodeJS.Timeout | null = null;
@@ -65,9 +66,8 @@ async function tick(intervalMs: number) {
     const result = await runMonitorPollManaged({
       minIntervalMs: Math.max(60_000, intervalMs - 10_000),
     });
-    console.log(
-      `[monitor-bg] ${result.summary}；推荐 ${result.recommendations.length} 条，自动交易 ${result.paperActions.length} 条`,
-    );
+    const summary = `${result.summary}；推荐 ${result.recommendations.length} 条，自动交易 ${result.paperActions.length} 条`;
+    console.log(`[monitor-bg] ${summary}`);
     const pushed = await notifyMonitorRealtime({
       tradeDate,
       result,
@@ -75,9 +75,25 @@ async function tick(intervalMs: number) {
     if (pushed > 0) {
       console.log(`[monitor-bg] 飞书实时推送 ${pushed} 条`);
     }
+    appendScheduledTaskLog({
+      taskId: 'monitor-background',
+      label: '消息雷达轮询',
+      tradeDate,
+      status: 'completed',
+      summary: pushed > 0 ? `${summary}；飞书推送 ${pushed} 条` : summary,
+      source: 'background-worker',
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[monitor-bg] 扫描失败：${message}`);
+    appendScheduledTaskLog({
+      taskId: 'monitor-background',
+      label: '消息雷达轮询',
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      source: 'background-worker',
+    });
   }
 }
 

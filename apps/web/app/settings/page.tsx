@@ -549,6 +549,13 @@ export default function SettingsPage() {
                 className="pane-card monitor-settings-section"
               >
                 <h2 className="section-title">定时任务</h2>
+                <p className="muted settings-env-hint">
+                  查看执行记录请前往{' '}
+                  <Link href="/scheduled-tasks" className="monitor-scan-status-link">
+                    任务日志
+                  </Link>
+                  页面（保留最近 3 天）。
+                </p>
                 <div className="settings-env-grid">
                   {scheduledTasks.map((task) => (
                     <label key={task.id} className="settings-env-field">

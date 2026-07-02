@@ -1,26 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getMarketUserProfile, requireSessionUsername } from '@/lib/session';
 import {
   fetchAgentCoreScheduledTasks,
   patchAgentCoreScheduledTask,
 } from '@/lib/agent-core';
+import { requireProScheduledTasks } from '@/lib/scheduled-tasks-access';
 
 export const runtime = 'nodejs';
-
-async function requireProScheduledTasks() {
-  await requireSessionUsername();
-  const profile = await getMarketUserProfile();
-  if (!profile) {
-    throw new Error('请先登录');
-  }
-  if (
-    profile.role !== 'admin' &&
-    profile.plan !== 'pro' &&
-    profile.plan !== 'enterprise'
-  ) {
-    throw new Error('任务定时设置仅 Pro 及以上账号可用');
-  }
-}
 
 export async function GET() {
   try {

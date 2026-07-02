@@ -20,6 +20,7 @@ import {
   updateScheduledTask,
   type ScheduledTaskId,
 } from '../data/schedulers/task-settings.js';
+import { readRecentScheduledTaskLogs, listScheduledTaskLogTradeDates } from '../data/schedulers/scheduled-task-log.js';
 
 const app = new Hono();
 
@@ -119,6 +120,23 @@ app.patch('/scheduler/tasks/:id', async (c) => {
     const message = error instanceof Error ? error.message : String(error);
     return jsonError(message, 400);
   }
+});
+
+app.get('/scheduler/logs', (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+
+  const limit = Number(c.req.query('limit') ?? 50);
+  const tradeDate = c.req.query('tradeDate')?.trim() || undefined;
+  const taskId = c.req.query('taskId')?.trim() as ScheduledTaskId | undefined;
+
+  return c.json({
+    logs: readRecentScheduledTaskLogs({
+      limit: Number.isFinite(limit) ? limit : 200,
+      tradeDate,
+      taskId,
+    }),
+    tradeDates: listScheduledTaskLogTradeDates(),
+  });
 });
 
 app.post('/cli/:module', async (c) => {

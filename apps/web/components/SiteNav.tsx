@@ -49,9 +49,9 @@ export function SiteNav() {
     return <AuthHeader />;
   }
 
-  const visibleNav = filterNavItems(user?.permissions ?? [], user?.role);
+  const visibleNav = filterNavItems(user?.permissions ?? [], user?.role, user?.plan);
   const homeHref = user
-    ? defaultNavPath(user.permissions, user.role)
+    ? defaultNavPath(user.permissions, user.role, user.plan)
     : '/research';
 
   function handleTabLinkClick(

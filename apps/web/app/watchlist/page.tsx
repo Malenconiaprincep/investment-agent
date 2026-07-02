@@ -509,7 +509,7 @@ export default function WatchlistPage() {
                   : '可在设置里的定时任务中开启自动轮询'}
               </span>
               {monitorStatus?.background && !monitorStatus.background.enabled && (
-                <Link href="/settings#scheduled-tasks" className="monitor-scan-status-link">
+                <Link href="/scheduled-tasks" className="monitor-scan-status-link">
                   去开启
                 </Link>
               )}
