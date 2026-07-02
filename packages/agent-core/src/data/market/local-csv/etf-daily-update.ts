@@ -36,6 +36,7 @@ export type DailyCsvUpdateItem = {
   symbol: string;
   name: string;
   path: string;
+  attempts: number;
   beforeRows: number;
   afterRows: number;
   addedRows: number;
@@ -255,6 +256,40 @@ function resolveDelayMs(assetType: DailyCsvAssetType, input?: number): number {
   );
 }
 
+function resolveRetryCount(input?: number): number {
+  return Math.max(
+    0,
+    Math.floor(input ?? envNumber('DAILY_CSV_UPDATE_RETRIES') ?? 2),
+  );
+}
+
+async function fetchDailyKlinesWithRetry(input: {
+  symbol: string;
+  days: number;
+  retryCount: number;
+  retryDelayMs: number;
+}): Promise<Awaited<ReturnType<typeof fetchDailyKlines>> & { attempts: number }> {
+  let lastError: unknown;
+  const maxAttempts = input.retryCount + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await fetchDailyKlines(input.symbol, input.days, {
+        forceRefresh: true,
+      });
+      return { ...result, attempts: attempt };
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      if (input.retryDelayMs > 0) {
+        await delay(input.retryDelayMs);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 async function collectActiveStockSymbols(): Promise<string[]> {
   const symbols = new Set<string>();
 
@@ -341,6 +376,7 @@ export async function updateDailyCsvPool(options: {
   includeActive?: boolean;
   maxSymbols?: number;
   delayMs?: number;
+  retryCount?: number;
 }): Promise<DailyCsvUpdateResult> {
   const days = Math.max(5, Math.floor(options.days ?? 30));
   const maxSymbols =
@@ -350,6 +386,7 @@ export async function updateDailyCsvPool(options: {
       : envNumber('STOCK_DAILY_CSV_MAX_SYMBOLS'));
   const symbols = await resolveSymbols({ ...options, maxSymbols });
   const delayMs = resolveDelayMs(options.assetType, options.delayMs);
+  const retryCount = resolveRetryCount(options.retryCount);
   const items: DailyCsvUpdateItem[] = [];
 
   for (const [index, symbol] of symbols.entries()) {
@@ -359,6 +396,7 @@ export async function updateDailyCsvPool(options: {
       symbol,
       name: getName(options.assetType, symbol),
       path: filePath,
+      attempts: 0,
       beforeRows: 0,
       afterRows: 0,
       addedRows: 0,
@@ -369,9 +407,13 @@ export async function updateDailyCsvPool(options: {
     try {
       const existing = readExistingRows(filePath, symbol);
       item.beforeRows = existing.length;
-      const { quotes } = await fetchDailyKlines(symbol, days, {
-        forceRefresh: true,
+      const { quotes, attempts } = await fetchDailyKlinesWithRetry({
+        symbol,
+        days,
+        retryCount,
+        retryDelayMs: delayMs,
       });
+      item.attempts = attempts;
       const merged = mergeRows({
         symbol,
         existing,
@@ -384,6 +426,7 @@ export async function updateDailyCsvPool(options: {
       item.updatedRows = merged.updatedRows;
       item.latestDate = merged.rows.at(-1)?.tradeDate ?? null;
     } catch (error) {
+      item.attempts = retryCount + 1;
       item.error = error instanceof Error ? error.message : String(error);
     }
 
@@ -410,6 +453,7 @@ export async function updateEtfDailyCsvPool(options?: {
   includeLocal?: boolean;
   maxSymbols?: number;
   delayMs?: number;
+  retryCount?: number;
 }): Promise<EtfDailyUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'etf',
@@ -424,6 +468,7 @@ export async function updateStockDailyCsvPool(options?: {
   includeActive?: boolean;
   maxSymbols?: number;
   delayMs?: number;
+  retryCount?: number;
 }): Promise<DailyCsvUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'stock',

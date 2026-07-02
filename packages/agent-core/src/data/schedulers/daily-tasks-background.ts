@@ -120,6 +120,7 @@ function appendDailyCsvUpdateLog(input: {
     .map((item) => ({
       symbol: item.symbol,
       name: item.name,
+      attempts: item.attempts,
       beforeRows: item.beforeRows,
       afterRows: item.afterRows,
       addedRows: item.addedRows,
@@ -131,6 +132,7 @@ function appendDailyCsvUpdateLog(input: {
     .map((item) => ({
       symbol: item.symbol,
       name: item.name,
+      attempts: item.attempts,
       error: item.error,
     }));
 
@@ -327,7 +329,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
     minute: 32,
     run: async () => {
       const startedAt = new Date().toISOString();
-      const result = await updateStockDailyCsvPool();
+      const result = await updateStockDailyCsvPool({ includeLocal: true });
       const finishedAt = new Date().toISOString();
       appendDailyCsvUpdateLog({
         label: '股票日线更新',
