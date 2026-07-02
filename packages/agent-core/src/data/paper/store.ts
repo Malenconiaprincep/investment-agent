@@ -3,7 +3,9 @@ import { getPrimaryLibsqlOptions } from '../libsql-config.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import {
   BUCKET_INITIAL_CASH,
+  BUCKET_LABELS,
   BUCKET_MAX_POSITIONS,
+  PAPER_BUCKETS,
   STOCK_POSITION_BUDGET_PCT,
   type PaperBucket,
   resolvePaperBucket,
@@ -269,7 +271,7 @@ async function migrateBucketSchema(db: Client): Promise<void> {
     updated_at TEXT NOT NULL
   )`);
 
-  for (const bucket of ['stock', 'etf'] as PaperBucket[]) {
+  for (const bucket of PAPER_BUCKETS) {
     const existing = await db.execute({
       sql: `SELECT id FROM paper_accounts WHERE bucket = ? LIMIT 1`,
       args: [bucket],
@@ -653,11 +655,11 @@ export async function executePaperTrade(input: {
 
   if (input.side === 'buy') {
     if (account.cash < amount) {
-      throw new Error(`${bucket === 'etf' ? 'ETF 仓' : '股票仓'}资金不足`);
+      throw new Error(`${BUCKET_LABELS[bucket]}资金不足`);
     }
     const positions = await listPaperPositions(bucket);
     if (!pos && positions.length >= maxPositions) {
-      throw new Error(`最多持有 ${maxPositions} 只${bucket === 'etf' ? ' ETF' : ''}`);
+      throw new Error(`最多持有 ${maxPositions} 只（${BUCKET_LABELS[bucket]}）`);
     }
 
     const newCash = Number((account.cash - amount).toFixed(2));
@@ -895,15 +897,20 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
 }
 
 export async function getPaperDualSummary() {
-  const [etf, stock] = await Promise.all([
+  const [etf, stock, stockBacktest, stockBacktestNews] = await Promise.all([
     getPaperAccountSummary('etf'),
     getPaperAccountSummary('stock'),
+    getPaperAccountSummary('stock-backtest'),
+    getPaperAccountSummary('stock-backtest-news'),
   ]);
-  const totalInitial = etf.account.initialCash + stock.account.initialCash;
-  const totalValue = etf.totalValue + stock.totalValue;
+  const buckets = [etf, stock, stockBacktest, stockBacktestNews];
+  const totalInitial = buckets.reduce((sum, item) => sum + item.account.initialCash, 0);
+  const totalValue = buckets.reduce((sum, item) => sum + item.totalValue, 0);
   return {
     etf,
     stock,
+    stockBacktest,
+    stockBacktestNews,
     combined: {
       totalValue: Number(totalValue.toFixed(2)),
       initialCash: totalInitial,
@@ -1100,12 +1107,15 @@ export async function listEquitySnapshots(
   });
 }
 
-export async function startAutoRun(tradeDate: string): Promise<string> {
+export async function startAutoRun(
+  tradeDate: string,
+  bucket: PaperBucket = 'stock',
+): Promise<string> {
   const db = await getDb();
   const id = crypto.randomUUID();
   await db.execute({
-    sql: `INSERT INTO paper_auto_runs (id, trade_date, started_at, status) VALUES (?, ?, ?, ?)`,
-    args: [id, tradeDate, new Date().toISOString(), 'running'],
+    sql: `INSERT INTO paper_auto_runs (id, bucket, trade_date, started_at, status) VALUES (?, ?, ?, ?, ?)`,
+    args: [id, bucket, tradeDate, new Date().toISOString(), 'running'],
   });
   return id;
 }

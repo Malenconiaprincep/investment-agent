@@ -13,13 +13,49 @@ export function formatTradeDate(date: Date = getBeijingNow()): string {
 
 /** 跳过周末，得到下一个自然工作日（不含法定节假日） */
 export function getNextTradeDateLabel(from: Date = getBeijingNow()): string {
-  const next = new Date(from);
-  next.setDate(next.getDate() + 1);
-  while (next.getDay() === 0 || next.getDay() === 6) {
-    next.setDate(next.getDate() + 1);
-  }
-  return formatTradeDate(next);
+  return shiftTradeDateLabel(formatTradeDate(from), 1);
 }
+
+/** 按 A 股工作日（不含法定节假日）偏移交易日 */
+export function shiftTradeDateLabel(tradeDate: string, deltaTradingDays: number): string {
+  const [y, m, d] = tradeDate.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  let remaining = Math.abs(Math.trunc(deltaTradingDays));
+  const dir = deltaTradingDays >= 0 ? 1 : -1;
+  while (remaining > 0) {
+    date.setDate(date.getDate() + dir);
+    const day = date.getDay();
+    if (day >= 1 && day <= 5) remaining -= 1;
+  }
+  return formatTradeDate(date);
+}
+
+export function getPreviousTradeDateLabel(from: Date = getBeijingNow()): string {
+  return shiftTradeDateLabel(formatTradeDate(from), -1);
+}
+
+/** 收盘后（15:05+）期望本地 CSV 已包含当日；盘前则期望上一交易日 */
+export function getExpectedMarketDataDate(now: Date = getBeijingNow()): string {
+  const tradeDate = formatTradeDate(now);
+  if (!isWeekday(now)) return getPreviousTradeDateLabel(now);
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes >= 15 * 60 + 5) return tradeDate;
+  return getPreviousTradeDateLabel(now);
+}
+
+export function isPreMarketMorningWindow(date: Date = getBeijingNow()): boolean {
+  if (!isWeekday(date)) return false;
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 7 * 60 && minutes < 9 * 60 + 30;
+}
+
+export const STOCK_BACKTEST_NEWS_SCHEDULE_LABEL = '每个交易日 08:00 回测策略+新闻模拟买入';
+
+export const STOCK_BACKTEST_CLOSE_SCHEDULE_LABEL =
+  '每个交易日数据更新后运行回测策略模拟买入（通常 16:00 检查）';
+
+export const MARKET_DATA_REMINDER_SCHEDULE_LABEL =
+  '每个交易日提醒更新大盘/个股日线 CSV（数据未就绪时不跑回测策略仓）';
 
 export function isWeekday(date: Date = getBeijingNow()): boolean {
   const day = date.getDay();

@@ -7,11 +7,14 @@ import { OpenWatchlistPanelButton } from '@/components/OpenWatchlistPanelButton'
 import { PageHeader } from '@/components/ui/PageHeader';
 import {
   normalizeDualPaperPayload,
+  PAPER_BUCKET_TABS,
+  resolvePaperView,
   type DualPaperPayload,
+  type PaperBucketKey,
 } from '@/lib/paper-dual';
 import { formatPaperTradeDisplayTime } from '@/lib/paper-trade-time';
 
-type PaperBucket = 'combined' | 'etf' | 'stock';
+type PaperBucket = 'combined' | PaperBucketKey;
 
 type Trade = {
   id: string;
@@ -46,6 +49,7 @@ function formatTradeSource(trade: Trade) {
   if (trade.note?.startsWith('monitor-watchlist:')) return '消息雷达';
   if (trade.note?.startsWith('monitor:')) return '消息雷达';
   if (trade.note?.startsWith('monitor-exit:')) return '规则卖出';
+  if (trade.note?.includes('回测策略')) return '回测策略';
   if (trade.note?.includes('动量派')) return '动量选股';
   return trade.source === 'auto' ? '自动' : '手动';
 }
@@ -60,29 +64,21 @@ function formatTradeNote(note: string | null) {
   return note;
 }
 
-function mergeEquityCurves(
-  etf: EquityPoint[],
-  stock: EquityPoint[],
-): EquityPoint[] {
+function mergeEquityCurves(curves: EquityPoint[][]): EquityPoint[] {
   const byDate = new Map<string, { totalValue: number; initialCash: number }>();
-  for (const point of etf) {
-    const initialCash = point.totalValue / (1 + point.returnPct / 100);
-    byDate.set(point.tradeDate, {
-      totalValue: point.totalValue,
-      initialCash,
-    });
-  }
-  for (const point of stock) {
-    const stockInitial = point.totalValue / (1 + point.returnPct / 100);
-    const prev = byDate.get(point.tradeDate);
-    if (prev) {
-      prev.totalValue += point.totalValue;
-      prev.initialCash += stockInitial;
-    } else {
-      byDate.set(point.tradeDate, {
-        totalValue: point.totalValue,
-        initialCash: stockInitial,
-      });
+  for (const points of curves) {
+    for (const point of points) {
+      const initialCash = point.totalValue / (1 + point.returnPct / 100);
+      const prev = byDate.get(point.tradeDate);
+      if (prev) {
+        prev.totalValue += point.totalValue;
+        prev.initialCash += initialCash;
+      } else {
+        byDate.set(point.tradeDate, {
+          totalValue: point.totalValue,
+          initialCash,
+        });
+      }
     }
   }
   return [...byDate.entries()]
@@ -98,9 +94,14 @@ function mergeEquityCurves(
 }
 
 function bucketLabel(bucket: PaperBucket) {
-  if (bucket === 'etf') return 'ETF 仓';
-  if (bucket === 'stock') return '股票仓';
-  return '总览';
+  return PAPER_BUCKET_TABS.find((item) => item.key === bucket)?.label ?? bucket;
+}
+
+function bucketShortLabel(bucket: PaperBucketKey) {
+  if (bucket === 'etf') return 'ETF';
+  if (bucket === 'stock') return '雷达股';
+  if (bucket === 'stock-backtest') return '回测';
+  return '回测+新闻';
 }
 
 export default function PaperTradingPage() {
@@ -127,10 +128,11 @@ export default function PaperTradingPage() {
             : `/api/paper/trades?limit=50${bucketQuery}`,
         ),
         activeBucket === 'combined'
-          ? Promise.all([
-              fetch('/api/paper/equity?limit=90&bucket=etf'),
-              fetch('/api/paper/equity?limit=90&bucket=stock'),
-            ])
+          ? Promise.all(
+              (['etf', 'stock', 'stock-backtest', 'stock-backtest-news'] as const).map(
+                (bucket) => fetch(`/api/paper/equity?limit=90&bucket=${bucket}`),
+              ),
+            )
           : fetch(`/api/paper/equity?limit=90${bucketQuery}`),
       ]);
 
@@ -139,24 +141,19 @@ export default function PaperTradingPage() {
       setDual(normalizeDualPaperPayload(accountJson));
 
       if (activeBucket === 'combined' && Array.isArray(equityRes)) {
-        const [etfEquityRes, stockEquityRes] = equityRes;
-        const etfJson = await etfEquityRes.json();
-        const stockJson = await stockEquityRes.json();
-        const etfPoints = (etfJson.snapshots ?? []).map(
-          (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
-            tradeDate: s.tradeDate,
-            totalValue: s.totalValue,
-            returnPct: s.returnPct,
+        const curves = await Promise.all(
+          equityRes.map(async (res) => {
+            const json = await res.json();
+            return (json.snapshots ?? []).map(
+              (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
+                tradeDate: s.tradeDate,
+                totalValue: s.totalValue,
+                returnPct: s.returnPct,
+              }),
+            );
           }),
         );
-        const stockPoints = (stockJson.snapshots ?? []).map(
-          (s: { tradeDate: string; totalValue: number; returnPct: number }) => ({
-            tradeDate: s.tradeDate,
-            totalValue: s.totalValue,
-            returnPct: s.returnPct,
-          }),
-        );
-        setEquity(mergeEquityCurves(etfPoints, stockPoints));
+        setEquity(mergeEquityCurves(curves));
       } else if (!Array.isArray(equityRes)) {
         const equityJson = await equityRes.json();
         setEquity(
@@ -191,22 +188,21 @@ export default function PaperTradingPage() {
 
   const view = useMemo(() => {
     if (!dual?.etf || !dual?.stock || !dual?.combined) return null;
-    if (activeBucket === 'etf') return dual.etf;
-    if (activeBucket === 'stock') return dual.stock;
+    const base = resolvePaperView(dual, activeBucket);
+    if (activeBucket !== 'combined') return base;
     return {
-      bucket: 'combined' as const,
-      account: {
-        cash: dual.etf.account.cash + dual.stock.account.cash,
-        initialCash: dual.combined.initialCash,
-      },
-      totalValue: dual.combined.totalValue,
-      marketValue: dual.etf.marketValue + dual.stock.marketValue,
-      returnPct: dual.combined.returnPct,
-      tradeDate: dual.combined.tradeDate,
-      isTradingSession: dual.combined.isTradingSession,
+      ...base,
       positions: [
         ...(dual.etf.positions ?? []).map((p) => ({ ...p, positionBucket: 'etf' as const })),
         ...(dual.stock.positions ?? []).map((p) => ({ ...p, positionBucket: 'stock' as const })),
+        ...(dual.stockBacktest.positions ?? []).map((p) => ({
+          ...p,
+          positionBucket: 'stock-backtest' as const,
+        })),
+        ...(dual.stockBacktestNews.positions ?? []).map((p) => ({
+          ...p,
+          positionBucket: 'stock-backtest-news' as const,
+        })),
       ],
     };
   }, [dual, activeBucket]);
@@ -219,20 +215,20 @@ export default function PaperTradingPage() {
     <main className="page page--list">
       <PageHeader
         title="模拟操盘"
-        description="10 万虚拟资金双分仓：ETF 动量轮动 + 股票动量派。成交按真实盘口（买=卖一、卖=买一）。"
+        description="四仓独立 10 万：ETF 动量、雷达股票、回测策略、回测策略+新闻。成交按真实盘口（买=卖一、卖=买一）。"
       />
 
       <div className="paper-bucket-tabs" role="tablist" aria-label="模拟分仓">
-        {(['combined', 'etf', 'stock'] as const).map((bucket) => (
+        {PAPER_BUCKET_TABS.map(({ key, label }) => (
           <button
-            key={bucket}
+            key={key}
             type="button"
             role="tab"
-            aria-selected={activeBucket === bucket}
-            className={`paper-bucket-tab${activeBucket === bucket ? ' paper-bucket-tab--active' : ''}`}
-            onClick={() => setActiveBucket(bucket)}
+            aria-selected={activeBucket === key}
+            className={`paper-bucket-tab${activeBucket === key ? ' paper-bucket-tab--active' : ''}`}
+            onClick={() => setActiveBucket(key)}
           >
-            {bucketLabel(bucket)}
+            {label}
           </button>
         ))}
       </div>
@@ -287,6 +283,14 @@ export default function PaperTradingPage() {
                     <span className="muted">股票仓</span>
                     <strong>{fmtMoney(dual.stock.totalValue)}</strong>
                   </div>
+                  <div>
+                    <span className="muted">回测策略</span>
+                    <strong>{fmtMoney(dual.stockBacktest.totalValue)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted">回测+新闻</span>
+                    <strong>{fmtMoney(dual.stockBacktestNews.totalValue)}</strong>
+                  </div>
                 </>
               )}
             </div>
@@ -305,8 +309,14 @@ export default function PaperTradingPage() {
               <div className="empty-state">
                 {activeBucket === 'etf'
                   ? 'ETF 仓暂无持仓。交易时段内每 30 分钟自动监听，条件满足即按动量轮动调仓。'
-                  : '暂无持仓。自动任务会在红钻信号出现时买入，也可在'}
-                {activeBucket !== 'etf' && (
+                  : activeBucket === 'stock'
+                    ? '暂无持仓。消息雷达/跟踪池达标后会买入此仓，也可在'
+                    : activeBucket === 'stock-backtest'
+                      ? '暂无持仓。数据更新后将按回测 T+2 策略全市场扫描并买入。'
+                      : activeBucket === 'stock-backtest-news'
+                        ? '暂无持仓。每个交易日 08:00 按回测 T+2 + 新闻过滤扫描并买入。'
+                        : '暂无持仓。'}
+                {activeBucket === 'stock' && (
                   <>
                     <OpenWatchlistPanelButton className="saved-link">
                       跟踪池
@@ -344,7 +354,9 @@ export default function PaperTradingPage() {
                         <tr key={`${'positionBucket' in p ? p.positionBucket : 'x'}-${p.symbol}`}>
                           {activeBucket === 'combined' && (
                             <td>
-                              {'positionBucket' in p && p.positionBucket === 'etf' ? 'ETF' : '股票'}
+                              {'positionBucket' in p
+                                ? bucketShortLabel(p.positionBucket)
+                                : '—'}
                             </td>
                           )}
                           <td>{p.symbol}</td>
@@ -408,19 +420,25 @@ export default function PaperTradingPage() {
         <h3 className="pane-card-title">分仓规则</h3>
         <ul className="paper-rules-list">
           <li>
-            <strong>总资金：</strong>20 万（ETF 仓 10 万 + 股票仓 10 万）
+            <strong>总资金：</strong>40 万（ETF / 雷达股票 / 回测策略 / 回测+新闻 各 10 万）
           </li>
           <li>
             <strong>成交定价：</strong>买入按卖一、卖出按买一；盘口缺失时退回最新价
           </li>
           <li>
-            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · 按 Top4 目标仓位建仓 · 10 日调仓 · -12% 止损
+            <strong>ETF 仓：</strong>交易时段每 30 分钟监听 · Top4 动量轮动 · 10 日调仓 · -12% 止损
           </li>
           <li>
-            <strong>股票仓：</strong>15:05 后 · 红钻 + Checklist ≥4 · 单票约 15% · 硬止损 -8% / MA20 / 移动止盈
+            <strong>股票仓（雷达）：</strong>消息雷达/跟踪池 · 红钻 + Checklist · 与回测策略仓隔离
           </li>
           <li>
-            <strong>交收规则：</strong>ETF 仓 <strong>T+0</strong>（当日买入当日可卖）· 股票仓 <strong>T+1</strong>（当日买入次日可卖）
+            <strong>回测策略仓：</strong>数据更新后全市场 T+2 扫描（纯策略，无额外新闻关）
+          </li>
+          <li>
+            <strong>回测+新闻仓：</strong>每个交易日 08:00 · 同策略 + 新闻利空过滤
+          </li>
+          <li>
+            <strong>交收规则：</strong>ETF 仓 T+0 · 各股票仓 T+1
           </li>
         </ul>
         {view && (

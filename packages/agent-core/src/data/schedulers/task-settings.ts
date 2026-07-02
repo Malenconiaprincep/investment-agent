@@ -14,6 +14,9 @@ export type ScheduledTaskId =
   | 'etf-daily-csv-update'
   | 'stock-daily-csv-update'
   | 'stock-paper'
+  | 'market-data-reminder'
+  | 'stock-backtest-paper'
+  | 'stock-backtest-news-paper'
   | 'etf-paper-monitor'
   | 'stock-intraday-monitor'
   | 'work-summary-snapshot';
@@ -118,8 +121,29 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
   {
     id: 'stock-paper',
     label: '股票模拟盘选股',
-    description: '收盘后运行股票模拟盘自动选股流程',
+    description: '收盘后运行股票模拟盘自动选股流程（消息雷达/跟踪池 → 股票仓）',
     scheduleText: '交易日 15:05',
+    defaultEnabled: true,
+  },
+  {
+    id: 'market-data-reminder',
+    label: '行情数据更新提醒',
+    description: '交易日早上检查本地 CSV 是否已更新；未更新则飞书提醒',
+    scheduleText: '交易日 08:00',
+    defaultEnabled: true,
+  },
+  {
+    id: 'stock-backtest-news-paper',
+    label: '回测策略+新闻模拟盘',
+    description: '8 点按回测 T+2 策略扫描全市场，叠加新闻过滤后写入独立分仓',
+    scheduleText: '交易日 08:00',
+    defaultEnabled: true,
+  },
+  {
+    id: 'stock-backtest-paper',
+    label: '回测策略模拟盘',
+    description: '数据更新后按回测 T+2 策略扫描全市场并写入独立分仓（纯策略，无额外新闻关）',
+    scheduleText: '交易日 16:00 / CSV 更新后',
     defaultEnabled: true,
   },
   {

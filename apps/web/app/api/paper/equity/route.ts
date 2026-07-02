@@ -9,7 +9,12 @@ export async function GET(request: Request) {
   const bucket = searchParams.get('bucket');
   try {
     const args = ['equity', limit];
-    if (bucket === 'etf' || bucket === 'stock') {
+    if (
+      bucket === 'etf' ||
+      bucket === 'stock' ||
+      bucket === 'stock-backtest' ||
+      bucket === 'stock-backtest-news'
+    ) {
       args.push('--bucket', bucket);
     }
     const stdout = await runAgentCorePaperJson(args);

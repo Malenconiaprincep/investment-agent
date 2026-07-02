@@ -7,12 +7,19 @@ import {
   notifyEtfMorningRadar,
   notifyEtfPaperMonitor,
   notifyEtfTailPick,
+  notifyMarketDataReminder,
+  notifyStockBacktestPaper,
   notifyStockPaper,
 } from '../notify/feishu-daily.js';
 import { notifyStockIntradayCandidates } from '../notify/feishu-realtime.js';
 import { isFeishuNotifyEnabled } from '../notify/feishu.js';
 import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
+import {
+  runStockBacktestNewsPaperPipeline,
+  runStockBacktestPaperPipeline,
+} from '../paper/stock-backtest-pipeline.js';
+import { checkMarketDataFreshness } from '../paper/market-data-freshness.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
@@ -300,6 +307,45 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
+    id: 'market-data-reminder',
+    label: '行情数据更新提醒',
+    hour: 8,
+    minute: 0,
+    run: async () => {
+      const freshness = checkMarketDataFreshness();
+      await notifyMarketDataReminder(freshness);
+      return {
+        skipped: !freshness.isTradingDay || freshness.isFresh,
+        reason: freshness.reminder ?? undefined,
+        summary: freshness.isFresh
+          ? `数据已就绪（最新 ${freshness.latestDataDate ?? '-'}）`
+          : '已发送数据更新提醒',
+      };
+    },
+  },
+  {
+    id: 'stock-backtest-news-paper',
+    label: '回测策略+新闻模拟盘',
+    hour: 8,
+    minute: 0,
+    run: async () => {
+      const result = await runStockBacktestNewsPaperPipeline();
+      await notifyStockBacktestPaper(result);
+      return result;
+    },
+  },
+  {
+    id: 'stock-backtest-paper',
+    label: '回测策略模拟盘',
+    hour: 16,
+    minute: 0,
+    run: async () => {
+      const result = await runStockBacktestPaperPipeline();
+      await notifyStockBacktestPaper(result);
+      return result;
+    },
+  },
+  {
     id: 'etf-daily-csv-update',
     label: 'ETF 日线更新',
     hour: 15,
@@ -338,6 +384,10 @@ const DAILY_TASKS: DailyTaskDef[] = [
         elapsedMs: Date.parse(finishedAt) - Date.parse(startedAt),
         result,
       });
+      if (result.errors < result.items.length) {
+        const backtestResult = await runStockBacktestPaperPipeline({ force: true });
+        await notifyStockBacktestPaper(backtestResult);
+      }
       return {
         skipped: result.items.length === 0 || result.errors === result.items.length,
         reason:
@@ -475,6 +525,8 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
+    `08:00 行情数据提醒 / 回测策略+新闻模拟盘`,
+    `16:00 回测策略模拟盘（数据就绪后）`,
     `15:30 ETF 日线更新`,
     `15:32 股票日线更新`,
   ].join(' · ');

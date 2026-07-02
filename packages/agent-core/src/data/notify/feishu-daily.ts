@@ -2,6 +2,9 @@ import type { EtfTailPickResult } from '../etf/tail-picker.js';
 import type { EtfMorningRadarResult } from '../etf/morning-radar.js';
 import type { EtfPaperPipelineResult } from '../paper/etf-paper-pipeline.js';
 import type { PaperAutoPipelineResult } from '../paper/auto-pipeline.js';
+import type { StockBacktestPaperResult } from '../paper/stock-backtest-pipeline.js';
+import type { MarketDataFreshness } from '../paper/market-data-freshness.js';
+import { BUCKET_LABELS } from '../paper/bucket.js';
 import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
 import { notifyFeishuPostSafe } from './feishu.js';
 
@@ -233,5 +236,76 @@ export async function notifyDailyTaskFailure(
     `时间：${beijingTimeLabel()}`,
     `交易日：${formatTradeDate(getBeijingNow())}`,
     `错误：${error}`,
+  ]);
+}
+
+export function buildStockBacktestPaperLines(result: StockBacktestPaperResult): string[] {
+  const label = BUCKET_LABELS[result.bucket];
+  const lines = [
+    `时间：${beijingTimeLabel()}`,
+    `分仓：${label}`,
+    `交易日：${result.tradeDate}`,
+  ];
+
+  if (result.dataFreshness) {
+    lines.push(
+      `数据：期望 ${result.dataFreshness.expectedDataDate} · 最新 ${result.dataFreshness.latestDataDate ?? '未知'} · ${result.dataFreshness.isFresh ? '已就绪' : '未更新'}`,
+    );
+  }
+
+  if (result.skipped) {
+    lines.push(`状态：跳过 — ${result.reason ?? '未执行'}`);
+    return lines;
+  }
+
+  if (result.error) {
+    lines.push(`状态：失败 — ${result.error}`);
+    return lines;
+  }
+
+  if (result.scan) {
+    lines.push(
+      `扫描：全市场 ${result.scan.scanned} 只 · 红钻信号 ${result.scan.rawSignals} · 候选 ${result.scan.candidates}`,
+    );
+  }
+
+  const buys = result.trades?.buys ?? [];
+  const sells = result.trades?.sells ?? [];
+  lines.push(
+    `成交：买入 ${buys.length} · 卖出 ${sells.length}`,
+    ...formatTradeLines(buys, '买入'),
+    ...formatTradeLines(sells, '卖出'),
+  );
+
+  if (result.equity) {
+    lines.push(
+      '',
+      `${label}市值：${result.equity.totalValue.toFixed(0)} 元 · 累计 ${result.equity.returnPct >= 0 ? '+' : ''}${result.equity.returnPct.toFixed(2)}%`,
+    );
+  }
+
+  return lines;
+}
+
+export async function notifyStockBacktestPaper(result: StockBacktestPaperResult): Promise<void> {
+  if (result.skipped && result.reason === '非交易日') return;
+  const title =
+    result.bucket === 'stock-backtest-news'
+      ? '📰 回测策略+新闻模拟盘'
+      : '📊 回测策略模拟盘';
+  await notifyFeishuPostSafe(title, buildStockBacktestPaperLines(result));
+}
+
+export async function notifyMarketDataReminder(
+  freshness: MarketDataFreshness,
+): Promise<void> {
+  if (!freshness.isTradingDay || freshness.isFresh || !freshness.reminder) return;
+  await notifyFeishuPostSafe('⏰ 请更新行情数据', [
+    `时间：${beijingTimeLabel()}`,
+    `交易日：${freshness.tradeDate}`,
+    freshness.reminder,
+    '',
+    '更新完成后系统将自动运行「股票仓（回测策略）」；若仅手动更新 CSV，可执行：',
+    'pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts stock-backtest-auto-run --force',
   ]);
 }

@@ -6,6 +6,7 @@ import {
   setPaperBucketCapital,
 } from '../data/paper/store.js';
 import type { PaperBucket } from '../data/paper/bucket.js';
+import { PAPER_BUCKETS, parsePaperBucket } from '../data/paper/bucket.js';
 
 function parsePaperArgs(args: string[]): { bucket?: PaperBucket; rest: string[] } {
   let bucket: PaperBucket | undefined;
@@ -13,7 +14,7 @@ function parsePaperArgs(args: string[]): { bucket?: PaperBucket; rest: string[] 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--bucket' && args[i + 1]) {
       const value = args[++i];
-      if (value === 'etf' || value === 'stock') bucket = value;
+      bucket = parsePaperBucket(value) ?? undefined;
       continue;
     }
     if (args[i] === '--force') continue;
@@ -42,7 +43,7 @@ export async function dispatchPaper(args: string[]): Promise<string> {
 
   if (command === 'set-capital') {
     const targetEquity = Number(rest[0] ?? 100_000);
-    const buckets: PaperBucket[] = bucket ? [bucket] : ['etf', 'stock'];
+    const buckets: PaperBucket[] = bucket ? [bucket] : [...PAPER_BUCKETS];
     return JSON.stringify({
       results: await Promise.all(
         buckets.map((item) =>
@@ -73,6 +74,35 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     const result = await runStockPaperAutoPipeline({ force });
     await notifyStockPaper(result);
     return JSON.stringify(result);
+  }
+
+  if (command === 'stock-backtest-auto-run') {
+    const { runStockBacktestPaperPipeline } = await import(
+      '../data/paper/stock-backtest-pipeline.js'
+    );
+    const { notifyStockBacktestPaper } = await import('../data/notify/feishu-daily.js');
+    const force = args.includes('--force');
+    const result = await runStockBacktestPaperPipeline({ force });
+    await notifyStockBacktestPaper(result);
+    return JSON.stringify(result);
+  }
+
+  if (command === 'stock-backtest-news-auto-run') {
+    const { runStockBacktestNewsPaperPipeline } = await import(
+      '../data/paper/stock-backtest-pipeline.js'
+    );
+    const { notifyStockBacktestPaper } = await import('../data/notify/feishu-daily.js');
+    const force = args.includes('--force');
+    const result = await runStockBacktestNewsPaperPipeline({ force });
+    await notifyStockBacktestPaper(result);
+    return JSON.stringify(result);
+  }
+
+  if (command === 'market-data-status') {
+    const { checkMarketDataFreshness } = await import(
+      '../data/paper/market-data-freshness.js'
+    );
+    return JSON.stringify(checkMarketDataFreshness());
   }
 
   if (command === 'etf-auto-run') {
@@ -123,6 +153,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock]|status|auto-run|stock-auto-run|etf-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-news-auto-run|market-data-status|etf-auto-run|fix-etf-probe|trade ...',
   );
 }

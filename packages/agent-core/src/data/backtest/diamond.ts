@@ -39,6 +39,7 @@ import {
   addCalendarDays,
   todayDateKey,
 } from './date-range.js';
+import { shiftTradeDateLabel } from '../paper/trading-calendar.js';
 import {
   buildPortfolioLedger,
   filterTradesByPortfolioRules,
@@ -1355,4 +1356,341 @@ export async function runDiamondBacktest(
             'A 股本地前复权历史早期可能出现负价格，回测已剔除非正收盘价 K 线。',
           ],
   };
+}
+
+export const STOCK_STRATEGY_PAPER_CONFIG = {
+  stockMarketFilter: 'require_bullish' as const,
+  minBenchmarkMomentum20Pct: 0,
+  defensiveBenchmarkMomentum20Pct: DEFAULT_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT,
+  excludeRiskyStockNames: true,
+  minEntryPrice: 3,
+  minAvgTurnoverAmount: 30_000_000,
+  minDelayedEntryDriftPct: DEFAULT_MIN_DELAYED_ENTRY_DRIFT_PCT,
+  maxDelayedEntryDriftPct: DEFAULT_MAX_DELAYED_ENTRY_DRIFT_PCT,
+  delayedEntryDriftFilterMaxBenchmarkMomentum20Pct:
+    DEFAULT_DELAYED_ENTRY_DRIFT_FILTER_MAX_BENCHMARK_MOMENTUM20_PCT,
+  maxEntryMa20ExtensionPct: MAX_ENTRY_MA20_EXTENSION_PCT,
+  newsLookbackDays: 3,
+  entryDelayTradingDays: STOCK_ENTRY_DELAY_TRADING_DAYS,
+  weakMomentumNoEntryMinBenchmarkMomentum20Pct:
+    DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MIN_BENCHMARK_MOMENTUM20_PCT,
+  weakMomentumNoEntryMaxBenchmarkMomentum20Pct:
+    DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MAX_BENCHMARK_MOMENTUM20_PCT,
+};
+
+export type StockStrategyScanMode = 'entry_close' | 'preopen';
+
+export type StockStrategyEntryCandidate = {
+  symbol: string;
+  name: string;
+  entryPrice: number;
+  entryTradeDate: string;
+  sourceSignalDate: string;
+  memo: string;
+};
+
+function matchesEntryTradeDate(actual: string, expected: string): boolean {
+  return normalizeTradeDateKey(actual) === normalizeTradeDateKey(expected);
+}
+
+function evaluateStockStrategyEntryGates(input: {
+  code: string;
+  name: string;
+  bars: OhlcvBar[];
+  diamond: DiamondSignalResult;
+  delayedEntry: NonNullable<ReturnType<typeof resolveDelayedEntrySignal>>;
+  entryDiamond: DiamondSignalResult;
+  marketRegimes: Map<string, MarketRegimeSnapshot>;
+  newsTimeline: BacktestNewsLoadResult;
+  newsFilter: EtfNewsFilterMode;
+  newsLookbackDays: number;
+  newsTradeDate?: string;
+  config: typeof STOCK_STRATEGY_PAPER_CONFIG;
+}): { passed: boolean; reason: string; entryPrice: number; memo: string } {
+  const momentumBuy = evaluateMomentumBuy(
+    { symbol: input.code, name: input.name },
+    input.diamond,
+    input.bars,
+    input.delayedEntry.entryTradeDate,
+    input.config.maxEntryMa20ExtensionPct,
+  );
+  if (!momentumBuy.passed) {
+    return {
+      passed: false,
+      reason: momentumBuy.ma20ExtensionPct != null ? 'MA20 乖离或动量未达标' : '动量 checklist 未达标',
+      entryPrice: input.delayedEntry.entryClose,
+      memo: '',
+    };
+  }
+
+  const delayedEntryDriftPct = calcDelayedEntryDriftPct({
+    sourceClose: input.delayedEntry.sourceClose,
+    entryClose: input.delayedEntry.entryClose,
+  });
+
+  const qualityGate = evaluateStockQualityGate({
+    name: input.name,
+    diamond: input.entryDiamond,
+    bars: input.bars,
+    excludeRiskyStockNames: input.config.excludeRiskyStockNames,
+    minEntryPrice: input.config.minEntryPrice,
+    minAvgTurnoverAmount: input.config.minAvgTurnoverAmount,
+  });
+  if (qualityGate.blocked) {
+    return { passed: false, reason: qualityGate.reason, entryPrice: input.delayedEntry.entryClose, memo: '' };
+  }
+
+  const marketGate = evaluateStockMarketGate({
+    tradeDate: input.entryDiamond.tradeDate,
+    mode: input.config.stockMarketFilter,
+    minBenchmarkMomentum20Pct: input.config.minBenchmarkMomentum20Pct,
+    defensiveBenchmarkMomentum20Pct: input.config.defensiveBenchmarkMomentum20Pct,
+    regimes: input.marketRegimes,
+  });
+  if (marketGate.blocked) {
+    return { passed: false, reason: marketGate.reason, entryPrice: input.delayedEntry.entryClose, memo: '' };
+  }
+
+  const applyDelayedEntryDriftFilter =
+    input.config.minDelayedEntryDriftPct != null || input.config.maxDelayedEntryDriftPct != null
+      ? input.config.delayedEntryDriftFilterMaxBenchmarkMomentum20Pct == null ||
+        marketGate.regime?.momentum20Pct == null ||
+        marketGate.regime.momentum20Pct <=
+          input.config.delayedEntryDriftFilterMaxBenchmarkMomentum20Pct
+      : false;
+  if (
+    applyDelayedEntryDriftFilter &&
+    delayedEntryDriftPct != null &&
+    input.config.minDelayedEntryDriftPct != null &&
+    delayedEntryDriftPct < input.config.minDelayedEntryDriftPct
+  ) {
+    return {
+      passed: false,
+      reason: `T+2 涨跌幅 ${delayedEntryDriftPct}% 低于 ${input.config.minDelayedEntryDriftPct}%`,
+      entryPrice: input.delayedEntry.entryClose,
+      memo: '',
+    };
+  }
+  if (
+    applyDelayedEntryDriftFilter &&
+    delayedEntryDriftPct != null &&
+    input.config.maxDelayedEntryDriftPct != null &&
+    delayedEntryDriftPct > input.config.maxDelayedEntryDriftPct
+  ) {
+    return {
+      passed: false,
+      reason: `T+2 涨跌幅 ${delayedEntryDriftPct}% 高于 ${input.config.maxDelayedEntryDriftPct}%`,
+      entryPrice: input.delayedEntry.entryClose,
+      memo: '',
+    };
+  }
+
+  if (
+    isWeakMomentumNoEntryBand({
+      momentum20Pct: marketGate.regime?.momentum20Pct,
+      minPct: input.config.weakMomentumNoEntryMinBenchmarkMomentum20Pct,
+      maxPct: input.config.weakMomentumNoEntryMaxBenchmarkMomentum20Pct,
+    })
+  ) {
+    return {
+      passed: false,
+      reason: '弱动量区间暂停新开仓',
+      entryPrice: input.delayedEntry.entryClose,
+      memo: '',
+    };
+  }
+
+  const newsProfile = getStockNewsProfile(input.code, input.name);
+  const entryNews = filterNewsForTradeDate({
+    news: input.newsTimeline.news,
+    tradeDate: input.newsTradeDate ?? input.entryDiamond.tradeDate,
+    lookbackDays: input.newsLookbackDays,
+  });
+  const newsSentiment = evaluateEtfNewsSentiment({
+    profile: newsProfile,
+    news: entryNews,
+  });
+  const newsGate = shouldBlockEtfEntryByNews(newsSentiment, input.newsFilter);
+  if (newsGate.blocked) {
+    return {
+      passed: false,
+      reason: newsGate.reason,
+      entryPrice: input.delayedEntry.entryClose,
+      memo: '',
+    };
+  }
+
+  const checklist = momentumBuy.analysis?.checklistScore ?? 0;
+  const memo = [
+    `红钻 ${input.delayedEntry.sourceTradeDate} → T+2 入场 ${input.entryDiamond.tradeDate}`,
+    `checklist ${checklist}`,
+    momentumBuy.analysis?.entryMemo ?? '',
+    qualityGate.reason,
+    marketGate.reason,
+    delayedEntryDriftPct != null ? `T+2 漂移 ${delayedEntryDriftPct}%` : null,
+    input.newsFilter !== 'off' ? `新闻：${newsSentiment.label}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return {
+    passed: true,
+    reason: '回测策略入场通过',
+    entryPrice: input.delayedEntry.entryClose,
+    memo,
+  };
+}
+
+export async function scanStockStrategyEntriesForDate(input: {
+  entryTradeDate: string;
+  mode: StockStrategyScanMode;
+  newsFilter?: EtfNewsFilterMode;
+  onProgress?: (done: number, total: number) => void;
+}): Promise<{
+  candidates: StockStrategyEntryCandidate[];
+  scanned: number;
+  rawSignals: number;
+}> {
+  const config = STOCK_STRATEGY_PAPER_CONFIG;
+  const newsFilter = input.newsFilter ?? 'off';
+  const newsLookbackDays = config.newsLookbackDays;
+  const entryKey = normalizeTradeDateKey(input.entryTradeDate);
+  const dateRange = {
+    startDate: addCalendarDays(entryKey, -120),
+    endDate: entryKey,
+  };
+  const marketRegimes = await buildStockMarketRegimeMap(dateRange, LOCAL_DAILY_LOAD_ALL_DAYS).catch(
+    () => new Map<string, MarketRegimeSnapshot>(),
+  );
+  const newsTimeline: BacktestNewsLoadResult =
+    newsFilter === 'off'
+      ? { news: [], sources: [] as string[] }
+      : await loadBacktestNewsTimeline({
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+        }).catch(() => ({
+          news: [],
+          sources: [] as string[],
+          warning: '新闻加载失败，已跳过',
+        }));
+
+  const universeSymbols = listLocalStockDailyCsvSymbols()
+    .filter(isRetailTradableStock)
+    .map((symbol) => ({ symbol, name: getLocalStockName(symbol) ?? symbol }));
+
+  const candidates: StockStrategyEntryCandidate[] = [];
+  let rawSignals = 0;
+  let done = 0;
+
+  for (const symbol of universeSymbols) {
+    done += 1;
+    input.onProgress?.(done, universeSymbols.length);
+    const code = symbol.symbol.trim();
+    const name = symbol.name ?? code;
+    if (!/^\d{6}$/.test(code)) continue;
+
+    try {
+      const data = await getDailyQuote(code, LOCAL_DAILY_LOAD_ALL_DAYS);
+      const bars = data.quotes.filter((bar) => bar.close != null && bar.close > 0);
+      if (bars.length === 0) continue;
+
+      const lookback = Math.min(bars.length, 120);
+      const signals = scanDiamondSignalHistory(code, name, bars, lookback)
+        .filter((signal) => signal.strength === 'red')
+        .reverse();
+
+      for (const diamond of signals) {
+        rawSignals += 1;
+
+        if (input.mode === 'preopen') {
+          const signalDate = shiftTradeDateLabel(
+            input.entryTradeDate,
+            -config.entryDelayTradingDays,
+          );
+          if (!matchesEntryTradeDate(diamond.tradeDate, signalDate)) continue;
+
+          const latestBar = bars[0];
+          if (!latestBar?.close) continue;
+          const preopenEntry = {
+            entryTradeDate: latestBar.tradeDate,
+            entryClose: latestBar.close,
+            sourceTradeDate: diamond.tradeDate,
+            sourceClose: diamond.close,
+            delayTradingDays: config.entryDelayTradingDays,
+          };
+          const entryDiamond = {
+            ...diamond,
+            tradeDate: preopenEntry.entryTradeDate,
+            close: preopenEntry.entryClose,
+          };
+          const gate = evaluateStockStrategyEntryGates({
+            code,
+            name,
+            bars,
+            diamond,
+            delayedEntry: preopenEntry,
+            entryDiamond,
+            marketRegimes,
+            newsTimeline,
+            newsFilter,
+            newsLookbackDays,
+            newsTradeDate: input.entryTradeDate,
+            config,
+          });
+          if (!gate.passed) continue;
+          candidates.push({
+            symbol: code,
+            name,
+            entryPrice: preopenEntry.entryClose,
+            entryTradeDate: input.entryTradeDate,
+            sourceSignalDate: diamond.tradeDate,
+            memo: `${gate.memo} · 盘前确认`,
+          });
+          break;
+        }
+
+        const delayedEntry = resolveDelayedEntrySignal({
+          sourceDiamond: diamond,
+          bars,
+          delayTradingDays: config.entryDelayTradingDays,
+        });
+        if (!delayedEntry || !matchesEntryTradeDate(delayedEntry.entryTradeDate, input.entryTradeDate)) {
+          continue;
+        }
+        const entryDiamond = {
+          ...diamond,
+          tradeDate: delayedEntry.entryTradeDate,
+          close: delayedEntry.entryClose,
+        };
+        const gate = evaluateStockStrategyEntryGates({
+          code,
+          name,
+          bars,
+          diamond,
+          delayedEntry,
+          entryDiamond,
+          marketRegimes,
+          newsTimeline,
+          newsFilter,
+          newsLookbackDays,
+          config,
+        });
+        if (!gate.passed) continue;
+        candidates.push({
+          symbol: code,
+          name,
+          entryPrice: gate.entryPrice,
+          entryTradeDate: delayedEntry.entryTradeDate,
+          sourceSignalDate: delayedEntry.sourceTradeDate,
+          memo: gate.memo,
+        });
+        break;
+      }
+    } catch {
+      // skip symbol
+    }
+  }
+
+  candidates.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return { candidates, scanned: universeSymbols.length, rawSignals };
 }

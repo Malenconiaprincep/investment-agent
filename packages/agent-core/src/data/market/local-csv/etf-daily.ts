@@ -241,6 +241,16 @@ export function parseLocalDailyCsv(
   return rows;
 }
 
+export function readLocalDailyCsvLatestTradeDate(
+  assetType: LocalCsvAssetType,
+  symbol: string,
+): string | null {
+  const filePath = dailyCsvPath(assetType, symbol.trim());
+  if (!existsSync(filePath)) return null;
+  const rows = parseLocalDailyCsv(readFileSync(filePath, 'utf-8'), 1);
+  return rows[0]?.tradeDate ?? null;
+}
+
 export function parseEtfDailyCsv(content: string): LocalDailyKlineBar[] {
   return parseLocalDailyCsv(content);
 }
