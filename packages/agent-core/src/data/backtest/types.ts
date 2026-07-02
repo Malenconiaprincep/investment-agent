@@ -164,6 +164,19 @@ export type BacktestRunConfig = {
   stockUniverseCount?: number;
   initialCapital?: number;
   takeProfitPct?: number;
+  stockEntryDelayTradingDays?: number;
+  delayedEntrySkippedCount?: number;
+  minDelayedEntryDriftPct?: number;
+  maxDelayedEntryDriftPct?: number;
+  delayedEntryDriftFilterMaxBenchmarkMomentum20Pct?: number;
+  delayedEntryDriftBlockedCount?: number;
+  maxEntryMa20ExtensionPct?: number;
+  entryMa20ExtensionBlockedCount?: number;
+  maxEntryChecklistScore?: number;
+  entryChecklistBlockedCount?: number;
+  momentumMaxHoldDays?: number;
+  weakMomentumMaxHoldDays?: number;
+  weakMomentumMaxHoldBenchmarkMomentum20Pct?: number;
 };
 
 export type BacktestRunResult = {

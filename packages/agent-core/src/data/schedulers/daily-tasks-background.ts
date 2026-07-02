@@ -17,6 +17,7 @@ import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 import {
+  type DailyCsvUpdateResult,
   updateEtfDailyCsvPool,
   updateStockDailyCsvPool,
 } from '../market/local-csv/etf-daily-update.js';
@@ -47,6 +48,7 @@ const completedKeys = new Set<string>();
 let lastEtfPaperRunMs = 0;
 let lastStockIntradayRunMs = 0;
 const SCREEN_LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
+const DAILY_CSV_LOG_PATH = path.join(DATA_DIR, 'daily-csv-update.log');
 
 function isEnabled(): boolean {
   return process.env.DAILY_TASKS_BACKGROUND_ENABLED !== '0';
@@ -100,6 +102,54 @@ function appendScreenTaskLog(
       stage,
       ...outcome,
       ok: outcome.passed ?? false,
+    })}\n`,
+    'utf-8',
+  );
+}
+
+function appendDailyCsvUpdateLog(input: {
+  label: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  result: DailyCsvUpdateResult;
+}) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  const changedItems = input.result.items
+    .filter((item) => item.addedRows > 0 || item.updatedRows > 0)
+    .map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      beforeRows: item.beforeRows,
+      afterRows: item.afterRows,
+      addedRows: item.addedRows,
+      updatedRows: item.updatedRows,
+      latestDate: item.latestDate,
+    }));
+  const errorItems = input.result.items
+    .filter((item) => item.error)
+    .map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      error: item.error,
+    }));
+
+  appendFileSync(
+    DAILY_CSV_LOG_PATH,
+    `${JSON.stringify({
+      label: input.label,
+      assetType: input.result.assetType,
+      ranAt: input.startedAt,
+      ranAtBeijing: formatBeijingLogTime(new Date(input.startedAt)),
+      finishedAt: input.finishedAt,
+      elapsedMs: input.elapsedMs,
+      tradeDate: input.result.tradeDate,
+      symbolCount: input.result.items.length,
+      addedRows: input.result.addedRows,
+      updatedRows: input.result.updatedRows,
+      errors: input.result.errors,
+      changedItems,
+      errorItems,
     })}\n`,
     'utf-8',
   );
@@ -253,11 +303,20 @@ const DAILY_TASKS: DailyTaskDef[] = [
     hour: 15,
     minute: 30,
     run: async () => {
+      const startedAt = new Date().toISOString();
       const result = await updateEtfDailyCsvPool();
+      const finishedAt = new Date().toISOString();
+      appendDailyCsvUpdateLog({
+        label: 'ETF 日线更新',
+        startedAt,
+        finishedAt,
+        elapsedMs: Date.parse(finishedAt) - Date.parse(startedAt),
+        result,
+      });
       return {
         skipped: result.errors === result.items.length,
         reason: result.errors === result.items.length ? 'ETF 日线全部更新失败' : undefined,
-        summary: `新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只`,
+        summary: `标的 ${result.items.length} 只 · 新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只`,
       };
     },
   },
@@ -267,7 +326,16 @@ const DAILY_TASKS: DailyTaskDef[] = [
     hour: 15,
     minute: 32,
     run: async () => {
+      const startedAt = new Date().toISOString();
       const result = await updateStockDailyCsvPool();
+      const finishedAt = new Date().toISOString();
+      appendDailyCsvUpdateLog({
+        label: '股票日线更新',
+        startedAt,
+        finishedAt,
+        elapsedMs: Date.parse(finishedAt) - Date.parse(startedAt),
+        result,
+      });
       return {
         skipped: result.items.length === 0 || result.errors === result.items.length,
         reason:

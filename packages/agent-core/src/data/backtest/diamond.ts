@@ -19,6 +19,7 @@ import {
   analyzeMomentum,
   evaluateMomentumExit,
   MOMENTUM_TRAILING_STOP_PCT,
+  type MomentumAnalysis,
 } from '../paper/momentum.js';
 import {
   buildTradeGroups,
@@ -87,6 +88,14 @@ export type RunDiamondBacktestInput = {
   excludeRiskyStockNames?: boolean;
   minEntryPrice?: number;
   minAvgTurnoverAmount?: number;
+  minDelayedEntryDriftPct?: number;
+  maxDelayedEntryDriftPct?: number;
+  delayedEntryDriftFilterMaxBenchmarkMomentum20Pct?: number;
+  maxEntryMa20ExtensionPct?: number;
+  maxEntryChecklistScore?: number;
+  momentumMaxHoldDays?: number;
+  weakMomentumMaxHoldDays?: number;
+  weakMomentumMaxHoldBenchmarkMomentum20Pct?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
 };
@@ -115,9 +124,15 @@ const MOMENTUM_SIGNAL_EXIT_CONFIRM_DAYS = 3;
 const MOMENTUM_MAX_HOLD_DAYS = 5;
 const DEFAULT_MAX_CONCURRENT = 5;
 const MAX_ENTRY_MA20_EXTENSION_PCT = 0.12;
-const DEFAULT_MIN_ENTRY_PRICE = 3;
-const DEFAULT_MIN_AVG_TURNOVER_AMOUNT = 30_000_000;
+const DEFAULT_MIN_ENTRY_PRICE = 0;
+const DEFAULT_MIN_AVG_TURNOVER_AMOUNT = 0;
 const DEFAULT_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT = 3;
+const STOCK_ENTRY_DELAY_TRADING_DAYS = 2;
+const DEFAULT_MIN_DELAYED_ENTRY_DRIFT_PCT = -5;
+const DEFAULT_MAX_DELAYED_ENTRY_DRIFT_PCT = 3;
+const DEFAULT_DELAYED_ENTRY_DRIFT_FILTER_MAX_BENCHMARK_MOMENTUM20_PCT = 3;
+const DEFAULT_WEAK_MOMENTUM_MAX_HOLD_DAYS = 4;
+const DEFAULT_WEAK_MOMENTUM_MAX_HOLD_BENCHMARK_MOMENTUM20_PCT = 3;
 
 type StockMarketFilterMode = NonNullable<RunDiamondBacktestInput['stockMarketFilter']>;
 
@@ -452,6 +467,44 @@ function evaluateStockQualityGate(input: {
   return { blocked: false, reason: '质量过滤通过' };
 }
 
+function resolveDelayedEntrySignal(input: {
+  sourceDiamond: DiamondSignalResult;
+  bars: OhlcvBar[];
+  delayTradingDays: number;
+}): {
+  entryTradeDate: string;
+  entryClose: number;
+  sourceTradeDate: string;
+  sourceClose: number;
+  delayTradingDays: number;
+} | null {
+  const sourceIndex = findBarIndex(input.bars, input.sourceDiamond.tradeDate);
+  if (sourceIndex < 0) return null;
+
+  const delayTradingDays = Math.max(0, Math.floor(input.delayTradingDays));
+  const entryIndex = sourceIndex - delayTradingDays;
+  if (entryIndex < 0) return null;
+
+  const entryBar = input.bars[entryIndex];
+  if (!entryBar?.close || entryBar.close <= 0) return null;
+
+  return {
+    entryTradeDate: entryBar.tradeDate,
+    entryClose: entryBar.close,
+    sourceTradeDate: input.sourceDiamond.tradeDate,
+    sourceClose: input.sourceDiamond.close,
+    delayTradingDays,
+  };
+}
+
+function calcDelayedEntryDriftPct(input: {
+  sourceClose: number;
+  entryClose: number;
+}): number | null {
+  if (input.sourceClose <= 0 || input.entryClose <= 0) return null;
+  return round(((input.entryClose - input.sourceClose) / input.sourceClose) * 100);
+}
+
 function mapMomentumExitReason(reason: string): BacktestExitReason {
   if (reason.includes('硬止损')) return 'stop_loss';
   if (reason.includes('止盈保护')) return 'take_profit';
@@ -473,6 +526,7 @@ function evaluateBacktestMomentumExit(input: {
   weakSignalDays: number;
   stopLossPct: number;
   takeProfitPct: number;
+  maxHoldDays: number;
 }): { reason: string } | null {
   if (input.avgCost > 0) {
     const lossPct = (input.close - input.avgCost) / input.avgCost;
@@ -486,7 +540,7 @@ function evaluateBacktestMomentumExit(input: {
     }
   }
 
-  if (input.holdDays < MOMENTUM_MAX_HOLD_DAYS) return null;
+  if (input.holdDays < input.maxHoldDays) return null;
 
   const baseExit = evaluateMomentumExit({
     avgCost: input.avgCost,
@@ -520,6 +574,7 @@ function createMomentumExitTrade(
   options: {
     stopLossPct: number;
     takeProfitPct: number;
+    maxHoldDays: number;
   },
 ): BacktestTrade | null {
   const entryIndex = findBarIndex(bars, signal.tradeDate);
@@ -553,11 +608,12 @@ function createMomentumExitTrade(
       weakSignalDays,
       stopLossPct: options.stopLossPct,
       takeProfitPct: options.takeProfitPct,
+      maxHoldDays: options.maxHoldDays,
     });
 
     const maxHoldExit =
-      holdDays >= MOMENTUM_MAX_HOLD_DAYS
-        ? { reason: `达到持有上限（${MOMENTUM_MAX_HOLD_DAYS} 日）` }
+      holdDays >= options.maxHoldDays
+        ? { reason: `达到持有上限（${options.maxHoldDays} 日）` }
         : null;
     const effectiveExit = exit ?? maxHoldExit;
     if (!effectiveExit) continue;
@@ -610,13 +666,21 @@ function createMomentumExitTrade(
   };
 }
 
-function passesMomentumBuy(
+function evaluateMomentumBuy(
   symbol: BacktestSymbolInput,
   diamond: DiamondSignalResult,
   bars: OhlcvBar[],
-): boolean {
-  const entryIndex = findBarIndex(bars, diamond.tradeDate);
-  if (entryIndex < 0) return false;
+  tradeDate = diamond.tradeDate,
+  maxMa20ExtensionPct = MAX_ENTRY_MA20_EXTENSION_PCT,
+): {
+  passed: boolean;
+  analysis: MomentumAnalysis | null;
+  ma20ExtensionPct: number | null;
+} {
+  const entryIndex = findBarIndex(bars, tradeDate);
+  if (entryIndex < 0) {
+    return { passed: false, analysis: null, ma20ExtensionPct: null };
+  }
 
   const analysis = analyzeMomentum(
     symbol.symbol,
@@ -624,13 +688,18 @@ function passesMomentumBuy(
     bars.slice(entryIndex),
     diamond,
   );
+  let ma20ExtensionPct: number | null = null;
   if (analysis?.ma20 != null && analysis.ma20 > 0) {
-    const ma20ExtensionPct = (analysis.close - analysis.ma20) / analysis.ma20;
-    if (ma20ExtensionPct > MAX_ENTRY_MA20_EXTENSION_PCT) {
-      return false;
+    ma20ExtensionPct = (analysis.close - analysis.ma20) / analysis.ma20;
+    if (ma20ExtensionPct > maxMa20ExtensionPct) {
+      return { passed: false, analysis, ma20ExtensionPct };
     }
   }
-  return analysis?.action === 'buy';
+  return {
+    passed: analysis?.action === 'buy',
+    analysis,
+    ma20ExtensionPct,
+  };
 }
 
 export async function runDiamondBacktest(
@@ -714,6 +783,50 @@ export async function runDiamondBacktest(
       : strategy === 'red-diamond-momentum'
         ? DEFAULT_MIN_AVG_TURNOVER_AMOUNT
         : 0;
+  const minDelayedEntryDriftPct =
+    input.minDelayedEntryDriftPct != null && Number.isFinite(input.minDelayedEntryDriftPct)
+      ? input.minDelayedEntryDriftPct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_MIN_DELAYED_ENTRY_DRIFT_PCT
+        : undefined;
+  const maxDelayedEntryDriftPct =
+    input.maxDelayedEntryDriftPct != null && Number.isFinite(input.maxDelayedEntryDriftPct)
+      ? input.maxDelayedEntryDriftPct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_MAX_DELAYED_ENTRY_DRIFT_PCT
+        : undefined;
+  const delayedEntryDriftFilterMaxBenchmarkMomentum20Pct =
+    input.delayedEntryDriftFilterMaxBenchmarkMomentum20Pct != null &&
+    Number.isFinite(input.delayedEntryDriftFilterMaxBenchmarkMomentum20Pct)
+      ? input.delayedEntryDriftFilterMaxBenchmarkMomentum20Pct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_DELAYED_ENTRY_DRIFT_FILTER_MAX_BENCHMARK_MOMENTUM20_PCT
+        : undefined;
+  const maxEntryMa20ExtensionPct =
+    input.maxEntryMa20ExtensionPct != null && Number.isFinite(input.maxEntryMa20ExtensionPct)
+      ? Math.max(0, input.maxEntryMa20ExtensionPct)
+      : MAX_ENTRY_MA20_EXTENSION_PCT;
+  const maxEntryChecklistScore =
+    input.maxEntryChecklistScore != null && Number.isFinite(input.maxEntryChecklistScore)
+      ? Math.max(0, Math.floor(input.maxEntryChecklistScore))
+      : undefined;
+  const momentumMaxHoldDays =
+    input.momentumMaxHoldDays != null && Number.isFinite(input.momentumMaxHoldDays)
+      ? Math.max(1, Math.floor(input.momentumMaxHoldDays))
+      : MOMENTUM_MAX_HOLD_DAYS;
+  const weakMomentumMaxHoldDays =
+    input.weakMomentumMaxHoldDays != null && Number.isFinite(input.weakMomentumMaxHoldDays)
+      ? Math.max(1, Math.floor(input.weakMomentumMaxHoldDays))
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_WEAK_MOMENTUM_MAX_HOLD_DAYS
+        : undefined;
+  const weakMomentumMaxHoldBenchmarkMomentum20Pct =
+    input.weakMomentumMaxHoldBenchmarkMomentum20Pct != null &&
+    Number.isFinite(input.weakMomentumMaxHoldBenchmarkMomentum20Pct)
+      ? input.weakMomentumMaxHoldBenchmarkMomentum20Pct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_WEAK_MOMENTUM_MAX_HOLD_BENCHMARK_MOMENTUM20_PCT
+        : undefined;
   const newsTimeline: BacktestNewsLoadResult =
     newsFilter === 'off'
       ? { news: [], sources: [] as string[] }
@@ -733,6 +846,10 @@ export async function runDiamondBacktest(
   let newsBlockedCount = 0;
   let marketBlockedCount = 0;
   let qualityBlockedCount = 0;
+  let delayedEntrySkippedCount = 0;
+  let delayedEntryDriftBlockedCount = 0;
+  let entryMa20ExtensionBlockedCount = 0;
+  let entryChecklistBlockedCount = 0;
 
   for (const symbol of universeSymbols) {
     const code = symbol.symbol.trim();
@@ -788,17 +905,54 @@ export async function runDiamondBacktest(
 
       for (const diamond of signals) {
         rawSignalCount += 1;
-        if (
-          strategy === 'red-diamond-momentum' &&
-          !passesMomentumBuy({ ...symbol, symbol: code, name }, diamond, bars)
-        ) {
-          continue;
-        }
 
         if (strategy === 'red-diamond-momentum') {
+          const delayedEntry = resolveDelayedEntrySignal({
+            sourceDiamond: diamond,
+            bars,
+            delayTradingDays: STOCK_ENTRY_DELAY_TRADING_DAYS,
+          });
+          if (!delayedEntry) {
+            delayedEntrySkippedCount += 1;
+            continue;
+          }
+
+          const entryDiamond = {
+            ...diamond,
+            tradeDate: delayedEntry.entryTradeDate,
+            close: delayedEntry.entryClose,
+          };
+          const momentumBuy = evaluateMomentumBuy(
+            { ...symbol, symbol: code, name },
+            diamond,
+            bars,
+            delayedEntry.entryTradeDate,
+            maxEntryMa20ExtensionPct,
+          );
+          if (!momentumBuy.passed) {
+            if (
+              momentumBuy.ma20ExtensionPct != null &&
+              momentumBuy.ma20ExtensionPct > maxEntryMa20ExtensionPct
+            ) {
+              entryMa20ExtensionBlockedCount += 1;
+            }
+            continue;
+          }
+          const delayedEntryDriftPct = calcDelayedEntryDriftPct({
+            sourceClose: delayedEntry.sourceClose,
+            entryClose: delayedEntry.entryClose,
+          });
+          if (
+            maxEntryChecklistScore != null &&
+            (momentumBuy.analysis?.checklistScore ?? 0) > maxEntryChecklistScore
+          ) {
+            entryChecklistBlockedCount += 1;
+            continue;
+          }
+
           const qualityGate = evaluateStockQualityGate({
             name,
-            diamond,
+            diamond: entryDiamond,
             bars,
             excludeRiskyStockNames,
             minEntryPrice,
@@ -810,7 +964,7 @@ export async function runDiamondBacktest(
           }
 
           const marketGate = evaluateStockMarketGate({
-            tradeDate: diamond.tradeDate,
+            tradeDate: entryDiamond.tradeDate,
             mode: stockMarketFilter,
             minBenchmarkMomentum20Pct,
             defensiveBenchmarkMomentum20Pct,
@@ -820,11 +974,44 @@ export async function runDiamondBacktest(
             marketBlockedCount += 1;
             continue;
           }
+          const effectiveMaxHoldDays =
+            weakMomentumMaxHoldDays != null &&
+            weakMomentumMaxHoldBenchmarkMomentum20Pct != null &&
+            marketGate.regime?.momentum20Pct != null &&
+            marketGate.regime.momentum20Pct <=
+              weakMomentumMaxHoldBenchmarkMomentum20Pct
+              ? weakMomentumMaxHoldDays
+              : momentumMaxHoldDays;
+          const applyDelayedEntryDriftFilter =
+            minDelayedEntryDriftPct != null || maxDelayedEntryDriftPct != null
+              ? delayedEntryDriftFilterMaxBenchmarkMomentum20Pct == null ||
+                marketGate.regime?.momentum20Pct == null ||
+                marketGate.regime.momentum20Pct <=
+                  delayedEntryDriftFilterMaxBenchmarkMomentum20Pct
+              : false;
+          if (
+            applyDelayedEntryDriftFilter &&
+            delayedEntryDriftPct != null &&
+            minDelayedEntryDriftPct != null &&
+            delayedEntryDriftPct < minDelayedEntryDriftPct
+          ) {
+            delayedEntryDriftBlockedCount += 1;
+            continue;
+          }
+          if (
+            applyDelayedEntryDriftFilter &&
+            delayedEntryDriftPct != null &&
+            maxDelayedEntryDriftPct != null &&
+            delayedEntryDriftPct > maxDelayedEntryDriftPct
+          ) {
+            delayedEntryDriftBlockedCount += 1;
+            continue;
+          }
 
           const newsProfile = getStockNewsProfile(code, name);
           const entryNews = filterNewsForTradeDate({
             news: newsTimeline.news,
-            tradeDate: diamond.tradeDate,
+            tradeDate: entryDiamond.tradeDate,
             lookbackDays: newsLookbackDays,
           });
           const newsSentiment = evaluateEtfNewsSentiment({
@@ -838,10 +1025,21 @@ export async function runDiamondBacktest(
           }
 
           const signal = toSignal(
-            diamond,
+            entryDiamond,
             { ...symbol, symbol: code, name },
             strategy,
             {
+              sourceSignalDate: delayedEntry.sourceTradeDate,
+              sourceSignalPrice: delayedEntry.sourceClose,
+              entryDelayTradingDays: delayedEntry.delayTradingDays,
+              delayedEntryDriftPct,
+              entryChecklistScore: momentumBuy.analysis?.checklistScore,
+              entryVolumeRatio: momentumBuy.analysis?.volumeRatio,
+              entryMa20ExtensionPct:
+                momentumBuy.ma20ExtensionPct == null
+                  ? null
+                  : round(momentumBuy.ma20ExtensionPct * 100),
+              effectiveMaxHoldDays,
               newsLabel: newsSentiment.label,
               newsNet: newsSentiment.net,
               newsBullish: newsSentiment.bullish,
@@ -863,6 +1061,7 @@ export async function runDiamondBacktest(
           const trade = createMomentumExitTrade(signal, bars, {
             stopLossPct,
             takeProfitPct,
+            maxHoldDays: effectiveMaxHoldDays,
           });
           if (trade) trades.push(trade);
           continue;
@@ -961,6 +1160,37 @@ export async function runDiamondBacktest(
       portfolioSkippedCount,
       stopLossPct,
       takeProfitPct,
+      stockEntryDelayTradingDays:
+        strategy === 'red-diamond-momentum'
+          ? STOCK_ENTRY_DELAY_TRADING_DAYS
+          : undefined,
+      delayedEntrySkippedCount:
+        strategy === 'red-diamond-momentum'
+          ? delayedEntrySkippedCount
+          : undefined,
+      minDelayedEntryDriftPct,
+      maxDelayedEntryDriftPct,
+      delayedEntryDriftFilterMaxBenchmarkMomentum20Pct,
+      delayedEntryDriftBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? delayedEntryDriftBlockedCount
+          : undefined,
+      maxEntryMa20ExtensionPct,
+      entryMa20ExtensionBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? entryMa20ExtensionBlockedCount
+          : undefined,
+      maxEntryChecklistScore,
+      entryChecklistBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? entryChecklistBlockedCount
+          : undefined,
+      momentumMaxHoldDays:
+        strategy === 'red-diamond-momentum'
+          ? momentumMaxHoldDays
+          : undefined,
+      weakMomentumMaxHoldDays,
+      weakMomentumMaxHoldBenchmarkMomentum20Pct,
     },
     equityCurve: portfolioLedger.equityCurve,
     portfolioSnapshots: portfolioLedger.snapshots,
@@ -972,8 +1202,18 @@ export async function runDiamondBacktest(
               ? '股票池为本地全市场 A 股 CSV，已排除 688/689 科创板代码。'
               : '股票池为手动输入代码列表，688/689 科创板会被排除。',
             `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的红钻信号。`,
-            `股票策略：红钻 + 动量 checklist 入场，并过滤距离 MA20 超过 ${Math.round(MAX_ENTRY_MA20_EXTENSION_PCT * 100)}% 的追高信号；最多持有 ${MOMENTUM_MAX_HOLD_DAYS} 个交易日，期间按 -${Math.round(stopLossPct * 100)}% 硬止损和 +${Math.round(takeProfitPct * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化。`,
-            `质量过滤：${excludeRiskyStockNames ? '排除 ST/退市风险名称' : '不排除风险名称'}，最低入场价 ${minEntryPrice} 元，近 5 日平均成交额不低于 ${Math.round(minAvgTurnoverAmount / 10_000)} 万元。`,
+            `股票策略：红钻信号先进入候选池，至少延迟 ${STOCK_ENTRY_DELAY_TRADING_DAYS} 个交易日后才允许入场；入场日按真实收盘价重新跑动量 checklist，并过滤距离 MA20 超过 ${Math.round(maxEntryMa20ExtensionPct * 100)}% 的追高信号。`,
+            minDelayedEntryDriftPct != null || maxDelayedEntryDriftPct != null
+              ? `T+2 涨跌幅过滤：信号日至入场日涨跌幅需满足 ${minDelayedEntryDriftPct ?? '-∞'}% 至 ${maxDelayedEntryDriftPct ?? '+∞'}%。`
+              : undefined,
+            maxEntryChecklistScore != null
+              ? `T+2 过热过滤：入场 checklist 通过项不高于 ${maxEntryChecklistScore}。`
+              : undefined,
+            weakMomentumMaxHoldDays != null &&
+            weakMomentumMaxHoldBenchmarkMomentum20Pct != null
+              ? `退出策略：默认最多持有 ${momentumMaxHoldDays} 个交易日；当沪深300 20 日动量不高于 ${weakMomentumMaxHoldBenchmarkMomentum20Pct}% 时，最多持有 ${weakMomentumMaxHoldDays} 个交易日。期间按 -${Math.round(stopLossPct * 100)}% 硬止损和 +${Math.round(takeProfitPct * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化。`
+              : `退出策略：从真实入场日开始最多持有 ${momentumMaxHoldDays} 个交易日，期间按 -${Math.round(stopLossPct * 100)}% 硬止损和 +${Math.round(takeProfitPct * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化。`,
+            `质量过滤：${excludeRiskyStockNames ? '排除 ST/退市风险名称' : '不排除风险名称'}；${minEntryPrice > 0 ? `最低入场价 ${minEntryPrice} 元` : '不启用最低价格硬过滤'}，${minAvgTurnoverAmount > 0 ? `近 5 日平均成交额不低于 ${Math.round(minAvgTurnoverAmount / 10_000)} 万元` : '不启用成交额硬过滤'}。`,
             stockMarketFilter === 'off'
               ? '大盘状态过滤已关闭；可用 --market-filter=require_bullish 仅在沪深300强势时新开股票仓。'
               : stockMarketFilter === 'require_bullish'
@@ -986,7 +1226,7 @@ export async function runDiamondBacktest(
             defensiveBenchmarkMomentum20Pct > 0
               ? `自适应防守阈值：沪深300未满足 MA60 中期强势时，20 日动量需不低于 ${defensiveBenchmarkMomentum20Pct}%。`
               : undefined,
-            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始红钻信号 ${rawSignalCount} 个，质量过滤 ${qualityBlockedCount} 个，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
+            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始红钻信号 ${rawSignalCount} 个，T+2 未形成可交易入场 ${delayedEntrySkippedCount} 个，T+2 涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，T+2 过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
             newsFilter === 'off'
               ? '股票新闻过滤默认关闭；可用 --news-filter=avoid_bearish 回测买入前近端新闻利空拦截，或 --news-filter=require_bullish 要求相关新闻净分为正。'
               : newsFilter === 'require_bullish'
