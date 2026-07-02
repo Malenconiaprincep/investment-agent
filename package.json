@@ -46,6 +46,8 @@
     "etf:morning-radar": "pnpm --filter @investment-agent/agent-core etf:morning-radar",
     "etf:tail-pick": "pnpm --filter @investment-agent/agent-core etf:tail-pick",
     "etf:tail-schedule": "pnpm --filter @investment-agent/agent-core etf:tail-schedule",
+    "etf:update-daily": "pnpm --filter @investment-agent/agent-core etf:update-daily",
+    "stock:update-daily": "pnpm --filter @investment-agent/agent-core stock:update-daily",
     "backtest": "pnpm --filter @investment-agent/agent-core backtest",
     "backtest:stock-news": "pnpm --filter @investment-agent/agent-core backtest:stock-news",
     "backtest:stock-robustness": "pnpm --filter @investment-agent/agent-core backtest:stock-robustness",

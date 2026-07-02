@@ -1,4 +1,4 @@
-import { isTradeSymbol } from '../market/asset-type.js';
+import { isBoardIndexSymbol, isTradeSymbol } from '../market/asset-type.js';
 import { fetchIntradayQuote } from '../market/free/intraday-quote.js';
 import { getDailyQuote } from '../market/services.js';
 import { addWatchlistItem } from '../watchlist/store.js';
@@ -65,6 +65,14 @@ function candidateRank(candidate: ScreeningSessionRecord['candidates'][number]):
   return gradeScore * 1000 + factorScore + diamondScore;
 }
 
+function isBoardOrIndexCandidate(
+  candidate: ScreeningSessionRecord['candidates'][number],
+): boolean {
+  if (isBoardIndexSymbol(candidate.symbol)) return true;
+  const text = `${candidate.name} ${candidate.thesis} ${candidate.dataSource}`;
+  return /(?:^|[；;,，\s])(?:指数代码|指数简称|板块代码|板块简称|板块名称|行业指数|概念指数):/.test(text);
+}
+
 export function selectScreeningWatchlistCandidates(
   session: ScreeningSessionRecord,
   options?: {
@@ -78,7 +86,7 @@ export function selectScreeningWatchlistCandidates(
     options?.etfLimit ?? limitFromEnv('SCREENING_WATCHLIST_ETF_LIMIT', DEFAULT_ETF_LIMIT);
 
   const ranked = session.candidates
-    .filter((candidate) => isTradeSymbol(candidate.symbol))
+    .filter((candidate) => isTradeSymbol(candidate.symbol) && !isBoardOrIndexCandidate(candidate))
     .map((candidate) => ({
       candidate,
       assetType: candidate.assetType === 'etf' ? 'etf' as const : 'stock' as const,

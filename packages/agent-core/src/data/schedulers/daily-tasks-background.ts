@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { runEtfTailPick } from '../etf/tail-picker.js';
 import { runEtfMorningRadar } from '../etf/morning-radar.js';
 import {
@@ -13,7 +15,11 @@ import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
-import { updateEtfDailyCsvPool } from '../market/local-csv/etf-daily-update.js';
+import { DATA_DIR } from '../../mastra/config/paths.js';
+import {
+  updateEtfDailyCsvPool,
+  updateStockDailyCsvPool,
+} from '../market/local-csv/etf-daily-update.js';
 import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
@@ -40,6 +46,7 @@ type DailyTaskDef = {
 const completedKeys = new Set<string>();
 let lastEtfPaperRunMs = 0;
 let lastStockIntradayRunMs = 0;
+const SCREEN_LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 
 function isEnabled(): boolean {
   return process.env.DAILY_TASKS_BACKGROUND_ENABLED !== '0';
@@ -47,6 +54,55 @@ function isEnabled(): boolean {
 
 function taskKey(id: string, tradeDate: string): string {
   return `${id}:${tradeDate}`;
+}
+
+function formatBeijingLogTime(date = new Date()): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+function logInfo(message: string) {
+  console.log(`[daily-tasks ${formatBeijingLogTime()}] ${message}`);
+}
+
+function logError(message: string) {
+  console.error(`[daily-tasks ${formatBeijingLogTime()}] ${message}`);
+}
+
+function appendScreenTaskLog(
+  stage: 'morning' | 'midday' | 'noon' | 'afternoon',
+  startedAt: string,
+  outcome: {
+    query?: string;
+    passed?: boolean;
+    sessionId?: string;
+    sectorCount?: number;
+    candidateCount?: number;
+    elapsedMs?: number;
+    watchlistAdded?: number;
+  },
+) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  appendFileSync(
+    SCREEN_LOG_PATH,
+    `${JSON.stringify({
+      ranAt: startedAt,
+      ranAtBeijing: formatBeijingLogTime(new Date(startedAt)),
+      source: 'background-worker',
+      stage,
+      ...outcome,
+      ok: outcome.passed ?? false,
+    })}\n`,
+    'utf-8',
+  );
 }
 
 function isDue(task: DailyTaskDef, now: Date): boolean {
@@ -61,6 +117,7 @@ function createScreenTask(input: {
     ScheduledTaskId,
     'screen-morning' | 'screen-midday' | 'screen-noon' | 'screen-afternoon'
   >;
+  stage: 'morning' | 'midday' | 'noon' | 'afternoon';
   label: string;
   hour: number;
   minute: number;
@@ -72,6 +129,7 @@ function createScreenTask(input: {
     hour: input.hour,
     minute: input.minute,
     run: async () => {
+      const startedAt = new Date().toISOString();
       const outcome: {
         query?: string;
         passed?: boolean;
@@ -96,6 +154,7 @@ function createScreenTask(input: {
           }
         },
       );
+      appendScreenTaskLog(input.stage, startedAt, outcome);
 
       return {
         skipped: outcome.passed === undefined,
@@ -110,6 +169,7 @@ function createScreenTask(input: {
 const DAILY_TASKS: DailyTaskDef[] = [
   createScreenTask({
     id: 'screen-morning',
+    stage: 'morning',
     label: '智能选股（早盘）',
     hour: 9,
     minute: 25,
@@ -117,6 +177,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
   }),
   createScreenTask({
     id: 'screen-midday',
+    stage: 'midday',
     label: '智能选股（午间）',
     hour: 11,
     minute: 35,
@@ -124,6 +185,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
   }),
   createScreenTask({
     id: 'screen-noon',
+    stage: 'noon',
     label: '智能选股（午后开盘前）',
     hour: 12,
     minute: 50,
@@ -131,6 +193,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
   }),
   createScreenTask({
     id: 'screen-afternoon',
+    stage: 'afternoon',
     label: '智能选股（尾盘前）',
     hour: 14,
     minute: 35,
@@ -198,6 +261,25 @@ const DAILY_TASKS: DailyTaskDef[] = [
       };
     },
   },
+  {
+    id: 'stock-daily-csv-update',
+    label: '股票日线更新',
+    hour: 15,
+    minute: 32,
+    run: async () => {
+      const result = await updateStockDailyCsvPool();
+      return {
+        skipped: result.items.length === 0 || result.errors === result.items.length,
+        reason:
+          result.items.length === 0
+            ? '暂无需要更新的活跃股票'
+            : result.errors === result.items.length
+              ? '股票日线全部更新失败'
+              : undefined,
+        summary: `标的 ${result.items.length} 只 · 新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只`,
+      };
+    },
+  },
 ];
 
 async function runStockIntradayMonitor(now = getBeijingNow()) {
@@ -220,7 +302,7 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
       marketOpen: true,
     });
     if (result.skipped) {
-      console.log(`[daily-tasks] ${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
       return;
     }
 
@@ -229,13 +311,13 @@ async function runStockIntradayMonitor(now = getBeijingNow()) {
       candidates: result.candidates,
     });
 
-    console.log(
-      `[daily-tasks] ${label} 完成：扫描 ${result.scanned} 只，达标 ${result.candidates.length} 只${pushed > 0 ? `，飞书推送 ${pushed} 只` : ''}`,
+    logInfo(
+      `${label} 完成：扫描 ${result.scanned} 只，达标 ${result.candidates.length} 只${pushed > 0 ? `，飞书推送 ${pushed} 只` : ''}`,
     );
   } catch (error) {
     lastStockIntradayRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[daily-tasks] ${label} 失败：${message}`);
+    logError(`${label} 失败：${message}`);
     await notifyDailyTaskFailure(label, message);
   }
 }
@@ -253,7 +335,7 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
     const result = await runEtfPaperAutoPipeline();
     const label = 'ETF 模拟盘监听';
     if (result.skipped) {
-      console.log(`[daily-tasks] ${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
       return;
     }
     await notifyEtfPaperMonitor(result);
@@ -263,13 +345,11 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
     if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
     if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
     if (result.reason) parts.push(result.reason);
-    console.log(
-      `[daily-tasks] ${label} 完成${parts.length > 0 ? `：${parts.join(' · ')}` : ''}`,
-    );
+    logInfo(`${label} 完成${parts.length > 0 ? `：${parts.join(' · ')}` : ''}`);
   } catch (error) {
     lastEtfPaperRunMs = 0;
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[daily-tasks] ETF 模拟盘监听 失败：${message}`);
+    logError(`ETF 模拟盘监听 失败：${message}`);
     await notifyDailyTaskFailure('ETF 模拟盘监听', message);
   }
 }
@@ -289,18 +369,14 @@ async function runDueTasks(now = getBeijingNow()) {
     try {
       const result = await task.run();
       if (result.skipped) {
-        console.log(
-          `[daily-tasks] ${task.label} 跳过：${result.reason ?? '非执行窗口'}`,
-        );
+        logInfo(`${task.label} 跳过：${result.reason ?? '非执行窗口'}`);
       } else {
-        console.log(
-          `[daily-tasks] ${task.label} 完成${result.summary ? `：${result.summary}` : ''}`,
-        );
+        logInfo(`${task.label} 完成${result.summary ? `：${result.summary}` : ''}`);
       }
     } catch (error) {
       completedKeys.delete(key);
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[daily-tasks] ${task.label} 失败：${message}`);
+      logError(`${task.label} 失败：${message}`);
       await notifyDailyTaskFailure(task.label, message);
     }
   }
@@ -330,11 +406,12 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
     `15:30 ETF 日线更新`,
+    `15:32 股票日线更新`,
   ].join(' · ');
 
-  console.log(`[daily-tasks] 已启动本机定时任务（北京时间）：${schedule}`);
+  logInfo(`已启动本机定时任务（北京时间）：${schedule}`);
   if (isFeishuNotifyEnabled()) {
-    console.log('[daily-tasks] 飞书推送已启用');
+    logInfo('飞书推送已启用');
   }
 
   void runDueTasks();

@@ -33,30 +33,74 @@ export async function dispatchEtf(args: string[]): Promise<string> {
   }
 
   if (command === 'update-daily-csv') {
-    const daysArg = args.find((item) => item.startsWith('--days='));
-    const symbolsArg = args.find((item) => item.startsWith('--symbols='));
-    const days = daysArg ? Number(daysArg.split('=')[1]) : undefined;
-    const symbols = symbolsArg
-      ? symbolsArg
-          .split('=')
-          .slice(1)
-          .join('=')
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : undefined;
+    const options = parseDailyCsvArgs(args.slice(1));
     const { updateEtfDailyCsvPool } = await import(
       '../data/market/local-csv/etf-daily-update.js'
     );
-    return JSON.stringify(
-      await updateEtfDailyCsvPool({
-        ...(Number.isFinite(days) ? { days } : {}),
-        ...(symbols && symbols.length > 0 ? { symbols } : {}),
-      }),
+    return JSON.stringify(await updateEtfDailyCsvPool(options));
+  }
+
+  if (command === 'update-stock-daily-csv') {
+    const options = parseDailyCsvArgs(args.slice(1));
+    const { updateStockDailyCsvPool } = await import(
+      '../data/market/local-csv/etf-daily-update.js'
     );
+    return JSON.stringify(await updateStockDailyCsvPool(options));
   }
 
   throw new Error(
-    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880]',
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N]|update-stock-daily-csv [--days=N] [--symbols=600519,300750] [--include-local|--no-include-local] [--include-active|--no-include-active] [--max=N] [--delay-ms=N]',
   );
+}
+
+function parseCsvList(value: string | undefined): string[] | undefined {
+  const items = value
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items && items.length > 0 ? items : undefined;
+}
+
+function parseNumberArg(args: string[], name: string): number | undefined {
+  const arg = args.find((item) => item.startsWith(`--${name}=`));
+  if (!arg) return undefined;
+  const parsed = Number(arg.split('=').slice(1).join('='));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseDailyCsvArgs(args: string[]): {
+  days?: number;
+  symbols?: string[];
+  includeLocal?: boolean;
+  includeActive?: boolean;
+  maxSymbols?: number;
+  delayMs?: number;
+} {
+  const options: {
+    days?: number;
+    symbols?: string[];
+    includeLocal?: boolean;
+    includeActive?: boolean;
+    maxSymbols?: number;
+    delayMs?: number;
+  } = {};
+
+  const days = parseNumberArg(args, 'days');
+  if (days != null) options.days = days;
+
+  const symbolsArg = args.find((item) => item.startsWith('--symbols='));
+  const symbols = parseCsvList(symbolsArg?.split('=').slice(1).join('='));
+  if (symbols) options.symbols = symbols;
+
+  if (args.includes('--include-local')) options.includeLocal = true;
+  if (args.includes('--no-include-local')) options.includeLocal = false;
+  if (args.includes('--include-active')) options.includeActive = true;
+  if (args.includes('--no-include-active')) options.includeActive = false;
+
+  const maxSymbols = parseNumberArg(args, 'max');
+  if (maxSymbols != null) options.maxSymbols = maxSymbols;
+  const delayMs = parseNumberArg(args, 'delay-ms');
+  if (delayMs != null) options.delayMs = delayMs;
+
+  return options;
 }

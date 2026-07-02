@@ -97,4 +97,23 @@ describe('screening watchlist sync', () => {
     expect(picked.filter((item) => item.assetType === 'stock')).toHaveLength(2);
     expect(picked.filter((item) => item.assetType === 'etf')).toHaveLength(1);
   });
+
+  it('skips board and index rows from screening results', () => {
+    const board = candidate('886110', '2026中报预增', 99);
+    board.thesis = '指数代码: 886110.TI；指数简称: 2026中报预增；最新价: 1234';
+
+    const sector = candidate('885808', '养鸡', 98);
+    sector.thesis = '板块名称: 养鸡；最新涨跌幅: 6.11%；指数代码: 885808.TI';
+
+    const picked = selectScreeningWatchlistCandidates(
+      session([
+        board,
+        sector,
+        candidate('000001', '平安银行', 62),
+      ]),
+      { stockLimit: 3, etfLimit: 0 },
+    );
+
+    expect(picked.map((item) => item.symbol)).toEqual(['000001']);
+  });
 });

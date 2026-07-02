@@ -9,9 +9,14 @@ export function isEtfSymbol(code: string): boolean {
   );
 }
 
+/** 问财/东财板块、行业、概念等指数常见为 88xxxx，不应进入股票/ETF 交易池 */
+export function isBoardIndexSymbol(code: string): boolean {
+  return /^88\d{4}$/.test(code.trim());
+}
+
 export function isStockSymbol(code: string): boolean {
   const c = code.trim();
-  if (!/^\d{6}$/.test(c) || isEtfSymbol(c)) return false;
+  if (!/^\d{6}$/.test(c) || isEtfSymbol(c) || isBoardIndexSymbol(c)) return false;
   return /^(6|0|3|8|4)\d{5}$/.test(c);
 }
 

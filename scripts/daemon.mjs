@@ -83,11 +83,18 @@ function selectServices() {
   return names;
 }
 
-function startService(name) {
+async function startService(name) {
   const service = services[name];
   const existing = readPid(name);
   if (existing && isAlive(existing.pid)) {
     console.log(`${service.label} already running (pid ${existing.pid}) -> ${service.displayUrl}`);
+    return;
+  }
+
+  const currentHealth = await health(service);
+  if (currentHealth.startsWith('healthy')) {
+    removePid(name);
+    console.log(`${service.label} already running (${currentHealth}, pid not tracked) -> ${service.displayUrl}`);
     return;
   }
 
@@ -169,6 +176,11 @@ async function statusService(name) {
   const info = readPid(name);
   if (!info || !isAlive(info.pid)) {
     removePid(name);
+    const currentHealth = await health(service);
+    if (currentHealth.startsWith('healthy')) {
+      console.log(`${service.label}: running (${currentHealth}, pid not tracked) -> ${service.displayUrl}`);
+      return;
+    }
     console.log(`${service.label}: stopped`);
     return;
   }
@@ -205,14 +217,14 @@ async function main() {
 
   switch (action) {
     case 'start':
-      names.forEach(startService);
+      for (const name of names) await startService(name);
       break;
     case 'stop':
       for (const name of names) await stopService(name);
       break;
     case 'restart':
       for (const name of names) await stopService(name);
-      names.forEach(startService);
+      for (const name of names) await startService(name);
       break;
     case 'status':
       for (const name of names) await statusService(name);

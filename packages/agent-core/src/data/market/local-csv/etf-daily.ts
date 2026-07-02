@@ -65,6 +65,18 @@ export function getLocalEtfDailyCsvPath(symbol: string): string {
   return etfCsvPath(symbol);
 }
 
+export function getLocalStockDailyCsvPath(symbol: string): string {
+  return stockCsvPath(symbol);
+}
+
+export function listLocalEtfDailyCsvSymbols(): string[] {
+  if (!existsSync(ETF_QFQ_DIR)) return [];
+  return readdirSync(ETF_QFQ_DIR)
+    .map((fileName) => fileName.match(/^(\d{6})_daily_qfq\.csv$/)?.[1])
+    .filter((symbol): symbol is string => Boolean(symbol))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 export function hasLocalStockDailyCsv(symbol: string): boolean {
   return existsSync(stockCsvPath(symbol));
 }

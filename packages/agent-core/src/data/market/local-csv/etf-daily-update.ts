@@ -1,13 +1,22 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ETF_POOL_19 } from '../../etf/pool.js';
+import { isEtfSymbol, isStockSymbol } from '../asset-type.js';
 import { fetchDailyKlines } from '../free/tencent.js';
-import { getLocalEtfDailyCsvPath } from './etf-daily.js';
+import {
+  getLocalEtfDailyCsvPath,
+  getLocalStockDailyCsvPath,
+  getLocalStockName,
+  listLocalEtfDailyCsvSymbols,
+  listLocalStockDailyCsvSymbols,
+} from './etf-daily.js';
 
-const ETF_DAILY_HEADER =
-  '\uFEFF日期,基金代码,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率';
+const DAILY_HEADER =
+  '\uFEFF日期,代码,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率';
 
-type EtfDailyCsvRow = {
+type DailyCsvAssetType = 'etf' | 'stock';
+
+type DailyCsvRow = {
   tradeDate: string;
   symbol: string;
   open: number | null;
@@ -22,7 +31,8 @@ type EtfDailyCsvRow = {
   turnover: number | null;
 };
 
-export type EtfDailyUpdateItem = {
+export type DailyCsvUpdateItem = {
+  assetType: DailyCsvAssetType;
   symbol: string;
   name: string;
   path: string;
@@ -34,14 +44,20 @@ export type EtfDailyUpdateItem = {
   error?: string;
 };
 
-export type EtfDailyUpdateResult = {
+export type DailyCsvUpdateResult = {
+  assetType: DailyCsvAssetType;
   tradeDate: string;
   updatedAt: string;
-  items: EtfDailyUpdateItem[];
+  items: DailyCsvUpdateItem[];
   addedRows: number;
   updatedRows: number;
   errors: number;
 };
+
+export type EtfDailyUpdateItem = DailyCsvUpdateItem;
+export type EtfDailyUpdateResult = DailyCsvUpdateResult;
+
+const ETF_NAME_BY_SYMBOL = new Map(ETF_POOL_19.map((item) => [item.symbol, item.name]));
 
 function normalizeTradeDate(value: string | undefined): string | null {
   const normalized = value?.trim().replace(/^\uFEFF/, '').replace(/-/g, '').slice(0, 8);
@@ -64,11 +80,11 @@ function formatNumber(value: number | null | undefined): string {
   return String(Number(value.toFixed(6)));
 }
 
-function readExistingRows(filePath: string, symbol: string): EtfDailyCsvRow[] {
+function readExistingRows(filePath: string, symbol: string): DailyCsvRow[] {
   if (!existsSync(filePath)) return [];
 
   const lines = readFileSync(filePath, 'utf-8').split(/\r?\n/);
-  const rows: EtfDailyCsvRow[] = [];
+  const rows: DailyCsvRow[] = [];
   for (let index = 1; index < lines.length; index += 1) {
     const line = lines[index]?.trim();
     if (!line) continue;
@@ -93,7 +109,7 @@ function readExistingRows(filePath: string, symbol: string): EtfDailyCsvRow[] {
   return rows;
 }
 
-function rowsEqual(a: EtfDailyCsvRow, b: EtfDailyCsvRow): boolean {
+function rowsEqual(a: DailyCsvRow, b: DailyCsvRow): boolean {
   return (
     a.open === b.open &&
     a.close === b.close &&
@@ -110,7 +126,7 @@ function rowsEqual(a: EtfDailyCsvRow, b: EtfDailyCsvRow): boolean {
 
 function mergeRows(input: {
   symbol: string;
-  existing: EtfDailyCsvRow[];
+  existing: DailyCsvRow[];
   fetched: Array<{
     tradeDate: string;
     open: number | null;
@@ -120,7 +136,7 @@ function mergeRows(input: {
     vol: number | null;
     amount: number | null;
   }>;
-}): { rows: EtfDailyCsvRow[]; addedRows: number; updatedRows: number } {
+}): { rows: DailyCsvRow[]; addedRows: number; updatedRows: number } {
   const byDate = new Map(input.existing.map((row) => [row.tradeDate, row]));
   let addedRows = 0;
   let updatedRows = 0;
@@ -130,7 +146,7 @@ function mergeRows(input: {
     if (!tradeDate) continue;
 
     const existing = byDate.get(tradeDate);
-    const next: EtfDailyCsvRow = {
+    const next: DailyCsvRow = {
       tradeDate,
       symbol: input.symbol,
       open: quote.open,
@@ -180,7 +196,7 @@ function mergeRows(input: {
   return { rows, addedRows, updatedRows };
 }
 
-function serializeRows(rows: EtfDailyCsvRow[]): string {
+function serializeRows(rows: DailyCsvRow[]): string {
   const body = rows
     .map((row) =>
       [
@@ -199,24 +215,149 @@ function serializeRows(rows: EtfDailyCsvRow[]): string {
       ].join(','),
     )
     .join('\n');
-  return `${ETF_DAILY_HEADER}\n${body}\n`;
+  return `${DAILY_HEADER}\n${body}\n`;
 }
 
-export async function updateEtfDailyCsvPool(options?: {
+function envFlag(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+function envNumber(name: string): number | undefined {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function uniqueSymbols(symbols: Iterable<string>, predicate: (symbol: string) => boolean): string[] {
+  return [...new Set([...symbols].map((item) => item.trim()).filter(predicate))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+function maybeLimit(symbols: string[], maxSymbols: number | undefined): string[] {
+  if (!maxSymbols || maxSymbols <= 0) return symbols;
+  return symbols.slice(0, Math.floor(maxSymbols));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveDelayMs(assetType: DailyCsvAssetType, input?: number): number {
+  const fromEnv =
+    assetType === 'etf'
+      ? envNumber('ETF_DAILY_CSV_DELAY_MS')
+      : envNumber('STOCK_DAILY_CSV_DELAY_MS');
+  return Math.max(
+    0,
+    Math.floor(input ?? fromEnv ?? envNumber('DAILY_CSV_UPDATE_DELAY_MS') ?? 80),
+  );
+}
+
+async function collectActiveStockSymbols(): Promise<string[]> {
+  const symbols = new Set<string>();
+
+  const [{ listWatchlistItems }, { listPaperPositions }, { listScreeningSessions, getScreeningSession }] =
+    await Promise.all([
+      import('../../watchlist/store.js'),
+      import('../../paper/store.js'),
+      import('../../screening/store.js'),
+    ]);
+
+  for (const item of await listWatchlistItems()) {
+    symbols.add(item.symbol);
+  }
+
+  for (const position of await listPaperPositions('stock')) {
+    symbols.add(position.symbol);
+  }
+
+  const limit = Math.max(1, Math.floor(envNumber('STOCK_DAILY_CSV_SCREENING_SESSIONS') ?? 5));
+  const sessions = await listScreeningSessions({ limit });
+  for (const summary of sessions) {
+    const session = await getScreeningSession(summary.id);
+    for (const candidate of session?.candidates ?? []) {
+      if (candidate.assetType === 'etf') continue;
+      symbols.add(candidate.symbol);
+    }
+  }
+
+  return uniqueSymbols(symbols, isStockSymbol);
+}
+
+async function resolveSymbols(input: {
+  assetType: DailyCsvAssetType;
+  symbols?: string[];
+  includeLocal?: boolean;
+  includeActive?: boolean;
+  maxSymbols?: number;
+}): Promise<string[]> {
+  if (input.symbols?.length) {
+    return maybeLimit(
+      uniqueSymbols(input.symbols, input.assetType === 'etf' ? isEtfSymbol : isStockSymbol),
+      input.maxSymbols,
+    );
+  }
+
+  const symbols = new Set<string>();
+  if (input.assetType === 'etf') {
+    for (const item of ETF_POOL_19) symbols.add(item.symbol);
+    const includeLocal =
+      input.includeLocal ?? envFlag('ETF_DAILY_CSV_INCLUDE_LOCAL', true);
+    if (includeLocal) {
+      for (const symbol of listLocalEtfDailyCsvSymbols()) symbols.add(symbol);
+    }
+    return maybeLimit(uniqueSymbols(symbols, isEtfSymbol), input.maxSymbols);
+  }
+
+  const includeLocal = input.includeLocal ?? envFlag('STOCK_DAILY_CSV_INCLUDE_LOCAL', false);
+  const includeActive = input.includeActive ?? envFlag('STOCK_DAILY_CSV_INCLUDE_ACTIVE', true);
+  if (includeLocal) {
+    for (const symbol of listLocalStockDailyCsvSymbols()) symbols.add(symbol);
+  }
+  if (includeActive) {
+    for (const symbol of await collectActiveStockSymbols()) symbols.add(symbol);
+  }
+  return maybeLimit(uniqueSymbols(symbols, isStockSymbol), input.maxSymbols);
+}
+
+function getName(assetType: DailyCsvAssetType, symbol: string): string {
+  if (assetType === 'etf') return ETF_NAME_BY_SYMBOL.get(symbol) ?? symbol;
+  return getLocalStockName(symbol) ?? symbol;
+}
+
+function getFilePath(assetType: DailyCsvAssetType, symbol: string): string {
+  return assetType === 'etf'
+    ? getLocalEtfDailyCsvPath(symbol)
+    : getLocalStockDailyCsvPath(symbol);
+}
+
+export async function updateDailyCsvPool(options: {
+  assetType: DailyCsvAssetType;
   days?: number;
   symbols?: string[];
-}): Promise<EtfDailyUpdateResult> {
-  const days = Math.max(5, Math.floor(options?.days ?? 30));
-  const wanted = options?.symbols ? new Set(options.symbols.map((item) => item.trim())) : null;
-  const items: EtfDailyUpdateItem[] = [];
+  includeLocal?: boolean;
+  includeActive?: boolean;
+  maxSymbols?: number;
+  delayMs?: number;
+}): Promise<DailyCsvUpdateResult> {
+  const days = Math.max(5, Math.floor(options.days ?? 30));
+  const maxSymbols =
+    options.maxSymbols ??
+    (options.assetType === 'etf'
+      ? envNumber('ETF_DAILY_CSV_MAX_SYMBOLS')
+      : envNumber('STOCK_DAILY_CSV_MAX_SYMBOLS'));
+  const symbols = await resolveSymbols({ ...options, maxSymbols });
+  const delayMs = resolveDelayMs(options.assetType, options.delayMs);
+  const items: DailyCsvUpdateItem[] = [];
 
-  for (const etf of ETF_POOL_19) {
-    if (wanted && !wanted.has(etf.symbol)) continue;
-
-    const filePath = getLocalEtfDailyCsvPath(etf.symbol);
-    const item: EtfDailyUpdateItem = {
-      symbol: etf.symbol,
-      name: etf.name,
+  for (const [index, symbol] of symbols.entries()) {
+    const filePath = getFilePath(options.assetType, symbol);
+    const item: DailyCsvUpdateItem = {
+      assetType: options.assetType,
+      symbol,
+      name: getName(options.assetType, symbol),
       path: filePath,
       beforeRows: 0,
       afterRows: 0,
@@ -226,13 +367,13 @@ export async function updateEtfDailyCsvPool(options?: {
     };
 
     try {
-      const existing = readExistingRows(filePath, etf.symbol);
+      const existing = readExistingRows(filePath, symbol);
       item.beforeRows = existing.length;
-      const { quotes } = await fetchDailyKlines(etf.symbol, days, {
+      const { quotes } = await fetchDailyKlines(symbol, days, {
         forceRefresh: true,
       });
       const merged = mergeRows({
-        symbol: etf.symbol,
+        symbol,
         existing,
         fetched: quotes,
       });
@@ -247,9 +388,13 @@ export async function updateEtfDailyCsvPool(options?: {
     }
 
     items.push(item);
+    if (delayMs > 0 && index < symbols.length - 1) {
+      await delay(delayMs);
+    }
   }
 
   return {
+    assetType: options.assetType,
     tradeDate: items.map((item) => item.latestDate).filter(Boolean).sort().at(-1) ?? '',
     updatedAt: new Date().toISOString(),
     items,
@@ -259,7 +404,33 @@ export async function updateEtfDailyCsvPool(options?: {
   };
 }
 
+export async function updateEtfDailyCsvPool(options?: {
+  days?: number;
+  symbols?: string[];
+  includeLocal?: boolean;
+  maxSymbols?: number;
+  delayMs?: number;
+}): Promise<EtfDailyUpdateResult> {
+  return updateDailyCsvPool({
+    assetType: 'etf',
+    ...options,
+  });
+}
+
+export async function updateStockDailyCsvPool(options?: {
+  days?: number;
+  symbols?: string[];
+  includeLocal?: boolean;
+  includeActive?: boolean;
+  maxSymbols?: number;
+  delayMs?: number;
+}): Promise<DailyCsvUpdateResult> {
+  return updateDailyCsvPool({
+    assetType: 'stock',
+    ...options,
+  });
+}
+
 export const __privateEtfDailyUpdate = {
   mergeRows,
-  serializeRows,
 };
