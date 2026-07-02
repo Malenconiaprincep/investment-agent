@@ -174,6 +174,10 @@ export type BacktestRunConfig = {
   entryMa20ExtensionBlockedCount?: number;
   maxEntryChecklistScore?: number;
   entryChecklistBlockedCount?: number;
+  weakMomentumNoEntryMinBenchmarkMomentum20Pct?: number;
+  weakMomentumNoEntryMaxBenchmarkMomentum20Pct?: number;
+  weakMomentumNoEntryBlockedCount?: number;
+  enrichedRiskNameBlockedCount?: number;
   momentumMaxHoldDays?: number;
   weakMomentumMaxHoldDays?: number;
   weakMomentumMaxHoldBenchmarkMomentum20Pct?: number;

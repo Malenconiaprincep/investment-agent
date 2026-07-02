@@ -50,6 +50,23 @@ describe('portfolio filter', () => {
     );
     expect(filtered).toHaveLength(3);
   });
+
+  it('can reserve rejected slots to avoid lower-quality backfills', () => {
+    const filtered = filterTradesByPortfolioRules(
+      [
+        trade({ symbol: '510300', entryDate: '20260101', exitDate: '20260110' }),
+        trade({ symbol: '512880', entryDate: '20260102', exitDate: '20260110' }),
+        trade({ symbol: '512760', entryDate: '20260103', exitDate: '20260110' }),
+      ],
+      {
+        maxConcurrent: 2,
+        noSymbolOverlap: true,
+        reserveRejectedSlots: true,
+        rejectTrade: (item) => item.symbol === '510300',
+      },
+    );
+    expect(filtered.map((item) => item.symbol)).toEqual(['512880']);
+  });
 });
 
 describe('portfolio ledger', () => {

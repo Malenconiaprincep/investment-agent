@@ -96,6 +96,8 @@ export type RunDiamondBacktestInput = {
   momentumMaxHoldDays?: number;
   weakMomentumMaxHoldDays?: number;
   weakMomentumMaxHoldBenchmarkMomentum20Pct?: number;
+  weakMomentumNoEntryMinBenchmarkMomentum20Pct?: number;
+  weakMomentumNoEntryMaxBenchmarkMomentum20Pct?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
 };
@@ -133,6 +135,8 @@ const DEFAULT_MAX_DELAYED_ENTRY_DRIFT_PCT = 3;
 const DEFAULT_DELAYED_ENTRY_DRIFT_FILTER_MAX_BENCHMARK_MOMENTUM20_PCT = 3;
 const DEFAULT_WEAK_MOMENTUM_MAX_HOLD_DAYS = 4;
 const DEFAULT_WEAK_MOMENTUM_MAX_HOLD_BENCHMARK_MOMENTUM20_PCT = 3;
+const DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MIN_BENCHMARK_MOMENTUM20_PCT = 0;
+const DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MAX_BENCHMARK_MOMENTUM20_PCT = 2;
 
 type StockMarketFilterMode = NonNullable<RunDiamondBacktestInput['stockMarketFilter']>;
 
@@ -365,11 +369,17 @@ function toSignal(
   };
 }
 
-async function enrichTradeNames(trades: BacktestTrade[]): Promise<BacktestTrade[]> {
+async function enrichTradeNames(
+  trades: BacktestTrade[],
+  options: { refreshExisting?: boolean } = {},
+): Promise<BacktestTrade[]> {
   const missingNameSymbols = [
     ...new Set(
       trades
-        .filter((trade) => !trade.name || trade.name === trade.symbol)
+        .filter(
+          (trade) =>
+            options.refreshExisting || !trade.name || trade.name === trade.symbol,
+        )
         .map((trade) => trade.symbol),
     ),
   ];
@@ -379,9 +389,8 @@ async function enrichTradeNames(trades: BacktestTrade[]): Promise<BacktestTrade[
   if (quotes.size === 0) return trades;
 
   return trades.map((trade) => {
-    if (trade.name && trade.name !== trade.symbol) return trade;
     const name = quotes.get(trade.symbol)?.name?.trim();
-    if (!name || name === trade.symbol) return trade;
+    if (!name || (!options.refreshExisting && name === trade.symbol)) return trade;
     return {
       ...trade,
       name,
@@ -409,9 +418,34 @@ function ma5At(bars: OhlcvBar[]): number | null {
   return sma(closes, 5);
 }
 
-function isRiskyStockName(name: string): boolean {
-  const normalized = name.trim().toUpperCase();
-  return normalized.includes('ST') || /退/.test(normalized);
+function isRiskyStockName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const normalized = name
+    .normalize('NFKC')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s.*＊·]+/g, '');
+  return normalized.includes('ST') || /退|风险警示/.test(normalized);
+}
+
+function tradeHasRiskyStockName(trade: BacktestTrade): boolean {
+  return isRiskyStockName(trade.name) || isRiskyStockName(trade.signal.name);
+}
+
+function isWeakMomentumNoEntryBand(input: {
+  momentum20Pct: number | null | undefined;
+  minPct: number | undefined;
+  maxPct: number | undefined;
+}): boolean {
+  if (
+    input.momentum20Pct == null ||
+    input.minPct == null ||
+    input.maxPct == null ||
+    input.minPct > input.maxPct
+  ) {
+    return false;
+  }
+  return input.momentum20Pct >= input.minPct && input.momentum20Pct <= input.maxPct;
 }
 
 function avgTurnoverAmountAt(
@@ -827,6 +861,20 @@ export async function runDiamondBacktest(
       : strategy === 'red-diamond-momentum'
         ? DEFAULT_WEAK_MOMENTUM_MAX_HOLD_BENCHMARK_MOMENTUM20_PCT
         : undefined;
+  const weakMomentumNoEntryMinBenchmarkMomentum20Pct =
+    input.weakMomentumNoEntryMinBenchmarkMomentum20Pct != null &&
+    Number.isFinite(input.weakMomentumNoEntryMinBenchmarkMomentum20Pct)
+      ? input.weakMomentumNoEntryMinBenchmarkMomentum20Pct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MIN_BENCHMARK_MOMENTUM20_PCT
+        : undefined;
+  const weakMomentumNoEntryMaxBenchmarkMomentum20Pct =
+    input.weakMomentumNoEntryMaxBenchmarkMomentum20Pct != null &&
+    Number.isFinite(input.weakMomentumNoEntryMaxBenchmarkMomentum20Pct)
+      ? input.weakMomentumNoEntryMaxBenchmarkMomentum20Pct
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_WEAK_MOMENTUM_NO_ENTRY_MAX_BENCHMARK_MOMENTUM20_PCT
+        : undefined;
   const newsTimeline: BacktestNewsLoadResult =
     newsFilter === 'off'
       ? { news: [], sources: [] as string[] }
@@ -850,6 +898,8 @@ export async function runDiamondBacktest(
   let delayedEntryDriftBlockedCount = 0;
   let entryMa20ExtensionBlockedCount = 0;
   let entryChecklistBlockedCount = 0;
+  let weakMomentumNoEntryBlockedCount = 0;
+  let enrichedRiskNameBlockedCount = 0;
 
   for (const symbol of universeSymbols) {
     const code = symbol.symbol.trim();
@@ -1093,15 +1143,49 @@ export async function runDiamondBacktest(
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
   });
+  const namedPrePortfolioTrades =
+    strategy === 'red-diamond-momentum'
+      ? await enrichTradeNames(sortedTrades, { refreshExisting: true })
+      : sortedTrades;
   const portfolioTrades =
     strategy === 'red-diamond-momentum'
-      ? filterTradesByPortfolioRules(sortedTrades, {
+      ? filterTradesByPortfolioRules(namedPrePortfolioTrades, {
           maxConcurrent: maxConcurrentPositions,
           noSymbolOverlap,
+          reserveRejectedSlots: true,
+          rejectTrade: (trade) => {
+            if (excludeRiskyStockNames && tradeHasRiskyStockName(trade)) {
+              enrichedRiskNameBlockedCount += 1;
+              return true;
+            }
+            if (
+              isWeakMomentumNoEntryBand({
+                momentum20Pct:
+                  typeof trade.signal.metadata?.benchmarkMomentum20Pct === 'number'
+                    ? trade.signal.metadata.benchmarkMomentum20Pct
+                    : null,
+                minPct: weakMomentumNoEntryMinBenchmarkMomentum20Pct,
+                maxPct: weakMomentumNoEntryMaxBenchmarkMomentum20Pct,
+              })
+            ) {
+              weakMomentumNoEntryBlockedCount += 1;
+              return true;
+            }
+            return false;
+          },
         })
-      : sortedTrades;
-  const portfolioSkippedCount = sortedTrades.length - portfolioTrades.length;
-  const namedTrades = await enrichTradeNames(portfolioTrades);
+      : namedPrePortfolioTrades;
+  const portfolioSkippedCount = Math.max(
+    0,
+    namedPrePortfolioTrades.length -
+      portfolioTrades.length -
+      enrichedRiskNameBlockedCount -
+      weakMomentumNoEntryBlockedCount,
+  );
+  const namedTrades =
+    strategy === 'red-diamond-momentum'
+      ? portfolioTrades
+      : await enrichTradeNames(portfolioTrades);
   const portfolioLedger = buildPortfolioLedger(namedTrades, {
     slots: maxConcurrentPositions,
     initialCapital,
@@ -1185,6 +1269,16 @@ export async function runDiamondBacktest(
         strategy === 'red-diamond-momentum'
           ? entryChecklistBlockedCount
           : undefined,
+      weakMomentumNoEntryMinBenchmarkMomentum20Pct,
+      weakMomentumNoEntryMaxBenchmarkMomentum20Pct,
+      weakMomentumNoEntryBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? weakMomentumNoEntryBlockedCount
+          : undefined,
+      enrichedRiskNameBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? enrichedRiskNameBlockedCount
+          : undefined,
       momentumMaxHoldDays:
         strategy === 'red-diamond-momentum'
           ? momentumMaxHoldDays
@@ -1213,7 +1307,13 @@ export async function runDiamondBacktest(
             weakMomentumMaxHoldBenchmarkMomentum20Pct != null
               ? `退出策略：默认最多持有 ${momentumMaxHoldDays} 个交易日；当沪深300 20 日动量不高于 ${weakMomentumMaxHoldBenchmarkMomentum20Pct}% 时，最多持有 ${weakMomentumMaxHoldDays} 个交易日。期间按 -${Math.round(stopLossPct * 100)}% 硬止损和 +${Math.round(takeProfitPct * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化。`
               : `退出策略：从真实入场日开始最多持有 ${momentumMaxHoldDays} 个交易日，期间按 -${Math.round(stopLossPct * 100)}% 硬止损和 +${Math.round(takeProfitPct * 100)}% 止盈保护提前出场，到期再检查 MA20/信号弱化。`,
-            `质量过滤：${excludeRiskyStockNames ? '排除 ST/退市风险名称' : '不排除风险名称'}；${minEntryPrice > 0 ? `最低入场价 ${minEntryPrice} 元` : '不启用最低价格硬过滤'}，${minAvgTurnoverAmount > 0 ? `近 5 日平均成交额不低于 ${Math.round(minAvgTurnoverAmount / 10_000)} 万元` : '不启用成交额硬过滤'}。`,
+            weakMomentumNoEntryMinBenchmarkMomentum20Pct != null &&
+            weakMomentumNoEntryMaxBenchmarkMomentum20Pct != null &&
+            weakMomentumNoEntryMinBenchmarkMomentum20Pct <=
+              weakMomentumNoEntryMaxBenchmarkMomentum20Pct
+              ? `弱动量降频：沪深300 20 日动量位于 ${weakMomentumNoEntryMinBenchmarkMomentum20Pct}% 至 ${weakMomentumNoEntryMaxBenchmarkMomentum20Pct}% 时暂停新开股票仓。`
+              : undefined,
+            `质量过滤：${excludeRiskyStockNames ? '排除 ST/退市/风险警示名称，并在行情名称补全后进入组合前复查' : '不排除风险名称'}；${minEntryPrice > 0 ? `最低入场价 ${minEntryPrice} 元` : '不启用最低价格硬过滤'}，${minAvgTurnoverAmount > 0 ? `近 5 日平均成交额不低于 ${Math.round(minAvgTurnoverAmount / 10_000)} 万元` : '不启用成交额硬过滤'}。`,
             stockMarketFilter === 'off'
               ? '大盘状态过滤已关闭；可用 --market-filter=require_bullish 仅在沪深300强势时新开股票仓。'
               : stockMarketFilter === 'require_bullish'
@@ -1226,7 +1326,7 @@ export async function runDiamondBacktest(
             defensiveBenchmarkMomentum20Pct > 0
               ? `自适应防守阈值：沪深300未满足 MA60 中期强势时，20 日动量需不低于 ${defensiveBenchmarkMomentum20Pct}%。`
               : undefined,
-            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始红钻信号 ${rawSignalCount} 个，T+2 未形成可交易入场 ${delayedEntrySkippedCount} 个，T+2 涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，T+2 过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
+            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始红钻信号 ${rawSignalCount} 个，T+2 未形成可交易入场 ${delayedEntrySkippedCount} 个，T+2 涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，T+2 过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，弱动量暂停新仓 ${weakMomentumNoEntryBlockedCount} 个，补全名称后风险过滤 ${enrichedRiskNameBlockedCount} 笔，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
             newsFilter === 'off'
               ? '股票新闻过滤默认关闭；可用 --news-filter=avoid_bearish 回测买入前近端新闻利空拦截，或 --news-filter=require_bullish 要求相关新闻净分为正。'
               : newsFilter === 'require_bullish'

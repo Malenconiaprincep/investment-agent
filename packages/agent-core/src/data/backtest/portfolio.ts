@@ -31,6 +31,8 @@ function readTradePricePath(trade: BacktestTrade): Map<string, number> {
 export type PortfolioFilterOptions = {
   maxConcurrent: number;
   noSymbolOverlap: boolean;
+  rejectTrade?: (trade: BacktestTrade) => boolean;
+  reserveRejectedSlots?: boolean;
 };
 
 export type PortfolioLedger = {
@@ -73,6 +75,13 @@ export function filterTradesByPortfolioRules(
       continue;
     }
     if (open.length >= maxConcurrent) continue;
+
+    if (options.rejectTrade?.(trade)) {
+      if (options.reserveRejectedSlots) {
+        open.push({ symbol: trade.symbol, exitDate: trade.exitDate });
+      }
+      continue;
+    }
 
     accepted.push(trade);
     open.push({ symbol: trade.symbol, exitDate: trade.exitDate });
