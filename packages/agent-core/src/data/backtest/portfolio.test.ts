@@ -70,6 +70,43 @@ describe('portfolio filter', () => {
 });
 
 describe('portfolio ledger', () => {
+  it('sizes A-share positions by whole 100-share lots and keeps leftover cash', () => {
+    const ledger = buildPortfolioLedger(
+      [
+        trade({
+          symbol: '000001',
+          assetType: 'stock',
+          entryDate: '20260101',
+          entryPrice: 57.5,
+          exitDate: '20260103',
+          exitPrice: 60,
+          returnPct: 4.3478,
+          signal: {
+            symbol: '000001',
+            name: '平安银行',
+            assetType: 'stock',
+            strategy: 'red-diamond-momentum',
+            tradeDate: '20260101',
+            entryPrice: 57.5,
+            metadata: {
+              pricePath: [
+                { tradeDate: '20260101', close: 57.5 },
+                { tradeDate: '20260102', close: 60 },
+                { tradeDate: '20260103', close: 60 },
+              ],
+            },
+          },
+        }),
+      ],
+      { slots: 1, initialCapital: 10_000 },
+    );
+
+    expect(ledger.snapshots[0]?.cash).toBe(4250);
+    expect(ledger.snapshots[0]?.positions[0]?.shares).toBe(100);
+    expect(ledger.snapshots[0]?.positions[0]?.costAmount).toBe(5750);
+    expect(ledger.snapshots[1]?.totalValue).toBe(10_250);
+  });
+
   it('marks open positions to market with the daily price path', () => {
     const ledger = buildPortfolioLedger(
       [

@@ -9,6 +9,30 @@ function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
 }
 
+const A_SHARE_LOT_SIZE = 100;
+
+function lotSizeForAsset(assetType: BacktestTrade['assetType']): number {
+  return assetType === 'stock' || assetType === 'etf' ? A_SHARE_LOT_SIZE : 1;
+}
+
+function calcPositionSize(input: {
+  assetType: BacktestTrade['assetType'];
+  budget: number;
+  price: number;
+}): { shares: number; costAmount: number } | null {
+  if (input.budget <= 0 || input.price <= 0) return null;
+
+  const lotSize = lotSizeForAsset(input.assetType);
+  const lots = Math.floor(input.budget / (input.price * lotSize));
+  const shares = lots * lotSize;
+  if (!Number.isFinite(shares) || shares <= 0) return null;
+
+  return {
+    shares,
+    costAmount: shares * input.price,
+  };
+}
+
 function readTradePricePath(trade: BacktestTrade): Map<string, number> {
   const raw = trade.signal.metadata?.pricePath;
   if (!Array.isArray(raw)) return new Map();
@@ -233,14 +257,19 @@ export function buildPortfolioLedger(
       const remainingEntries = entries.length - index;
       const remainingSlots = Math.max(1, slotCount - active.size);
       const slotsToFill = Math.min(remainingEntries, remainingSlots);
-      const costAmount = cash / slotsToFill;
-      if (costAmount <= 0 || trade.entryPrice <= 0) continue;
-      cash -= costAmount;
+      const targetBudget = cash / slotsToFill;
+      const positionSize = calcPositionSize({
+        assetType: trade.assetType,
+        budget: targetBudget,
+        price: trade.entryPrice,
+      });
+      if (!positionSize) continue;
+      cash -= positionSize.costAmount;
       active.set(`${trade.symbol}-${trade.entryDate}`, {
         trade,
-        costAmount,
-        shares: costAmount / trade.entryPrice,
-        marketValue: costAmount,
+        costAmount: positionSize.costAmount,
+        shares: positionSize.shares,
+        marketValue: positionSize.costAmount,
         lastPrice: trade.entryPrice,
         priceByDate: readTradePricePath(trade),
       });

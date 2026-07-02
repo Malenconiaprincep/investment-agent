@@ -86,6 +86,7 @@ const BEAR_REGIME_MAX_EXPOSURE = 0.25;
 const BULL_BENCHMARK_SLOT_MOMENTUM_PCT = 8;
 const BULL_BENCHMARK_SLOT_COUNT = 1;
 const DEFAULT_MAX_PER_THEME = 2;
+const ETF_LOT_SIZE = 100;
 
 const ETF_THEME_BY_SYMBOL: Record<string, string> = {
   '512880': 'brokerage',
@@ -363,12 +364,20 @@ function buyShares(input: {
   price: number;
   commissionRate: number;
   slippageRate: number;
+  initialCapital: number;
 }): { shares: number; spent: number } | null {
-  if (input.cash <= 0 || input.price <= 0) return null;
+  if (input.cash <= 0 || input.price <= 0 || input.initialCapital <= 0) return null;
   const adjustedPrice = input.price * (1 + input.slippageRate);
-  const shares = input.cash / (adjustedPrice * (1 + input.commissionRate));
-  if (!Number.isFinite(shares) || shares <= 0) return null;
-  return { shares, spent: input.cash };
+  const actualBudget = input.cash * input.initialCapital;
+  const actualCostPerLot = adjustedPrice * (1 + input.commissionRate) * ETF_LOT_SIZE;
+  const lots = Math.floor(actualBudget / actualCostPerLot);
+  const actualShares = lots * ETF_LOT_SIZE;
+  if (!Number.isFinite(actualShares) || actualShares <= 0) return null;
+
+  return {
+    shares: actualShares / input.initialCapital,
+    spent: (actualShares * adjustedPrice * (1 + input.commissionRate)) / input.initialCapital,
+  };
 }
 
 function sellProceeds(input: {
@@ -886,15 +895,23 @@ function simulateDailyPortfolio(input: {
 
       for (const slot of targetSlots) {
         const entryBar = slot.history.byDate.get(tradeDate);
-        if (!entryBar || slotBudget <= 0) continue;
+        if (!entryBar || slotBudget <= 0) {
+          cash += slotBudget;
+          continue;
+        }
 
         const bought = buyShares({
           cash: slotBudget,
           price: entryBar.close,
           commissionRate: input.commissionRate,
           slippageRate: input.slippageRate,
+          initialCapital: input.initialCapital,
         });
-        if (!bought) continue;
+        if (!bought) {
+          cash += slotBudget;
+          continue;
+        }
+        cash += Math.max(0, slotBudget - bought.spent);
 
         positions.push({
           symbol: slot.history.symbol,
