@@ -25,7 +25,7 @@ import {
   readRecentScheduledTaskLogs,
   listScheduledTaskLogTradeDates,
 } from '../data/schedulers/scheduled-task-log.js';
-import { runStockDailyMarketDataSyncManually } from '../data/schedulers/daily-tasks-background.js';
+import { runStockDailyCsvUpdateManually } from '../data/schedulers/daily-tasks-background.js';
 
 const app = new Hono();
 
@@ -131,12 +131,41 @@ app.post('/scheduler/tasks/stock-daily-csv-update/run', async (c) => {
   if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
 
   try {
-    const result = await runStockDailyMarketDataSyncManually();
+    const result = await runStockDailyCsvUpdateManually();
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonError(message, 500);
   }
+});
+
+app.post('/scheduler/tasks/stock-daily-csv-update/stream', async (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+
+  applySseHeaders(c);
+  return stream(c, async (s) => {
+    await s.write(': stream-open\n\n');
+    try {
+      const outcome = await runStockDailyCsvUpdateManually({
+        onProgress: async (event) => {
+          await s.write(sseLine(event));
+        },
+      });
+      await s.write(
+        sseLine({
+          type: 'complete',
+          result: outcome,
+        }),
+      );
+    } catch (error) {
+      await s.write(
+        sseLine({
+          type: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  });
 });
 
 app.get('/scheduler/logs', (c) => {

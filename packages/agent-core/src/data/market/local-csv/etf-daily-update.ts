@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { ETF_POOL_19 } from '../../etf/pool.js';
 import { isEtfSymbol, isStockSymbol } from '../asset-type.js';
@@ -55,8 +61,48 @@ export type DailyCsvUpdateResult = {
   errors: number;
 };
 
+export type DailyCsvUpdateProgressEvent =
+  | {
+      type: 'start';
+      assetType: DailyCsvAssetType;
+      total: number;
+      days: number;
+      retryRounds: number;
+    }
+  | {
+      type: 'round';
+      assetType: DailyCsvAssetType;
+      round: number;
+      retryRounds: number;
+      pending: number;
+      total: number;
+      processed: number;
+    }
+  | {
+      type: 'item';
+      assetType: DailyCsvAssetType;
+      round: number;
+      retryRounds: number;
+      total: number;
+      processed: number;
+      pending: number;
+      item: DailyCsvUpdateItem;
+      final: boolean;
+    }
+  | {
+      type: 'done';
+      assetType: DailyCsvAssetType;
+      total: number;
+      processed: number;
+      result: DailyCsvUpdateResult;
+    };
+
 export type EtfDailyUpdateItem = DailyCsvUpdateItem;
 export type EtfDailyUpdateResult = DailyCsvUpdateResult;
+
+type DailyCsvUpdateProgressHandler = (
+  event: DailyCsvUpdateProgressEvent,
+) => void | Promise<void>;
 
 const ETF_NAME_BY_SYMBOL = new Map(ETF_POOL_19.map((item) => [item.symbol, item.name]));
 
@@ -219,6 +265,13 @@ function serializeRows(rows: DailyCsvRow[]): string {
   return `${DAILY_HEADER}\n${body}\n`;
 }
 
+function writeDailyCsvAtomic(filePath: string, content: string): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.tmp-${process.pid}`;
+  writeFileSync(tempPath, content, 'utf-8');
+  renameSync(tempPath, filePath);
+}
+
 function envFlag(name: string, fallback: boolean): boolean {
   const raw = process.env[name]?.trim().toLowerCase();
   if (!raw) return fallback;
@@ -263,6 +316,38 @@ function resolveRetryCount(input?: number): number {
   );
 }
 
+function resolveRetryRounds(assetType: DailyCsvAssetType, input?: number): number {
+  const fromEnv =
+    assetType === 'etf'
+      ? envNumber('ETF_DAILY_CSV_RETRY_ROUNDS')
+      : envNumber('STOCK_DAILY_CSV_RETRY_ROUNDS');
+  return Math.max(
+    1,
+    Math.floor(
+      input ??
+        fromEnv ??
+        envNumber('DAILY_CSV_UPDATE_RETRY_ROUNDS') ??
+        (assetType === 'stock' ? 3 : 1),
+    ),
+  );
+}
+
+function resolveRetryRoundDelayMs(assetType: DailyCsvAssetType, input?: number): number {
+  const fromEnv =
+    assetType === 'etf'
+      ? envNumber('ETF_DAILY_CSV_RETRY_ROUND_DELAY_MS')
+      : envNumber('STOCK_DAILY_CSV_RETRY_ROUND_DELAY_MS');
+  return Math.max(
+    0,
+    Math.floor(
+      input ??
+        fromEnv ??
+        envNumber('DAILY_CSV_UPDATE_RETRY_ROUND_DELAY_MS') ??
+        5_000,
+    ),
+  );
+}
+
 function resolveTimeoutMs(input?: number): number {
   return Math.max(
     1_000,
@@ -298,6 +383,58 @@ async function fetchDailyKlinesWithRetry(input: {
   }
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function updateDailyCsvSymbol(input: {
+  assetType: DailyCsvAssetType;
+  symbol: string;
+  days: number;
+  retryCount: number;
+  delayMs: number;
+  timeoutMs: number;
+  previousAttempts?: number;
+}): Promise<DailyCsvUpdateItem> {
+  const filePath = getFilePath(input.assetType, input.symbol);
+  const item: DailyCsvUpdateItem = {
+    assetType: input.assetType,
+    symbol: input.symbol,
+    name: getName(input.assetType, input.symbol),
+    path: filePath,
+    attempts: input.previousAttempts ?? 0,
+    beforeRows: 0,
+    afterRows: 0,
+    addedRows: 0,
+    updatedRows: 0,
+    latestDate: null,
+  };
+
+  try {
+    const existing = readExistingRows(filePath, input.symbol);
+    item.beforeRows = existing.length;
+    const { quotes, attempts } = await fetchDailyKlinesWithRetry({
+      symbol: input.symbol,
+      days: input.days,
+      retryCount: input.retryCount,
+      retryDelayMs: input.delayMs,
+      timeoutMs: input.timeoutMs,
+    });
+    item.attempts += attempts;
+    const merged = mergeRows({
+      symbol: input.symbol,
+      existing,
+      fetched: quotes,
+    });
+    writeDailyCsvAtomic(filePath, serializeRows(merged.rows));
+    item.afterRows = merged.rows.length;
+    item.addedRows = merged.addedRows;
+    item.updatedRows = merged.updatedRows;
+    item.latestDate = merged.rows.at(-1)?.tradeDate ?? null;
+  } catch (error) {
+    item.attempts += input.retryCount + 1;
+    item.error = error instanceof Error ? error.message : String(error);
+  }
+
+  return item;
 }
 
 async function collectActiveStockSymbols(): Promise<string[]> {
@@ -387,7 +524,10 @@ export async function updateDailyCsvPool(options: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  retryRounds?: number;
+  retryRoundDelayMs?: number;
   timeoutMs?: number;
+  onProgress?: DailyCsvUpdateProgressHandler;
 }): Promise<DailyCsvUpdateResult> {
   const days = Math.max(5, Math.floor(options.days ?? 30));
   const maxSymbols =
@@ -398,58 +538,89 @@ export async function updateDailyCsvPool(options: {
   const symbols = await resolveSymbols({ ...options, maxSymbols });
   const delayMs = resolveDelayMs(options.assetType, options.delayMs);
   const retryCount = resolveRetryCount(options.retryCount);
+  const retryRounds = resolveRetryRounds(options.assetType, options.retryRounds);
+  const retryRoundDelayMs = resolveRetryRoundDelayMs(
+    options.assetType,
+    options.retryRoundDelayMs,
+  );
   const timeoutMs = resolveTimeoutMs(options.timeoutMs);
-  const items: DailyCsvUpdateItem[] = [];
+  const itemsBySymbol = new Map<string, DailyCsvUpdateItem>();
+  const finalSymbols = new Set<string>();
+  let pendingSymbols = symbols;
 
-  for (const [index, symbol] of symbols.entries()) {
-    const filePath = getFilePath(options.assetType, symbol);
-    const item: DailyCsvUpdateItem = {
+  await options.onProgress?.({
+    type: 'start',
+    assetType: options.assetType,
+    total: symbols.length,
+    days,
+    retryRounds,
+  });
+
+  for (
+    let round = 1;
+    round <= retryRounds && pendingSymbols.length > 0;
+    round += 1
+  ) {
+    const failedSymbols: string[] = [];
+
+    await options.onProgress?.({
+      type: 'round',
       assetType: options.assetType,
-      symbol,
-      name: getName(options.assetType, symbol),
-      path: filePath,
-      attempts: 0,
-      beforeRows: 0,
-      afterRows: 0,
-      addedRows: 0,
-      updatedRows: 0,
-      latestDate: null,
-    };
+      round,
+      retryRounds,
+      pending: pendingSymbols.length,
+      total: symbols.length,
+      processed: finalSymbols.size,
+    });
 
-    try {
-      const existing = readExistingRows(filePath, symbol);
-      item.beforeRows = existing.length;
-      const { quotes, attempts } = await fetchDailyKlinesWithRetry({
+    for (const [index, symbol] of pendingSymbols.entries()) {
+      const item = await updateDailyCsvSymbol({
+        assetType: options.assetType,
         symbol,
         days,
         retryCount,
-        retryDelayMs: delayMs,
+        delayMs,
         timeoutMs,
+        previousAttempts: itemsBySymbol.get(symbol)?.attempts,
       });
-      item.attempts = attempts;
-      const merged = mergeRows({
-        symbol,
-        existing,
-        fetched: quotes,
+
+      itemsBySymbol.set(symbol, item);
+      const final = !item.error || round === retryRounds;
+      if (item.error) failedSymbols.push(symbol);
+      if (final) finalSymbols.add(symbol);
+
+      await options.onProgress?.({
+        type: 'item',
+        assetType: options.assetType,
+        round,
+        retryRounds,
+        total: symbols.length,
+        processed: finalSymbols.size,
+        pending: Math.max(0, pendingSymbols.length - index - 1),
+        item,
+        final,
       });
-      mkdirSync(path.dirname(filePath), { recursive: true });
-      writeFileSync(filePath, serializeRows(merged.rows), 'utf-8');
-      item.afterRows = merged.rows.length;
-      item.addedRows = merged.addedRows;
-      item.updatedRows = merged.updatedRows;
-      item.latestDate = merged.rows.at(-1)?.tradeDate ?? null;
-    } catch (error) {
-      item.attempts = retryCount + 1;
-      item.error = error instanceof Error ? error.message : String(error);
+
+      if (delayMs > 0 && index < pendingSymbols.length - 1) {
+        await delay(delayMs);
+      }
     }
 
-    items.push(item);
-    if (delayMs > 0 && index < symbols.length - 1) {
-      await delay(delayMs);
+    pendingSymbols = failedSymbols;
+    if (
+      pendingSymbols.length > 0 &&
+      round < retryRounds &&
+      retryRoundDelayMs > 0
+    ) {
+      await delay(retryRoundDelayMs);
     }
   }
 
-  return {
+  const items = symbols
+    .map((symbol) => itemsBySymbol.get(symbol))
+    .filter((item): item is DailyCsvUpdateItem => Boolean(item));
+
+  const result = {
     assetType: options.assetType,
     tradeDate: items.map((item) => item.latestDate).filter(Boolean).sort().at(-1) ?? '',
     updatedAt: new Date().toISOString(),
@@ -458,6 +629,16 @@ export async function updateDailyCsvPool(options: {
     updatedRows: items.reduce((sum, item) => sum + item.updatedRows, 0),
     errors: items.filter((item) => item.error).length,
   };
+
+  await options.onProgress?.({
+    type: 'done',
+    assetType: options.assetType,
+    total: symbols.length,
+    processed: finalSymbols.size,
+    result,
+  });
+
+  return result;
 }
 
 export async function updateEtfDailyCsvPool(options?: {
@@ -467,7 +648,10 @@ export async function updateEtfDailyCsvPool(options?: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  retryRounds?: number;
+  retryRoundDelayMs?: number;
   timeoutMs?: number;
+  onProgress?: DailyCsvUpdateProgressHandler;
 }): Promise<EtfDailyUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'etf',
@@ -483,7 +667,10 @@ export async function updateStockDailyCsvPool(options?: {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  retryRounds?: number;
+  retryRoundDelayMs?: number;
   timeoutMs?: number;
+  onProgress?: DailyCsvUpdateProgressHandler;
 }): Promise<DailyCsvUpdateResult> {
   return updateDailyCsvPool({
     assetType: 'stock',

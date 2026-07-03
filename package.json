@@ -47,6 +47,7 @@
     "etf:tail-pick": "pnpm --filter @investment-agent/agent-core etf:tail-pick",
     "etf:tail-schedule": "pnpm --filter @investment-agent/agent-core etf:tail-schedule",
     "etf:update-daily": "pnpm --filter @investment-agent/agent-core etf:update-daily",
+    "stock:update-daily": "pnpm --filter @investment-agent/agent-core stock:update-daily",
     "market-data:sync": "pnpm --filter @investment-agent/agent-core market-data:sync",
     "backtest": "pnpm --filter @investment-agent/agent-core backtest",
     "backtest:stock-news": "pnpm --filter @investment-agent/agent-core backtest:stock-news",

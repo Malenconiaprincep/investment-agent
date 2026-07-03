@@ -25,7 +25,9 @@ import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 import {
   type DailyCsvUpdateResult,
+  type DailyCsvUpdateProgressEvent,
   updateEtfDailyCsvPool,
+  updateStockDailyCsvPool,
 } from '../market/local-csv/etf-daily-update.js';
 import {
   resolveMarketDataSyncOptions,
@@ -72,6 +74,16 @@ export type StockDailyMarketDataSyncRunResult = {
   finishedAt: string;
   elapsedMs: number;
   result: MarketDataSyncResult;
+};
+
+export type StockDailyCsvUpdateRunResult = {
+  skipped: boolean;
+  reason?: string;
+  summary: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  result: DailyCsvUpdateResult;
 };
 
 const completedKeys = new Set<string>();
@@ -265,6 +277,10 @@ function marketDataSyncSummary(result: MarketDataSyncResult): string {
     : `百度网盘同步完成：导入 ${result.importedStockCsvFiles} 只 · 最新 ${result.sourceLatestTradeDate}`;
 }
 
+function dailyCsvUpdateSummary(result: DailyCsvUpdateResult): string {
+  return `标的 ${result.items.length} 只 · 新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只 · 最新 ${result.tradeDate || '-'}`;
+}
+
 export function runStockDailyMarketDataSync(input?: {
   label?: string;
   startedAt?: string;
@@ -307,6 +323,84 @@ export async function runStockDailyMarketDataSyncManually(input?: {
       tradeDate,
       status: outcome.skipped ? 'skipped' : 'completed',
       reason: outcome.skipped ? outcome.reason ?? '源数据未更新' : undefined,
+      summary: outcome.summary,
+      elapsedMs: outcome.elapsedMs,
+      source,
+      ranAt: outcome.startedAt,
+    });
+    return outcome;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendScheduledTaskLog({
+      taskId: STOCK_DAILY_SYNC_TASK_ID,
+      label: STOCK_DAILY_SYNC_LABEL,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      source,
+      ranAt: startedAt,
+    });
+    throw error;
+  }
+}
+
+export async function runStockDailyCsvUpdate(input?: {
+  label?: string;
+  startedAt?: string;
+  onProgress?: (event: DailyCsvUpdateProgressEvent) => void | Promise<void>;
+}): Promise<StockDailyCsvUpdateRunResult> {
+  const label = input?.label ?? STOCK_DAILY_SYNC_LABEL;
+  const startedAt = input?.startedAt ?? new Date().toISOString();
+  const result = await updateStockDailyCsvPool({
+    includeLocal: true,
+    includeActive: true,
+    onProgress: input?.onProgress,
+  });
+  const finishedAt = new Date().toISOString();
+  const elapsedMs = Date.parse(finishedAt) - Date.parse(startedAt);
+  appendDailyCsvUpdateLog({
+    label,
+    startedAt,
+    finishedAt,
+    elapsedMs,
+    result,
+  });
+  return {
+    skipped: result.items.length === 0 || result.errors === result.items.length,
+    reason:
+      result.items.length === 0
+        ? '没有找到需要更新的股票'
+        : result.errors === result.items.length
+          ? '股票日线全部更新失败'
+          : undefined,
+    summary: dailyCsvUpdateSummary(result),
+    startedAt,
+    finishedAt,
+    elapsedMs,
+    result,
+  };
+}
+
+export async function runStockDailyCsvUpdateManually(input?: {
+  source?: ScheduledTaskLogSource;
+  onProgress?: (event: DailyCsvUpdateProgressEvent) => void | Promise<void>;
+}): Promise<StockDailyCsvUpdateRunResult> {
+  const source = input?.source ?? 'manual';
+  const tradeDate = formatTradeDate(getBeijingNow());
+  const startedAt = new Date().toISOString();
+
+  try {
+    const outcome = await runStockDailyCsvUpdate({
+      startedAt,
+      onProgress: input?.onProgress,
+    });
+    appendScheduledTaskLog({
+      taskId: STOCK_DAILY_SYNC_TASK_ID,
+      label: STOCK_DAILY_SYNC_LABEL,
+      tradeDate,
+      status: outcome.skipped ? 'skipped' : 'completed',
+      reason: outcome.reason,
       summary: outcome.summary,
       elapsedMs: outcome.elapsedMs,
       source,
@@ -521,7 +615,7 @@ const DAILY_TASKS: DailyTaskDef[] = [
     hour: 17,
     minute: 0,
     run: async () => {
-      const outcome = runStockDailyMarketDataSync();
+      const outcome = await runStockDailyCsvUpdate();
       return {
         skipped: outcome.skipped,
         reason: outcome.reason,

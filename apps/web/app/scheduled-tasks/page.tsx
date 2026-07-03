@@ -25,6 +25,54 @@ type ScheduledTaskLogEntry = {
   elapsedMs?: number;
 };
 
+type StockUpdateItem = {
+  symbol: string;
+  name: string;
+  attempts: number;
+  addedRows: number;
+  updatedRows: number;
+  latestDate: string | null;
+  error?: string;
+};
+
+type StockUpdateProgress = {
+  running: boolean;
+  total: number;
+  processed: number;
+  pending: number;
+  round: number;
+  retryRounds: number;
+  addedRows: number;
+  updatedRows: number;
+  errors: number;
+  current?: string;
+  message: string;
+};
+
+type StockUpdateResult = {
+  items?: StockUpdateItem[];
+  addedRows?: number;
+  updatedRows?: number;
+  errors?: number;
+  tradeDate?: string;
+};
+
+type StockUpdateStreamEvent = {
+  type: string;
+  total?: number;
+  processed?: number;
+  pending?: number;
+  round?: number;
+  retryRounds?: number;
+  message?: string;
+  final?: boolean;
+  item?: StockUpdateItem;
+  result?: StockUpdateResult | {
+    result?: StockUpdateResult;
+    summary?: string;
+  };
+};
+
 const STATUS_LABEL: Record<ScheduledTaskLogEntry['status'], string> = {
   completed: '已完成',
   skipped: '已跳过',
@@ -62,6 +110,32 @@ function formatElapsed(ms?: number): string | null {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function getSseData(chunk: string): StockUpdateStreamEvent | null {
+  const data = chunk
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart())
+    .join('\n');
+  if (!data) return null;
+  try {
+    return JSON.parse(data) as StockUpdateStreamEvent;
+  } catch {
+    return null;
+  }
+}
+
+function isStockUpdateRunResult(
+  value: StockUpdateStreamEvent['result'],
+): value is { result?: StockUpdateResult; summary?: string } {
+  return Boolean(value && 'result' in value);
+}
+
+function extractDoneResult(event: StockUpdateStreamEvent): StockUpdateResult | null {
+  if (!event.result) return null;
+  if (isStockUpdateRunResult(event.result)) return event.result.result ?? null;
+  return event.result;
+}
+
 export default function ScheduledTasksPage() {
   const { user, loading: authLoading } = useAuthUser();
   const canAccess = canUseScheduledTasks(user ?? undefined);
@@ -73,6 +147,7 @@ export default function ScheduledTasksPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [stockUpdate, setStockUpdate] = useState<StockUpdateProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -134,6 +209,171 @@ export default function ScheduledTasksPage() {
     }
   }, [clearing, logs.length]);
 
+  const handleStockUpdateEvent = useCallback((event: StockUpdateStreamEvent) => {
+    if (event.type === 'start') {
+      setStockUpdate({
+        running: true,
+        total: event.total ?? 0,
+        processed: 0,
+        pending: event.total ?? 0,
+        round: 1,
+        retryRounds: event.retryRounds ?? 1,
+        addedRows: 0,
+        updatedRows: 0,
+        errors: 0,
+        message: '准备更新',
+      });
+      return;
+    }
+
+    if (event.type === 'round') {
+      setStockUpdate((prev) => ({
+        running: true,
+        total: event.total ?? prev?.total ?? 0,
+        processed: event.processed ?? prev?.processed ?? 0,
+        pending: event.pending ?? prev?.pending ?? 0,
+        round: event.round ?? prev?.round ?? 1,
+        retryRounds: event.retryRounds ?? prev?.retryRounds ?? 1,
+        addedRows: prev?.addedRows ?? 0,
+        updatedRows: prev?.updatedRows ?? 0,
+        errors: prev?.errors ?? 0,
+        current: prev?.current,
+        message: `第 ${event.round ?? 1}/${event.retryRounds ?? 1} 轮`,
+      }));
+      return;
+    }
+
+    if (event.type === 'item' && event.item) {
+      const item = event.item;
+      setStockUpdate((prev) => {
+        const final = event.final ?? true;
+        return {
+          running: true,
+          total: event.total ?? prev?.total ?? 0,
+          processed: event.processed ?? prev?.processed ?? 0,
+          pending: event.pending ?? prev?.pending ?? 0,
+          round: event.round ?? prev?.round ?? 1,
+          retryRounds: event.retryRounds ?? prev?.retryRounds ?? 1,
+          addedRows: (prev?.addedRows ?? 0) + (final ? item.addedRows : 0),
+          updatedRows:
+            (prev?.updatedRows ?? 0) + (final ? item.updatedRows : 0),
+          errors: (prev?.errors ?? 0) + (final && item.error ? 1 : 0),
+          current: `${item.symbol} ${item.name}`,
+          message: item.error
+            ? final
+              ? item.error
+              : '等待重试'
+            : `最新 ${item.latestDate ?? '-'}`,
+        };
+      });
+      return;
+    }
+
+    if (event.type === 'done' || event.type === 'complete') {
+      const result = extractDoneResult(event);
+      setStockUpdate((prev) => ({
+        running: false,
+        total: result?.items?.length ?? event.total ?? prev?.total ?? 0,
+        processed:
+          result?.items?.length ??
+          event.processed ??
+          prev?.processed ??
+          prev?.total ??
+          0,
+        pending: 0,
+        round: prev?.round ?? 1,
+        retryRounds: prev?.retryRounds ?? 1,
+        addedRows: result?.addedRows ?? prev?.addedRows ?? 0,
+        updatedRows: result?.updatedRows ?? prev?.updatedRows ?? 0,
+        errors: result?.errors ?? prev?.errors ?? 0,
+        current: prev?.current,
+        message: event.type === 'complete' ? '更新完成' : '收尾中',
+      }));
+      return;
+    }
+
+    if (event.type === 'error') {
+      setStockUpdate((prev) => ({
+        running: false,
+        total: prev?.total ?? 0,
+        processed: prev?.processed ?? 0,
+        pending: prev?.pending ?? 0,
+        round: prev?.round ?? 1,
+        retryRounds: prev?.retryRounds ?? 1,
+        addedRows: prev?.addedRows ?? 0,
+        updatedRows: prev?.updatedRows ?? 0,
+        errors: prev?.errors ?? 0,
+        current: prev?.current,
+        message: event.message ?? '更新失败',
+      }));
+    }
+  }, []);
+
+  const runStockUpdate = useCallback(async () => {
+    if (stockUpdate?.running) return;
+    setError(null);
+    setStockUpdate({
+      running: true,
+      total: 0,
+      processed: 0,
+      pending: 0,
+      round: 1,
+      retryRounds: 1,
+      addedRows: 0,
+      updatedRows: 0,
+      errors: 0,
+      message: '启动中',
+    });
+
+    try {
+      const res = await fetch('/api/scheduled-tasks/stock-daily-csv-update/stream', {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? '启动失败');
+      }
+      if (!res.body) throw new Error('没有收到进度流');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary >= 0) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const event = getSseData(chunk);
+          if (event) handleStockUpdateEvent(event);
+          boundary = buffer.indexOf('\n\n');
+        }
+      }
+
+      void load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新失败';
+      setStockUpdate((prev) => ({
+        running: false,
+        total: prev?.total ?? 0,
+        processed: prev?.processed ?? 0,
+        pending: prev?.pending ?? 0,
+        round: prev?.round ?? 1,
+        retryRounds: prev?.retryRounds ?? 1,
+        addedRows: prev?.addedRows ?? 0,
+        updatedRows: prev?.updatedRows ?? 0,
+        errors: prev?.errors ?? 0,
+        current: prev?.current,
+        message,
+      }));
+      setError(message);
+    }
+  }, [handleStockUpdateEvent, load, stockUpdate?.running]);
+
   const groupedLogs = useMemo(() => {
     const groups = new Map<string, ScheduledTaskLogEntry[]>();
     for (const entry of logs) {
@@ -149,6 +389,11 @@ export default function ScheduledTasksPage() {
     const failed = logs.filter((entry) => entry.status === 'failed').length;
     return { total: logs.length, completed, failed };
   }, [logs]);
+
+  const stockUpdatePercent =
+    stockUpdate && stockUpdate.total > 0
+      ? Math.min(100, Math.round((stockUpdate.processed / stockUpdate.total) * 100))
+      : 0;
 
   if (authLoading) {
     return (
@@ -205,6 +450,49 @@ export default function ScheduledTasksPage() {
       </div>
 
       {error ? <div className="error">{error}</div> : null}
+
+      <section className={`pane-card ${styles.stockUpdatePanel}`}>
+        <div className={styles.stockUpdateHeader}>
+          <div>
+            <h2 className="section-title">股票日线更新</h2>
+            <p className="muted">逐只补齐本地 A 股前复权日线 CSV。</p>
+          </div>
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={stockUpdate?.running}
+            onClick={() => void runStockUpdate()}
+          >
+            {stockUpdate?.running ? '更新中…' : '更新股票日线'}
+          </button>
+        </div>
+
+        {stockUpdate ? (
+          <div className={styles.stockUpdateProgress}>
+            <div className={styles.progressTrack}>
+              <div
+                className={styles.progressFill}
+                style={{ width: `${stockUpdatePercent}%` }}
+              />
+            </div>
+            <div className={styles.progressMeta}>
+              <span>
+                {stockUpdate.processed}/{stockUpdate.total || '-'} · {stockUpdatePercent}%
+              </span>
+              <span>
+                第 {stockUpdate.round}/{stockUpdate.retryRounds} 轮
+              </span>
+              <span>新增 {stockUpdate.addedRows}</span>
+              <span>修正 {stockUpdate.updatedRows}</span>
+              <span>失败 {stockUpdate.errors}</span>
+            </div>
+            <p className={`${styles.logDetail} muted`}>
+              {stockUpdate.current ? `${stockUpdate.current} · ` : ''}
+              {stockUpdate.message}
+            </p>
+          </div>
+        ) : null}
+      </section>
 
       <section className={`pane-card ${styles.toolbar}`}>
         <div className={styles.filters}>

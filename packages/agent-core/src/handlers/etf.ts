@@ -41,7 +41,7 @@ export async function dispatchEtf(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]',
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--retry-rounds=N] [--retry-round-delay-ms=N] [--timeout-ms=N]',
   );
 }
 
@@ -68,6 +68,8 @@ function parseDailyCsvArgs(args: string[]): {
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
+  retryRounds?: number;
+  retryRoundDelayMs?: number;
   timeoutMs?: number;
 } {
   const options: {
@@ -78,6 +80,8 @@ function parseDailyCsvArgs(args: string[]): {
     maxSymbols?: number;
     delayMs?: number;
     retryCount?: number;
+    retryRounds?: number;
+    retryRoundDelayMs?: number;
     timeoutMs?: number;
   } = {};
 
@@ -99,6 +103,10 @@ function parseDailyCsvArgs(args: string[]): {
   if (delayMs != null) options.delayMs = delayMs;
   const retryCount = parseNumberArg(args, 'retries');
   if (retryCount != null) options.retryCount = retryCount;
+  const retryRounds = parseNumberArg(args, 'retry-rounds');
+  if (retryRounds != null) options.retryRounds = retryRounds;
+  const retryRoundDelayMs = parseNumberArg(args, 'retry-round-delay-ms');
+  if (retryRoundDelayMs != null) options.retryRoundDelayMs = retryRoundDelayMs;
   const timeoutMs = parseNumberArg(args, 'timeout-ms');
   if (timeoutMs != null) options.timeoutMs = timeoutMs;
 

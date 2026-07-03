@@ -337,14 +337,23 @@ export type StockDailyMarketDataSyncRunResult = {
   finishedAt: string;
   elapsedMs: number;
   result: {
-    skipped?: boolean;
-    reason?: string;
-    sourceLatestTradeDate: string;
-    targetLatestTradeDate?: string | null;
-    importedStockCsvFiles?: number;
-    discoveredStockCsvFiles?: number;
-    sourceDir?: string | null;
-    zipPath?: string | null;
+    assetType: 'stock';
+    tradeDate: string;
+    updatedAt: string;
+    items: Array<{
+      symbol: string;
+      name: string;
+      attempts: number;
+      beforeRows: number;
+      afterRows: number;
+      addedRows: number;
+      updatedRows: number;
+      latestDate: string | null;
+      error?: string;
+    }>;
+    addedRows: number;
+    updatedRows: number;
+    errors: number;
   };
 };
 
@@ -363,6 +372,27 @@ export async function runAgentCoreStockDailyMarketDataSync(): Promise<
     throw new Error(await readAgentCoreError(response));
   }
   return response.json() as Promise<StockDailyMarketDataSyncRunResult>;
+}
+
+export async function streamAgentCoreStockDailyCsvUpdate(): Promise<Response> {
+  const { baseUrl, token } = getAgentCoreConfig();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${baseUrl}/scheduler/tasks/stock-daily-csv-update/stream`,
+    {
+      method: 'POST',
+      headers,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  if (!response.body) {
+    throw new Error('agent-core 未返回进度流');
+  }
+  return response;
 }
 
 export type ScheduledTaskLogEntry = {
