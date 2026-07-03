@@ -390,16 +390,34 @@ async function fetchDailyKlinesWithRetry(input: {
       const useInfoway =
         input.provider === 'infoway' ||
         (input.provider === 'auto' && Boolean(process.env.INFOWAY_API_KEY?.trim()));
-      const result = useInfoway
-        ? await fetchInfowayDailyKlines(input.symbol, input.days, {
-            retries: 0,
-            timeoutMs: input.timeoutMs,
-          })
-        : await fetchDailyKlines(input.symbol, input.days, {
-            forceRefresh: true,
+      let infowayError: unknown;
+      if (useInfoway) {
+        try {
+          const result = await fetchInfowayDailyKlines(input.symbol, input.days, {
             retries: 0,
             timeoutMs: input.timeoutMs,
           });
+          return { ...result, attempts: attempt };
+        } catch (error) {
+          infowayError = error;
+          if (input.provider === 'infoway') throw error;
+        }
+      }
+
+      const result = await fetchDailyKlines(input.symbol, input.days, {
+        forceRefresh: true,
+        retries: 0,
+        timeoutMs: input.timeoutMs,
+      }).catch((tencentError: unknown) => {
+        if (infowayError) {
+          const infowayMessage =
+            infowayError instanceof Error ? infowayError.message : String(infowayError);
+          const tencentMessage =
+            tencentError instanceof Error ? tencentError.message : String(tencentError);
+          throw new Error(`Infoway 失败: ${infowayMessage}; 腾讯兜底失败: ${tencentMessage}`);
+        }
+        throw tencentError;
+      });
       return { ...result, attempts: attempt };
     } catch (error) {
       lastError = error;

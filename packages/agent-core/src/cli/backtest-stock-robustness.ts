@@ -78,7 +78,7 @@ const smokeWindows: WindowSpec[] = [
 const variants: StockVariant[] = [
   {
     name: 'default',
-    label: '默认：强势确认 + 中期不强时沪深300动量 >= 3%',
+    label: '默认：强势确认 + 中期不强时沪深300动量 >= 3% + 8元以上',
     maxConcurrentPositions: 5,
     stockMarketFilter: 'require_bullish',
     stopLossPct: 0.08,
@@ -160,13 +160,13 @@ const variants: StockVariant[] = [
   },
   {
     name: 'high-quality',
-    label: '高质量：强势确认 + 5元以上 + 1亿成交额',
+    label: '高质量：强势确认 + 8元以上 + 1亿成交额',
     maxConcurrentPositions: 5,
     stockMarketFilter: 'require_bullish',
     stopLossPct: 0.08,
     takeProfitPct: 0.2,
     excludeRiskyStockNames: true,
-    minEntryPrice: 5,
+    minEntryPrice: 8,
     minAvgTurnoverAmount: 100_000_000,
   },
   {
