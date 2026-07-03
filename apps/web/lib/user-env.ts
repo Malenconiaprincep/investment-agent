@@ -45,7 +45,7 @@ export type FeishuConfigStatus = {
   configured: boolean;
   mode: 'app' | 'webhook' | null;
   notifyEnabled: boolean;
-  etfMonitorPushAll: boolean;
+  etfMonitorTradesEnabled: boolean;
   monitorRealtime: boolean;
   stockIntraday: boolean;
 };
@@ -272,7 +272,7 @@ function buildKeyStatus(key: SyncedEnvKey, value: string): TokenKeyStatus {
 
 const FEISHU_TOGGLE_DEFAULTS: Record<FeishuToggleKey, '0' | '1'> = {
   FEISHU_NOTIFY_ENABLED: '1',
-  FEISHU_NOTIFY_ETF_MONITOR: '0',
+  FEISHU_NOTIFY_ETF_MONITOR: '1',
   FEISHU_NOTIFY_MONITOR: '1',
   FEISHU_NOTIFY_STOCK_INTRADAY: '1',
 };
@@ -302,7 +302,7 @@ export function getFeishuConfigStatus(
         'FEISHU_NOTIFY_ENABLED',
         values.FEISHU_NOTIFY_ENABLED?.trim() ?? '',
       ) === '1',
-    etfMonitorPushAll:
+    etfMonitorTradesEnabled:
       resolveFeishuToggleValue(
         'FEISHU_NOTIFY_ETF_MONITOR',
         values.FEISHU_NOTIFY_ETF_MONITOR?.trim() ?? '',

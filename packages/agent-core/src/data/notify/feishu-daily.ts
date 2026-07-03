@@ -190,8 +190,18 @@ export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): strin
   return lines;
 }
 
+export function hasEtfPaperTrades(result: EtfPaperPipelineResult): boolean {
+  return (
+    (result.buys?.length ?? 0) +
+      (result.sells?.length ?? 0) +
+      (result.stopLosses?.length ?? 0) >
+    0
+  );
+}
+
 export async function notifyEtfTailPick(result: EtfTailPickResult): Promise<void> {
   if (result.status === 'skipped') return;
+  if (process.env.FEISHU_NOTIFY_ETF_TAIL_PICK !== '1') return;
   await notifyFeishuPostSafe(
     '📊 ETF 尾盘推荐',
     buildEtfTailPickLines(result),
@@ -215,15 +225,8 @@ export async function notifyStockPaper(result: PaperAutoPipelineResult): Promise
 
 export async function notifyEtfPaperMonitor(result: EtfPaperPipelineResult): Promise<void> {
   if (result.skipped) return;
-
-  const hasTrades =
-    (result.buys?.length ?? 0) +
-      (result.sells?.length ?? 0) +
-      (result.stopLosses?.length ?? 0) >
-    0;
-
-  const notifyAll = process.env.FEISHU_NOTIFY_ETF_MONITOR === '1';
-  if (!hasTrades && !notifyAll) return;
+  if (process.env.FEISHU_NOTIFY_ETF_MONITOR === '0') return;
+  if (!hasEtfPaperTrades(result)) return;
 
   await notifyFeishuPostSafe('🤖 ETF 模拟盘', buildEtfPaperMonitorLines(result));
 }

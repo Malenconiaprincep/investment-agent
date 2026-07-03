@@ -329,6 +329,42 @@ export async function patchAgentCoreScheduledTask(
   return data.tasks ?? [];
 }
 
+export type StockDailyMarketDataSyncRunResult = {
+  skipped: boolean;
+  reason?: string;
+  summary: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  result: {
+    skipped?: boolean;
+    reason?: string;
+    sourceLatestTradeDate: string;
+    targetLatestTradeDate?: string | null;
+    importedStockCsvFiles?: number;
+    discoveredStockCsvFiles?: number;
+    sourceDir?: string | null;
+    zipPath?: string | null;
+  };
+};
+
+export async function runAgentCoreStockDailyMarketDataSync(): Promise<
+  StockDailyMarketDataSyncRunResult
+> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(
+    `${baseUrl}/scheduler/tasks/stock-daily-csv-update/run`,
+    {
+      method: 'POST',
+      headers: buildHeaders(),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  return response.json() as Promise<StockDailyMarketDataSyncRunResult>;
+}
+
 export type ScheduledTaskLogEntry = {
   taskId: string;
   label: string;
@@ -339,7 +375,7 @@ export type ScheduledTaskLogEntry = {
   reason?: string;
   summary?: string;
   elapsedMs?: number;
-  source: 'background-worker';
+  source: 'background-worker' | 'manual';
 };
 
 export async function fetchAgentCoreScheduledTaskLogs(input?: {

@@ -25,6 +25,7 @@ import {
   readRecentScheduledTaskLogs,
   listScheduledTaskLogTradeDates,
 } from '../data/schedulers/scheduled-task-log.js';
+import { runStockDailyMarketDataSyncManually } from '../data/schedulers/daily-tasks-background.js';
 
 const app = new Hono();
 
@@ -123,6 +124,18 @@ app.patch('/scheduler/tasks/:id', async (c) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonError(message, 400);
+  }
+});
+
+app.post('/scheduler/tasks/stock-daily-csv-update/run', async (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+
+  try {
+    const result = await runStockDailyMarketDataSyncManually();
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return jsonError(message, 500);
   }
 });
 

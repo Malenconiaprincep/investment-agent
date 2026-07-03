@@ -37,7 +37,7 @@ type TokenConfigStatus = {
     configured: boolean;
     mode: 'app' | 'webhook' | null;
     notifyEnabled: boolean;
-    etfMonitorPushAll: boolean;
+    etfMonitorTradesEnabled: boolean;
     monitorRealtime: boolean;
     stockIntraday: boolean;
   };
@@ -50,6 +50,12 @@ type ScheduledTaskStatus = {
   description: string;
   scheduleText: string;
   enabled: boolean;
+};
+
+type StockDailySyncResponse = {
+  skipped?: boolean;
+  summary?: string;
+  error?: string;
 };
 
 type SettingsUser = {
@@ -115,13 +121,13 @@ const FEISHU_TOGGLE_FIELDS: Array<{
   },
   {
     key: 'FEISHU_NOTIFY_ETF_MONITOR',
-    label: 'ETF 模拟盘每次监听都推送',
-    hint: '默认仅在有成交/止损时推送',
+    label: 'ETF 模拟盘成交通知',
+    hint: '仅在模拟盘买入、卖出或止损成交时推送',
   },
   {
     key: 'FEISHU_NOTIFY_MONITOR',
     label: '消息雷达实时推送',
-    hint: '新闻催化、自动买入候选、模拟盘成交',
+    hint: '仅在消息雷达触发模拟盘买入成交时推送',
   },
   {
     key: 'FEISHU_NOTIFY_STOCK_INTRADAY',
@@ -167,6 +173,10 @@ export default function SettingsPage() {
   const [providerId, setProviderId] = useState('deepseek');
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskStatus[]>([]);
   const [taskSavingId, setTaskSavingId] = useState<string | null>(null);
+  const [stockDailySyncRunning, setStockDailySyncRunning] = useState(false);
+  const [stockDailySyncMessage, setStockDailySyncMessage] = useState<string | null>(
+    null,
+  );
   const [canUseScheduledTasks, setCanUseScheduledTasks] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('ai');
   const [notifyTesting, setNotifyTesting] = useState(false);
@@ -461,6 +471,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function runStockDailySyncNow() {
+    setStockDailySyncRunning(true);
+    setStockDailySyncMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(
+        '/api/settings/scheduled-tasks/stock-daily-sync',
+        { method: 'POST' },
+      );
+      const data = (await res.json()) as StockDailySyncResponse;
+      if (!res.ok) throw new Error(data.error ?? '同步股票日线失败');
+      setStockDailySyncMessage(
+        data.summary ??
+          (data.skipped ? '百度网盘源数据未更新，已跳过。' : '股票日线同步完成。'),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '同步股票日线失败');
+    } finally {
+      setStockDailySyncRunning(false);
+    }
+  }
+
   const requiredApiKeyEnv = activeProvider?.apiKeyEnv ?? status?.requiredApiKeyEnv;
   const missingAiKey =
     status && requiredApiKeyEnv && !status.keys[requiredApiKeyEnv]?.configured;
@@ -556,6 +588,22 @@ export default function SettingsPage() {
                   </Link>
                   页面（保留最近 3 天）。
                 </p>
+                <div className={styles.scheduledTaskActions}>
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    disabled={stockDailySyncRunning}
+                    onClick={() => void runStockDailySyncNow()}
+                  >
+                    {stockDailySyncRunning ? '同步中…' : '立即同步股票日线'}
+                  </button>
+                  <span className="muted settings-env-hint">
+                    从百度网盘目录导入 A 股前复权日线；源数据未更新会自动跳过。
+                  </span>
+                </div>
+                {stockDailySyncMessage && (
+                  <p className="monitor-settings-saved">{stockDailySyncMessage}</p>
+                )}
                 <div className="settings-env-grid">
                   {scheduledTasks.map((task) => (
                     <label key={task.id} className="settings-env-field">

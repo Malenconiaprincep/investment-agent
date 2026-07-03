@@ -11,6 +11,7 @@ import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
 import type { ScheduledTaskId } from './task-settings.js';
 
 export type ScheduledTaskLogStatus = 'completed' | 'skipped' | 'failed' | 'disabled';
+export type ScheduledTaskLogSource = 'background-worker' | 'manual';
 
 export type ScheduledTaskLogEntry = {
   taskId: ScheduledTaskId;
@@ -22,7 +23,7 @@ export type ScheduledTaskLogEntry = {
   reason?: string;
   summary?: string;
   elapsedMs?: number;
-  source: 'background-worker';
+  source: ScheduledTaskLogSource;
 };
 
 export const SCHEDULED_TASK_LOG_RETENTION_DAYS = 3;

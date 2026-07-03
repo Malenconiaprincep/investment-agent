@@ -81,7 +81,8 @@ FEISHU_WEBHOOK_SECRET=          # 可选
 FEISHU_NOTIFY_ENABLED=0              # 关闭全部飞书推送
 FEISHU_NOTIFY_STOCK_INTRADAY=0         # 关闭交易时段股票动量扫描推送
 FEISHU_NOTIFY_MONITOR=0              # 关闭消息雷达实时推送
-FEISHU_NOTIFY_ETF_MONITOR=1          # ETF 每次监听都推（默认仅有成交/止损才推）
+FEISHU_NOTIFY_ETF_MONITOR=0          # 关闭 ETF 模拟盘成交通知（默认有成交/止损才推）
+FEISHU_NOTIFY_ETF_TAIL_PICK=1        # 恢复 ETF 尾盘推荐推送（默认关闭，仅保留历史记录）
 STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES=15   # 股票扫描间隔（交易时段，默认 15 分钟）
 MONITOR_BACKGROUND_INTERVAL_MS=300000        # 消息雷达间隔（默认 5 分钟）
 ```
@@ -92,8 +93,8 @@ MONITOR_BACKGROUND_INTERVAL_MS=300000        # 消息雷达间隔（默认 5 分
 |------|------|
 | 09:25 / 11:35 / 12:50 / 14:35 | **智能选股**（早盘、午间、午后开盘前、尾盘前复核；Top 股票/ETF 自动进入跟踪池） |
 | 交易时段每 15 分钟 | **股票实时信号**（自选/选股池 · 红钻+动量达标） |
-| 交易时段每 5 分钟 | **消息雷达**（新闻催化、自动买入候选、模拟盘成交） |
-| 14:00 | ETF 尾盘推荐 |
+| 交易时段每 5 分钟 | **消息雷达**（默认仅推模拟盘买入成交） |
+| 14:45 | ETF 尾盘推荐（默认只保存历史，不推飞书） |
 | 15:05 | 股票模拟盘收盘后选股 |
 
 同一标的**每天只推一次**，避免刷屏。

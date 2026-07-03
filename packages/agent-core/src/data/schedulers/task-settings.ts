@@ -114,8 +114,8 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
   {
     id: 'stock-daily-csv-update',
     label: '股票日线更新',
-    description: '收盘后更新跟踪池、持仓和近期筛选候选的本地股票前复权日线 CSV',
-    scheduleText: '交易日 15:32',
+    description: '17 点从百度网盘下载目录导入 A 股前复权日线 CSV 与股票列表',
+    scheduleText: '交易日 17:00',
     defaultEnabled: true,
   },
   {

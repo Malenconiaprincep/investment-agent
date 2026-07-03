@@ -26,13 +26,18 @@ import { DATA_DIR } from '../../mastra/config/paths.js';
 import {
   type DailyCsvUpdateResult,
   updateEtfDailyCsvPool,
-  updateStockDailyCsvPool,
 } from '../market/local-csv/etf-daily-update.js';
+import {
+  resolveMarketDataSyncOptions,
+  syncMarketData,
+  type MarketDataSyncResult,
+} from '../../cli/sync-market-data.js';
 import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
 } from './task-settings.js';
 import { appendScheduledTaskLog } from './scheduled-task-log.js';
+import type { ScheduledTaskLogSource } from './scheduled-task-log.js';
 import {
   createDailyTaskDueCheck,
   getMinuteOfDay,
@@ -59,6 +64,16 @@ type DailyTaskDef = {
   run: () => Promise<{ skipped?: boolean; reason?: string; summary?: string }>;
 };
 
+export type StockDailyMarketDataSyncRunResult = {
+  skipped: boolean;
+  reason?: string;
+  summary: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  result: MarketDataSyncResult;
+};
+
 const completedKeys = new Set<string>();
 let lastEtfPaperRunMs = 0;
 let lastStockIntradayRunMs = 0;
@@ -67,6 +82,11 @@ let lastStockBacktestExitRunMs = 0;
 let lastDailyTaskDueCursor: DailyTaskDueCursor | null = null;
 const SCREEN_LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 const DAILY_CSV_LOG_PATH = path.join(DATA_DIR, 'daily-csv-update.log');
+const STOCK_DAILY_SYNC_TASK_ID: Extract<
+  ScheduledTaskId,
+  'stock-daily-csv-update'
+> = 'stock-daily-csv-update';
+const STOCK_DAILY_SYNC_LABEL = '股票日线更新';
 
 function isEnabled(): boolean {
   return process.env.DAILY_TASKS_BACKGROUND_ENABLED !== '0';
@@ -196,6 +216,117 @@ function appendDailyCsvUpdateLog(input: {
     })}\n`,
     'utf-8',
   );
+}
+
+function appendMarketDataSyncLog(input: {
+  label: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  result: MarketDataSyncResult;
+}) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  appendFileSync(
+    DAILY_CSV_LOG_PATH,
+    `${JSON.stringify({
+      label: input.label,
+      assetType: 'stock',
+      mode: 'baidu-market-sync',
+      ranAt: input.startedAt,
+      ranAtBeijing: formatBeijingLogTime(new Date(input.startedAt)),
+      finishedAt: input.finishedAt,
+      elapsedMs: input.elapsedMs,
+      tradeDate: input.result.sourceLatestTradeDate,
+      skipped: input.result.skipped ?? false,
+      reason: input.result.reason,
+      symbolCount:
+        input.result.importedStockCsvFiles ||
+        input.result.discoveredStockCsvFiles ||
+        0,
+      importedStockCsvFiles: input.result.importedStockCsvFiles,
+      discoveredStockCsvFiles: input.result.discoveredStockCsvFiles,
+      sourceLatestTradeDate: input.result.sourceLatestTradeDate,
+      targetLatestTradeDate: input.result.targetLatestTradeDate,
+      sourceDir: input.result.sourceDir,
+      zipPath: input.result.zipPath,
+      firstStockCsv: input.result.firstStockCsv,
+      lastStockCsv: input.result.lastStockCsv,
+      meta: input.result.meta,
+      backups: input.result.backups,
+      actions: input.result.actions,
+    })}\n`,
+    'utf-8',
+  );
+}
+
+function marketDataSyncSummary(result: MarketDataSyncResult): string {
+  return result.skipped
+    ? `百度网盘源数据未更新：源 ${result.sourceLatestTradeDate} · 当前 ${result.targetLatestTradeDate ?? '-'}`
+    : `百度网盘同步完成：导入 ${result.importedStockCsvFiles} 只 · 最新 ${result.sourceLatestTradeDate}`;
+}
+
+export function runStockDailyMarketDataSync(input?: {
+  label?: string;
+  startedAt?: string;
+}): StockDailyMarketDataSyncRunResult {
+  const label = input?.label ?? STOCK_DAILY_SYNC_LABEL;
+  const startedAt = input?.startedAt ?? new Date().toISOString();
+  const result = syncMarketData(resolveMarketDataSyncOptions());
+  const finishedAt = new Date().toISOString();
+  const elapsedMs = Date.parse(finishedAt) - Date.parse(startedAt);
+  appendMarketDataSyncLog({
+    label,
+    startedAt,
+    finishedAt,
+    elapsedMs,
+    result,
+  });
+  return {
+    skipped: result.skipped ?? false,
+    reason: result.reason,
+    summary: marketDataSyncSummary(result),
+    startedAt,
+    finishedAt,
+    elapsedMs,
+    result,
+  };
+}
+
+export async function runStockDailyMarketDataSyncManually(input?: {
+  source?: ScheduledTaskLogSource;
+}): Promise<StockDailyMarketDataSyncRunResult> {
+  const source = input?.source ?? 'manual';
+  const tradeDate = formatTradeDate(getBeijingNow());
+  const startedAt = new Date().toISOString();
+
+  try {
+    const outcome = runStockDailyMarketDataSync({ startedAt });
+    appendScheduledTaskLog({
+      taskId: STOCK_DAILY_SYNC_TASK_ID,
+      label: STOCK_DAILY_SYNC_LABEL,
+      tradeDate,
+      status: outcome.skipped ? 'skipped' : 'completed',
+      reason: outcome.skipped ? outcome.reason ?? '源数据未更新' : undefined,
+      summary: outcome.summary,
+      elapsedMs: outcome.elapsedMs,
+      source,
+      ranAt: outcome.startedAt,
+    });
+    return outcome;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendScheduledTaskLog({
+      taskId: STOCK_DAILY_SYNC_TASK_ID,
+      label: STOCK_DAILY_SYNC_LABEL,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      source,
+      ranAt: startedAt,
+    });
+    throw error;
+  }
 }
 
 function createScreenTask(input: {
@@ -385,30 +516,16 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
-    id: 'stock-daily-csv-update',
-    label: '股票日线更新',
-    hour: 15,
-    minute: 32,
+    id: STOCK_DAILY_SYNC_TASK_ID,
+    label: STOCK_DAILY_SYNC_LABEL,
+    hour: 17,
+    minute: 0,
     run: async () => {
-      const startedAt = new Date().toISOString();
-      const result = await updateStockDailyCsvPool({ includeLocal: true });
-      const finishedAt = new Date().toISOString();
-      appendDailyCsvUpdateLog({
-        label: '股票日线更新',
-        startedAt,
-        finishedAt,
-        elapsedMs: Date.parse(finishedAt) - Date.parse(startedAt),
-        result,
-      });
+      const outcome = runStockDailyMarketDataSync();
       return {
-        skipped: result.items.length === 0 || result.errors === result.items.length,
-        reason:
-          result.items.length === 0
-            ? '暂无需要更新的活跃股票'
-            : result.errors === result.items.length
-              ? '股票日线全部更新失败'
-              : undefined,
-        summary: `标的 ${result.items.length} 只 · 新增 ${result.addedRows} 行 · 修正 ${result.updatedRows} 行 · 失败 ${result.errors} 只`,
+        skipped: outcome.skipped,
+        reason: outcome.reason,
+        summary: outcome.summary,
       };
     },
   },
@@ -724,7 +841,7 @@ export function startDailyTasksBackgroundWorker() {
     `08:00 行情数据提醒 / 回测+新闻仓买入`,
     `交易时段 回测策略分仓出场监控（策略仓+新闻仓）`,
     `15:30 ETF 日线更新`,
-    `15:32 股票日线更新`,
+    `17:00 股票日线更新`,
   ].join(' · ');
 
   logInfo(`已启动本机定时任务（北京时间）：${schedule}`);

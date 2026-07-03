@@ -39,7 +39,6 @@
     "etf:tail-pick": "tsx src/cli/etf-json.ts tail-pick",
     "etf:tail-schedule": "tsx src/cli/scheduled-etf-tail.ts",
     "etf:update-daily": "tsx src/cli/etf-json.ts update-daily-csv",
-    "stock:update-daily": "tsx src/cli/etf-json.ts update-stock-daily-csv",
     "market-data:sync": "tsx src/cli/sync-market-data.ts",
     "watchlist:snapshot": "tsx src/cli/scheduled-watchlist.ts",
     "watchlist:weekly": "tsx src/cli/scheduled-weekly-review.ts",

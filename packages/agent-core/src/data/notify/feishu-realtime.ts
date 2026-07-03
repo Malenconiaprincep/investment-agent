@@ -1,5 +1,5 @@
 import type { MonitorPollResult } from '../monitor/engine.js';
-import type { MonitorPaperRecommendation } from '../paper/monitor-bridge.js';
+import type { MonitorPaperAction } from '../paper/monitor-bridge.js';
 import type { StockIntradayCandidate } from '../paper/stock-intraday-scan.js';
 import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
 import {
@@ -30,13 +30,13 @@ function fmtPct(value: number | null | undefined): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
-export function isMonitorRealtimeTrackCandidate(
-  item: MonitorPaperRecommendation,
-): item is MonitorPaperRecommendation & { symbol: string } {
+export function isMonitorRealtimePaperBuy(
+  action: MonitorPaperAction,
+): action is MonitorPaperAction & { kind: 'buy'; status: 'bought'; symbol: string } {
   return Boolean(
-    item.symbol &&
-      item.level === 'auto_buy' &&
-      item.status === 'tracked',
+    action.symbol &&
+      action.kind === 'buy' &&
+      action.status === 'bought',
   );
 }
 
@@ -58,32 +58,6 @@ export function buildStockIntradayCandidateLines(
   }
   if (candidates.length > 8) {
     lines.push(`… 另有 ${candidates.length - 8} 只`);
-  }
-  return lines;
-}
-
-export function buildMonitorRealtimeLines(input: {
-  result: MonitorPollResult;
-  recommendations: MonitorPaperRecommendation[];
-}): string[] {
-  const lines = [
-    `时间：${beijingTimeLabel()}`,
-    `扫描：${input.result.summary}`,
-  ];
-
-  const actionable = input.recommendations.filter(isMonitorRealtimeTrackCandidate);
-
-  if (actionable.length === 0) {
-    lines.push('本轮无新的自动跟踪标的');
-    return lines;
-  }
-
-  lines.push('', `消息雷达 ${actionable.length} 条：`);
-  for (const item of actionable.slice(0, 6)) {
-    lines.push(
-      `· ${item.name ?? item.symbol}(${item.symbol}) ${fmtPct(item.pctChg)} · 已加入跟踪池`,
-    );
-    lines.push(`  ${item.reason}`);
   }
   return lines;
 }
@@ -116,39 +90,11 @@ export async function notifyMonitorRealtime(input: {
 }): Promise<number> {
   if (!isMonitorRealtimeNotifyEnabled() || !input.result.marketOpen) return 0;
 
-  const newAlertIds = new Set(input.result.alerts.map((alert) => alert.id));
-  const freshRecommendations = input.result.recommendations.filter(
-    (item) => item.alertId && newAlertIds.has(item.alertId),
-  );
+  const boughtActions = input.result.paperActions.filter(isMonitorRealtimePaperBuy);
 
-  const boughtActions = input.result.paperActions.filter(
-    (action) => action.kind === 'buy' && action.status === 'bought' && action.symbol,
-  );
-
-  if (freshRecommendations.length === 0 && boughtActions.length === 0) {
-    return 0;
-  }
+  if (boughtActions.length === 0) return 0;
 
   let pushed = 0;
-
-  for (const item of freshRecommendations) {
-    if (!isMonitorRealtimeTrackCandidate(item)) continue;
-    if (
-      !shouldFeishuPushOnce(
-        buildFeishuPushKey('monitor-tracked', item.symbol, input.tradeDate),
-      )
-    ) {
-      continue;
-    }
-    pushed += 1;
-    await notifyFeishuPostSafe(
-      '📌 消息雷达·已加入跟踪',
-      buildMonitorRealtimeLines({
-        result: input.result,
-        recommendations: [item],
-      }),
-    );
-  }
 
   for (const action of boughtActions) {
     if (

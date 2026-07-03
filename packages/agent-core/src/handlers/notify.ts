@@ -24,7 +24,7 @@ export async function dispatchNotify(args: string[]): Promise<string> {
       webhookConfigured: webhook != null,
       webhookHost: webhook ? new URL(webhook.webhookUrl).hostname : null,
       hasWebhookSecret: Boolean(webhook?.secret),
-      etfMonitorPushAll: process.env.FEISHU_NOTIFY_ETF_MONITOR === '1',
+      etfMonitorTradesEnabled: process.env.FEISHU_NOTIFY_ETF_MONITOR !== '0',
     });
   }
 

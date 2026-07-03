@@ -16,15 +16,44 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { MARKET_CSV_DIR } from '../mastra/config/paths.js';
 
-type Options = {
+export type MarketDataSyncOptions = {
   sourceDir: string | null;
   targetDir: string;
   zipName: string;
   minStockFiles: number;
   dryRun: boolean;
   force: boolean;
+};
+
+export type MarketDataSyncResult = {
+  ok: true;
+  skipped?: boolean;
+  reason?: string;
+  dryRun: boolean;
+  sourceDir: string;
+  targetDir: string;
+  zipPath: string;
+  importedStockCsvFiles: number;
+  discoveredStockCsvFiles?: number;
+  sourceLatestTradeDate: string;
+  targetLatestTradeDate: string | null;
+  firstStockCsv?: string | null;
+  lastStockCsv?: string | null;
+  meta?: {
+    listed: string | null;
+    delisted: string | null;
+    tradingCalendar: string | null;
+  };
+  backups?: {
+    stockQfqDir: string | null;
+    listedCsv: string | null;
+    delistedCsv: string | null;
+    tradingCalendarCsv: string | null;
+  };
+  actions: string[];
 };
 
 type StockCsvFile = {
@@ -53,8 +82,8 @@ function expandPath(input: string): string {
   return path.resolve(trimmed);
 }
 
-function parseArgs(argv: string[]): Options {
-  const options: Options = {
+export function resolveMarketDataSyncOptions(argv: string[] = []): MarketDataSyncOptions {
+  const options: MarketDataSyncOptions = {
     sourceDir: process.env.INVESTMENT_AGENT_MARKET_SYNC_SOURCE?.trim()
       ? expandPath(process.env.INVESTMENT_AGENT_MARKET_SYNC_SOURCE)
       : null,
@@ -348,7 +377,7 @@ function copyMetaFile(input: {
   return backupPath;
 }
 
-function run(options: Options): void {
+export function syncMarketData(options: MarketDataSyncOptions): MarketDataSyncResult {
   const sourceDir = options.sourceDir;
   if (!sourceDir || !existsSync(sourceDir)) {
     throw new Error(`Source directory does not exist: ${sourceDir ?? '(missing)'}`);
@@ -385,29 +414,22 @@ function run(options: Options): void {
     const existingStockCsvFiles = discoverExistingStockCsvFiles(options.targetDir);
     const targetLatestTradeDate = latestTradeDateFromFiles(existingStockCsvFiles);
     if (!options.force && targetLatestTradeDate && sourceLatestTradeDate <= targetLatestTradeDate) {
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            ok: true,
-            skipped: true,
-            reason: 'source_not_newer',
-            dryRun: options.dryRun,
-            sourceDir,
-            targetDir: options.targetDir,
-            zipPath,
-            importedStockCsvFiles: 0,
-            discoveredStockCsvFiles: stockCsvFiles.length,
-            sourceLatestTradeDate,
-            targetLatestTradeDate,
-            actions: [
-              `skipped: source latest date ${sourceLatestTradeDate} is not newer than target latest date ${targetLatestTradeDate}`,
-            ],
-          },
-          null,
-          2,
-        )}\n`,
-      );
-      return;
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'source_not_newer',
+        dryRun: options.dryRun,
+        sourceDir,
+        targetDir: options.targetDir,
+        zipPath,
+        importedStockCsvFiles: 0,
+        discoveredStockCsvFiles: stockCsvFiles.length,
+        sourceLatestTradeDate,
+        targetLatestTradeDate,
+        actions: [
+          `skipped: source latest date ${sourceLatestTradeDate} is not newer than target latest date ${targetLatestTradeDate}`,
+        ],
+      };
     }
 
     const timestamp = timestampForPath();
@@ -452,36 +474,30 @@ function run(options: Options): void {
       dryRun: options.dryRun,
     });
 
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          ok: true,
-          dryRun: options.dryRun,
-          sourceDir,
-          targetDir: options.targetDir,
-          zipPath,
-          importedStockCsvFiles: stockCsvFiles.length,
-          sourceLatestTradeDate,
-          targetLatestTradeDate,
-          firstStockCsv: stockCsvFiles[0]?.targetName ?? null,
-          lastStockCsv: stockCsvFiles.at(-1)?.targetName ?? null,
-          meta: {
-            listed: listedCsvPath ? 'stock-list-listed.csv' : null,
-            delisted: delistedCsvPath ? 'stock-list-delisted.csv' : null,
-            tradingCalendar: tradingCalendarPath ? 'trading-calendar.csv' : null,
-          },
-          backups: {
-            stockQfqDir: stockBackupDir,
-            listedCsv: listedBackup,
-            delistedCsv: delistedBackup,
-            tradingCalendarCsv: calendarBackup,
-          },
-          actions,
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    return {
+      ok: true,
+      dryRun: options.dryRun,
+      sourceDir,
+      targetDir: options.targetDir,
+      zipPath,
+      importedStockCsvFiles: stockCsvFiles.length,
+      sourceLatestTradeDate,
+      targetLatestTradeDate,
+      firstStockCsv: stockCsvFiles[0]?.targetName ?? null,
+      lastStockCsv: stockCsvFiles.at(-1)?.targetName ?? null,
+      meta: {
+        listed: listedCsvPath ? 'stock-list-listed.csv' : null,
+        delisted: delistedCsvPath ? 'stock-list-delisted.csv' : null,
+        tradingCalendar: tradingCalendarPath ? 'trading-calendar.csv' : null,
+      },
+      backups: {
+        stockQfqDir: stockBackupDir,
+        listedCsv: listedBackup,
+        delistedCsv: delistedBackup,
+        tradingCalendarCsv: calendarBackup,
+      },
+      actions,
+    };
   } finally {
     if (stagingDir && stagingDir.includes(`${path.sep}.qfq-daily.sync-`) && existsSync(stagingDir)) {
       rmSync(stagingDir, { recursive: true, force: true });
@@ -490,9 +506,18 @@ function run(options: Options): void {
   }
 }
 
-try {
-  run(parseArgs(process.argv.slice(2)));
-} catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
+function isMainModule(): boolean {
+  return process.argv[1]
+    ? import.meta.url === pathToFileURL(process.argv[1]).href
+    : false;
+}
+
+if (isMainModule()) {
+  try {
+    const result = syncMarketData(resolveMarketDataSyncOptions(process.argv.slice(2)));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
 }

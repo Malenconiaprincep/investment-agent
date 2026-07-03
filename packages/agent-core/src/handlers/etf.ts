@@ -40,16 +40,8 @@ export async function dispatchEtf(args: string[]): Promise<string> {
     return JSON.stringify(await updateEtfDailyCsvPool(options));
   }
 
-  if (command === 'update-stock-daily-csv') {
-    const options = parseDailyCsvArgs(args.slice(1));
-    const { updateStockDailyCsvPool } = await import(
-      '../data/market/local-csv/etf-daily-update.js'
-    );
-    return JSON.stringify(await updateStockDailyCsvPool(options));
-  }
-
   throw new Error(
-    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]|update-stock-daily-csv [--days=N] [--symbols=600519,300750] [--include-local|--no-include-local] [--include-active|--no-include-active] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]',
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--timeout-ms=N]',
   );
 }
 

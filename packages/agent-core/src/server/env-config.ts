@@ -17,6 +17,7 @@ export const CONFIGURABLE_KEYS = [
   'FEISHU_WEBHOOK_SECRET',
   'FEISHU_NOTIFY_ENABLED',
   'FEISHU_NOTIFY_ETF_MONITOR',
+  'FEISHU_NOTIFY_ETF_TAIL_PICK',
   'FEISHU_NOTIFY_MONITOR',
   'FEISHU_NOTIFY_STOCK_INTRADAY',
 ] as const;
@@ -93,6 +94,7 @@ function serializeEnvFile(values: Record<string, string>): string {
       keys: [
         'FEISHU_NOTIFY_ENABLED',
         'FEISHU_NOTIFY_ETF_MONITOR',
+        'FEISHU_NOTIFY_ETF_TAIL_PICK',
         'FEISHU_NOTIFY_MONITOR',
         'FEISHU_NOTIFY_STOCK_INTRADAY',
       ],

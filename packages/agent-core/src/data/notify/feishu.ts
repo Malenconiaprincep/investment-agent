@@ -41,7 +41,7 @@ export function isFeishuNotifyEnabled(): boolean {
 }
 
 export function shouldNotifyEtfPaperMonitor(): boolean {
-  return process.env.FEISHU_NOTIFY_ETF_MONITOR === '1';
+  return process.env.FEISHU_NOTIFY_ETF_MONITOR !== '0';
 }
 
 export async function notifyFeishuText(text: string): Promise<FeishuSendResult> {
