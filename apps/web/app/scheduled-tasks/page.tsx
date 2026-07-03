@@ -39,6 +39,7 @@ type StockUpdateProgress = {
   running: boolean;
   total: number;
   processed: number;
+  roundProcessed: number;
   pending: number;
   round: number;
   retryRounds: number;
@@ -61,6 +62,7 @@ type StockUpdateStreamEvent = {
   type: string;
   total?: number;
   processed?: number;
+  roundProcessed?: number;
   pending?: number;
   round?: number;
   retryRounds?: number;
@@ -215,6 +217,7 @@ export default function ScheduledTasksPage() {
         running: true,
         total: event.total ?? 0,
         processed: 0,
+        roundProcessed: 0,
         pending: event.total ?? 0,
         round: 1,
         retryRounds: event.retryRounds ?? 1,
@@ -231,6 +234,7 @@ export default function ScheduledTasksPage() {
         running: true,
         total: event.total ?? prev?.total ?? 0,
         processed: event.processed ?? prev?.processed ?? 0,
+        roundProcessed: event.roundProcessed ?? 0,
         pending: event.pending ?? prev?.pending ?? 0,
         round: event.round ?? prev?.round ?? 1,
         retryRounds: event.retryRounds ?? prev?.retryRounds ?? 1,
@@ -251,6 +255,7 @@ export default function ScheduledTasksPage() {
           running: true,
           total: event.total ?? prev?.total ?? 0,
           processed: event.processed ?? prev?.processed ?? 0,
+          roundProcessed: event.roundProcessed ?? prev?.roundProcessed ?? 0,
           pending: event.pending ?? prev?.pending ?? 0,
           round: event.round ?? prev?.round ?? 1,
           retryRounds: event.retryRounds ?? prev?.retryRounds ?? 1,
@@ -262,7 +267,7 @@ export default function ScheduledTasksPage() {
           message: item.error
             ? final
               ? item.error
-              : '等待重试'
+              : `${item.error}，等待下一轮重试`
             : `最新 ${item.latestDate ?? '-'}`,
         };
       });
@@ -280,6 +285,7 @@ export default function ScheduledTasksPage() {
           prev?.processed ??
           prev?.total ??
           0,
+        roundProcessed: result?.items?.length ?? prev?.roundProcessed ?? 0,
         pending: 0,
         round: prev?.round ?? 1,
         retryRounds: prev?.retryRounds ?? 1,
@@ -297,6 +303,7 @@ export default function ScheduledTasksPage() {
         running: false,
         total: prev?.total ?? 0,
         processed: prev?.processed ?? 0,
+        roundProcessed: prev?.roundProcessed ?? 0,
         pending: prev?.pending ?? 0,
         round: prev?.round ?? 1,
         retryRounds: prev?.retryRounds ?? 1,
@@ -316,6 +323,7 @@ export default function ScheduledTasksPage() {
       running: true,
       total: 0,
       processed: 0,
+      roundProcessed: 0,
       pending: 0,
       round: 1,
       retryRounds: 1,
@@ -361,6 +369,7 @@ export default function ScheduledTasksPage() {
         running: false,
         total: prev?.total ?? 0,
         processed: prev?.processed ?? 0,
+        roundProcessed: prev?.roundProcessed ?? 0,
         pending: prev?.pending ?? 0,
         round: prev?.round ?? 1,
         retryRounds: prev?.retryRounds ?? 1,
@@ -392,7 +401,10 @@ export default function ScheduledTasksPage() {
 
   const stockUpdatePercent =
     stockUpdate && stockUpdate.total > 0
-      ? Math.min(100, Math.round((stockUpdate.processed / stockUpdate.total) * 100))
+      ? Math.min(
+          100,
+          Math.round((stockUpdate.roundProcessed / stockUpdate.total) * 100),
+        )
       : 0;
 
   if (authLoading) {
@@ -477,8 +489,10 @@ export default function ScheduledTasksPage() {
             </div>
             <div className={styles.progressMeta}>
               <span>
-                {stockUpdate.processed}/{stockUpdate.total || '-'} · {stockUpdatePercent}%
+                本轮 {stockUpdate.roundProcessed}/{stockUpdate.total || '-'} ·{' '}
+                {stockUpdatePercent}%
               </span>
+              <span>完成 {stockUpdate.processed}</span>
               <span>
                 第 {stockUpdate.round}/{stockUpdate.retryRounds} 轮
               </span>

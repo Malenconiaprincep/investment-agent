@@ -7,6 +7,8 @@ export const CONFIGURABLE_KEYS = [
   ...AI_API_KEY_ENVS,
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
+  'INFOWAY_API_KEY',
+  'STOCK_DAILY_CSV_PROVIDER',
   'LIBSQL_URL',
   'LIBSQL_AUTH_TOKEN',
   'AGENT_CORE_TOKEN',
@@ -70,6 +72,10 @@ function serializeEnvFile(values: Record<string, string>): string {
     {
       title: '问财 MCP（智能选股 / 投委会）',
       keys: ['IWENCAI_API_KEY', 'IWENCAI_BASE_URL'],
+    },
+    {
+      title: '行情数据源（股票日线更新）',
+      keys: ['INFOWAY_API_KEY', 'STOCK_DAILY_CSV_PROVIDER'],
     },
     {
       title: 'Turso 远程数据库（可选）',

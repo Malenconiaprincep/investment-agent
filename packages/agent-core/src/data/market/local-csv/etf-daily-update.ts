@@ -9,6 +9,7 @@ import path from 'node:path';
 import { ETF_POOL_19 } from '../../etf/pool.js';
 import { isEtfSymbol, isStockSymbol } from '../asset-type.js';
 import { fetchDailyKlines } from '../free/tencent.js';
+import { fetchInfowayDailyKlines } from '../free/infoway.js';
 import {
   getLocalEtfDailyCsvPath,
   getLocalStockDailyCsvPath,
@@ -21,6 +22,7 @@ const DAILY_HEADER =
   '\uFEFF日期,代码,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率';
 
 type DailyCsvAssetType = 'etf' | 'stock';
+type DailyCsvProvider = 'auto' | 'tencent' | 'infoway';
 
 type DailyCsvRow = {
   tradeDate: string;
@@ -77,6 +79,7 @@ export type DailyCsvUpdateProgressEvent =
       pending: number;
       total: number;
       processed: number;
+      roundProcessed: number;
     }
   | {
       type: 'item';
@@ -85,6 +88,7 @@ export type DailyCsvUpdateProgressEvent =
       retryRounds: number;
       total: number;
       processed: number;
+      roundProcessed: number;
       pending: number;
       item: DailyCsvUpdateItem;
       final: boolean;
@@ -283,6 +287,15 @@ function envNumber(name: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function resolveDailyCsvProvider(assetType: DailyCsvAssetType): DailyCsvProvider {
+  const raw =
+    assetType === 'stock'
+      ? process.env.STOCK_DAILY_CSV_PROVIDER?.trim().toLowerCase()
+      : process.env.ETF_DAILY_CSV_PROVIDER?.trim().toLowerCase();
+  if (raw === 'tencent' || raw === 'infoway' || raw === 'auto') return raw;
+  return 'auto';
+}
+
 function uniqueSymbols(symbols: Iterable<string>, predicate: (symbol: string) => boolean): string[] {
   return [...new Set([...symbols].map((item) => item.trim()).filter(predicate))].sort((a, b) =>
     a.localeCompare(b),
@@ -303,9 +316,15 @@ function resolveDelayMs(assetType: DailyCsvAssetType, input?: number): number {
     assetType === 'etf'
       ? envNumber('ETF_DAILY_CSV_DELAY_MS')
       : envNumber('STOCK_DAILY_CSV_DELAY_MS');
+  const defaultDelayMs = assetType === 'stock' ? 333 : 80;
   return Math.max(
     0,
-    Math.floor(input ?? fromEnv ?? envNumber('DAILY_CSV_UPDATE_DELAY_MS') ?? 80),
+    Math.floor(
+      input ??
+        fromEnv ??
+        envNumber('DAILY_CSV_UPDATE_DELAY_MS') ??
+        defaultDelayMs,
+    ),
   );
 }
 
@@ -361,17 +380,26 @@ async function fetchDailyKlinesWithRetry(input: {
   retryCount: number;
   retryDelayMs: number;
   timeoutMs: number;
+  provider: DailyCsvProvider;
 }): Promise<Awaited<ReturnType<typeof fetchDailyKlines>> & { attempts: number }> {
   let lastError: unknown;
   const maxAttempts = input.retryCount + 1;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const result = await fetchDailyKlines(input.symbol, input.days, {
-        forceRefresh: true,
-        retries: 0,
-        timeoutMs: input.timeoutMs,
-      });
+      const useInfoway =
+        input.provider === 'infoway' ||
+        (input.provider === 'auto' && Boolean(process.env.INFOWAY_API_KEY?.trim()));
+      const result = useInfoway
+        ? await fetchInfowayDailyKlines(input.symbol, input.days, {
+            retries: 0,
+            timeoutMs: input.timeoutMs,
+          })
+        : await fetchDailyKlines(input.symbol, input.days, {
+            forceRefresh: true,
+            retries: 0,
+            timeoutMs: input.timeoutMs,
+          });
       return { ...result, attempts: attempt };
     } catch (error) {
       lastError = error;
@@ -392,6 +420,7 @@ async function updateDailyCsvSymbol(input: {
   retryCount: number;
   delayMs: number;
   timeoutMs: number;
+  provider: DailyCsvProvider;
   previousAttempts?: number;
 }): Promise<DailyCsvUpdateItem> {
   const filePath = getFilePath(input.assetType, input.symbol);
@@ -417,6 +446,7 @@ async function updateDailyCsvSymbol(input: {
       retryCount: input.retryCount,
       retryDelayMs: input.delayMs,
       timeoutMs: input.timeoutMs,
+      provider: input.provider,
     });
     item.attempts += attempts;
     const merged = mergeRows({
@@ -544,6 +574,7 @@ export async function updateDailyCsvPool(options: {
     options.retryRoundDelayMs,
   );
   const timeoutMs = resolveTimeoutMs(options.timeoutMs);
+  const provider = resolveDailyCsvProvider(options.assetType);
   const itemsBySymbol = new Map<string, DailyCsvUpdateItem>();
   const finalSymbols = new Set<string>();
   let pendingSymbols = symbols;
@@ -571,6 +602,7 @@ export async function updateDailyCsvPool(options: {
       pending: pendingSymbols.length,
       total: symbols.length,
       processed: finalSymbols.size,
+      roundProcessed: 0,
     });
 
     for (const [index, symbol] of pendingSymbols.entries()) {
@@ -581,6 +613,7 @@ export async function updateDailyCsvPool(options: {
         retryCount,
         delayMs,
         timeoutMs,
+        provider,
         previousAttempts: itemsBySymbol.get(symbol)?.attempts,
       });
 
@@ -596,6 +629,7 @@ export async function updateDailyCsvPool(options: {
         retryRounds,
         total: symbols.length,
         processed: finalSymbols.size,
+        roundProcessed: index + 1,
         pending: Math.max(0, pendingSymbols.length - index - 1),
         item,
         final,

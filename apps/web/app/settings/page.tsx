@@ -142,6 +142,7 @@ type OtherKeyField = {
   required?: boolean;
   placeholder: string;
   hint?: string;
+  secret?: boolean;
 };
 
 const OTHER_KEY_FIELDS: OtherKeyField[] = [
@@ -151,12 +152,26 @@ const OTHER_KEY_FIELDS: OtherKeyField[] = [
     required: true,
     placeholder: 'sk-...',
     hint: '智能选股、板块筛选、热点新闻需要此 Key',
+    secret: true,
   },
   {
     key: 'IWENCAI_BASE_URL',
     label: '问财 API 地址',
     placeholder: 'https://openapi.iwencai.com',
     hint: '一般保持默认即可',
+  },
+  {
+    key: 'INFOWAY_API_KEY',
+    label: 'Infoway API Key',
+    placeholder: 'Infoway 控制台申请的 API Key',
+    hint: '股票日线更新可用 Infoway Candles + 前复权因子接口',
+    secret: true,
+  },
+  {
+    key: 'STOCK_DAILY_CSV_PROVIDER',
+    label: '股票日线数据源',
+    placeholder: 'auto / infoway / tencent',
+    hint: 'auto 表示有 Infoway Key 时优先 Infoway，否则回退腾讯',
   },
 ];
 
@@ -841,7 +856,7 @@ export default function SettingsPage() {
               </section>
 
               <section className="pane-card monitor-settings-section">
-                <h2 className="section-title">问财 MCP</h2>
+                <h2 className="section-title">外部数据源</h2>
 
                 <div className="settings-env-grid">
                   {OTHER_KEY_FIELDS.map((field) => (
@@ -854,7 +869,7 @@ export default function SettingsPage() {
                         )}
                       </span>
                       <input
-                        type="password"
+                        type={field.secret ? 'password' : 'text'}
                         className="input"
                         autoComplete="off"
                         placeholder={secretPlaceholder(

@@ -15,6 +15,8 @@ export const TOKEN_KEYS = [
   ...AI_API_KEY_ENVS,
   'IWENCAI_API_KEY',
   'IWENCAI_BASE_URL',
+  'INFOWAY_API_KEY',
+  'STOCK_DAILY_CSV_PROVIDER',
 ] as const;
 
 import {
@@ -264,7 +266,7 @@ function buildKeyStatus(key: SyncedEnvKey, value: string): TokenKeyStatus {
     };
   }
   if (!trimmed) return { configured: false };
-  if (key === 'IWENCAI_BASE_URL') {
+  if (key === 'IWENCAI_BASE_URL' || key === 'STOCK_DAILY_CSV_PROVIDER') {
     return { configured: true, value: trimmed };
   }
   return { configured: true, masked: maskSecret(trimmed) };

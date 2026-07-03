@@ -44,7 +44,9 @@ pnpm stock:update-daily
 pnpm stock:update-daily --max=50 --retry-rounds=3
 ```
 
-定时任务 `stock-daily-csv-update` 默认在交易日 17:00 执行同一套增量更新逻辑。单只股票请求失败会按 `DAILY_CSV_UPDATE_RETRIES` 立即重试；整批结束后，失败标的会按 `STOCK_DAILY_CSV_RETRY_ROUNDS` 再跑多轮。可用 `STOCK_DAILY_CSV_DELAY_MS` 和 `STOCK_DAILY_CSV_RETRY_ROUND_DELAY_MS` 控制节奏。
+定时任务 `stock-daily-csv-update` 默认在交易日 17:00 执行同一套增量更新逻辑。股票默认每只间隔 333ms，约 1 秒 3 个请求。单只股票请求失败会按 `DAILY_CSV_UPDATE_RETRIES` 立即重试；整批结束后，失败标的会按 `STOCK_DAILY_CSV_RETRY_ROUNDS` 再跑多轮。可用 `STOCK_DAILY_CSV_DELAY_MS` 和 `STOCK_DAILY_CSV_RETRY_ROUND_DELAY_MS` 控制节奏。
+
+可选接入 Infoway：配置 `INFOWAY_API_KEY` 后，`STOCK_DAILY_CSV_PROVIDER=auto` 会优先使用 Infoway Candles + 前复权因子接口；不配置时继续走腾讯接口。也可显式设为 `infoway` 或 `tencent`。
 
 ## 百度网盘 A 股数据同步（兜底）
 
