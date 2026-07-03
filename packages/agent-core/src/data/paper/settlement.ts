@@ -13,13 +13,12 @@ export function usesT1Settlement(symbol: string): boolean {
   return getPaperSettlementRule(symbol) === 't1';
 }
 
-/** 分仓可卖延迟：回测策略仓 T+2，新闻仓/雷达股票仓 T+1，ETF T+0 */
+/** 分仓可卖延迟：普通股票 T+1，ETF T+0 */
 export function getStockSettlementDelayDays(
   bucket: PaperBucket,
   symbol: string,
 ): number {
   if (isEtfSymbol(symbol)) return 0;
-  if (bucket === 'stock-backtest') return 2;
   return 1;
 }
 
@@ -47,7 +46,6 @@ export function isLotSellableOnTradeDate(input: {
 
 export function bucketSettlementRuleLabel(bucket: PaperBucket, symbol: string): string {
   if (isEtfSymbol(symbol)) return 'T+0';
-  if (bucket === 'stock-backtest') return 'T+2';
   return 'T+1';
 }
 

@@ -53,10 +53,10 @@ export const STOCK_BACKTEST_EXIT_SCHEDULE_LABEL =
   '每个交易日 9:30–15:00 监控回测策略仓与新闻仓出场（止盈/止损/持有到期等）';
 
 export const STOCK_BACKTEST_CLOSE_SCHEDULE_LABEL =
-  '回测策略仓：数据更新后手动执行 stock-backtest-auto-run';
+  '回测策略仓：交易日前 08:00 按前一交易日数据扫描并买入';
 
 export const MARKET_DATA_REMINDER_SCHEDULE_LABEL =
-  '每个交易日提醒更新大盘/个股日线 CSV（数据未就绪时不跑回测策略仓）';
+  '每个交易日提醒更新大盘/个股日线 CSV（数据未就绪时不跑回测策略仓买入）';
 
 export function isWeekday(date: Date = getBeijingNow()): boolean {
   const day = date.getDay();

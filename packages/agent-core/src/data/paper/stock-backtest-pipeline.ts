@@ -174,7 +174,7 @@ async function runStockBacktestBucketPipeline(input: {
       bucket: input.bucket,
       tradeDate,
       skipped: true,
-      reason: '非早盘 8 点窗口（回测策略+新闻仓应在 08:00 运行）',
+      reason: '非早盘窗口（回测策略仓应在交易日前 08:00 左右运行买入）',
       dataFreshness,
     };
   }
@@ -199,7 +199,7 @@ async function runStockBacktestBucketPipeline(input: {
       input.mode === 'preopen' ? tradeDate : getExpectedMarketDataDate(now);
 
     const exitSells =
-      input.bucket === 'stock-backtest-news'
+      input.mode === 'preopen'
         ? []
         : await autoSellExits(input.bucket, tradeDate, {
             requireSession: false,
@@ -254,10 +254,10 @@ export async function runStockBacktestPaperPipeline(options?: {
 }): Promise<StockBacktestPaperResult> {
   return runStockBacktestBucketPipeline({
     bucket: 'stock-backtest',
-    mode: 'entry_close',
+    mode: 'preopen',
     newsFilter: 'off',
     force: options?.force,
-    requirePostMarket: !options?.force,
+    requirePreMarket: !options?.force,
   });
 }
 

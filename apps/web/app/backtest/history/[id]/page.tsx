@@ -131,7 +131,7 @@ function returnClass(value: number | null | undefined) {
 }
 
 function strategyLabel(strategy: string) {
-  if (strategy === 'red-diamond-momentum') return 'A 股红钻动量';
+  if (strategy === 'red-diamond-momentum') return 'A 股动量启动';
   if (strategy === 'red-diamond') return '红钻信号统计';
   if (strategy === 'etf-momentum-rotation') return 'ETF 动量轮动';
   if (strategy === 'etf-tail-rules') return 'ETF 尾盘规则';

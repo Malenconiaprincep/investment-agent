@@ -10,7 +10,7 @@ function checkCronAuth(request: Request) {
   return request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-/** 数据更新后运行回测策略模拟盘（纯策略仓） */
+/** 北京时间 08:00 运行回测策略模拟盘（纯策略仓） */
 export async function GET(request: Request) {
   if (!checkCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

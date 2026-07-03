@@ -16,6 +16,7 @@ import { isFeishuNotifyEnabled } from '../notify/feishu.js';
 import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import {
+  runStockBacktestPaperPipeline,
   runStockBacktestNewsPaperPipeline,
 } from '../paper/stock-backtest-pipeline.js';
 import { runStockBacktestPaperExitMonitor } from '../paper/stock-backtest-exit.js';
@@ -576,6 +577,17 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
+    id: 'stock-backtest-paper',
+    label: '回测策略模拟盘买入',
+    hour: 8,
+    minute: 0,
+    run: async () => {
+      const result = await runStockBacktestPaperPipeline();
+      await notifyStockBacktestPaper(result);
+      return result;
+    },
+  },
+  {
     id: 'stock-backtest-news-paper',
     label: '回测策略+新闻模拟盘买入',
     hour: 8,
@@ -932,7 +944,7 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
-    `08:00 行情数据提醒 / 回测+新闻仓买入`,
+    `08:00 行情数据提醒 / 回测策略仓买入 / 回测+新闻仓买入`,
     `交易时段 回测策略分仓出场监控（策略仓+新闻仓）`,
     `15:30 ETF 日线更新`,
     `17:00 股票日线更新`,

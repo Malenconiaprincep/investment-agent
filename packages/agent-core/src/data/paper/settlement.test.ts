@@ -20,9 +20,9 @@ describe('paper settlement rules', () => {
     expect(bucketSettlementRuleLabel('stock', '600519')).toBe('T+1');
   });
 
-  it('treats backtest strategy bucket as T+2', () => {
-    expect(getStockSettlementDelayDays('stock-backtest', '600519')).toBe(2);
-    expect(bucketSettlementRuleLabel('stock-backtest', '600519')).toBe('T+2');
+  it('treats backtest strategy bucket as T+1 after real next-day entry', () => {
+    expect(getStockSettlementDelayDays('stock-backtest', '600519')).toBe(1);
+    expect(bucketSettlementRuleLabel('stock-backtest', '600519')).toBe('T+1');
   });
 
   it('treats backtest news bucket as T+1', () => {
@@ -49,7 +49,15 @@ describe('paper settlement rules', () => {
     ).toBe(true);
   });
 
-  it('blocks T+2 sell until two trading days after buy', () => {
+  it('treats backtest strategy lots as sellable on the next trading day', () => {
+    expect(
+      isLotSellableOnTradeDate({
+        bucket: 'stock-backtest',
+        symbol: '600519',
+        buyDate: '2026-07-01',
+        tradeDate: '2026-07-01',
+      }),
+    ).toBe(false);
     expect(
       isLotSellableOnTradeDate({
         bucket: 'stock-backtest',
@@ -57,7 +65,7 @@ describe('paper settlement rules', () => {
         buyDate: '2026-07-01',
         tradeDate: '2026-07-02',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isLotSellableOnTradeDate({
         bucket: 'stock-backtest',

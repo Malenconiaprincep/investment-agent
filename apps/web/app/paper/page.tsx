@@ -350,9 +350,9 @@ export default function PaperTradingPage() {
                   : activeBucket === 'stock'
                     ? '暂无持仓。消息雷达/跟踪池达标后会买入此仓，也可在'
                     : activeBucket === 'stock-backtest'
-                      ? '暂无持仓。数据更新后将按回测 T+2 策略全市场扫描并买入。'
+                      ? '暂无持仓。每个交易日 08:00 按回测策略扫描，次日交易用盘口价买入。'
                       : activeBucket === 'stock-backtest-news'
-                        ? '暂无持仓。每个交易日 08:00 按回测 T+2 + 新闻过滤扫描并买入。'
+                        ? '暂无持仓。每个交易日 08:00 按回测策略 + 新闻过滤扫描，次日交易用盘口价买入。'
                         : '暂无持仓。'}
                 {activeBucket === 'stock' && (
                   <>
@@ -475,13 +475,13 @@ export default function PaperTradingPage() {
             <strong>股票仓（雷达）：</strong>消息雷达/跟踪池 · 红钻 + Checklist · 与回测策略仓隔离
           </li>
           <li>
-            <strong>回测策略仓：</strong>数据更新后手动执行脚本买入 · 交易时段自动监控出场
+            <strong>回测策略仓：</strong>08:00 按前一交易日数据扫描 · 盘口价买入 · 交易时段自动监控出场
           </li>
           <li>
-            <strong>回测+新闻仓：</strong>08:00 自动买入 · 交易时段自动监控出场（规则同上）
+            <strong>回测+新闻仓：</strong>08:00 自动扫描并叠加新闻过滤 · 盘口价买入 · 交易时段自动监控出场
           </li>
           <li>
-            <strong>交收规则：</strong>ETF 仓 T+0 · 雷达/新闻仓 T+1 · 回测策略仓 T+2
+            <strong>交收规则：</strong>ETF 仓 T+0 · 股票仓 T+1
           </li>
         </ul>
         {view && (

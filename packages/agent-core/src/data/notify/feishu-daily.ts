@@ -268,7 +268,7 @@ export function buildStockBacktestPaperLines(result: StockBacktestPaperResult): 
 
   if (result.scan) {
     lines.push(
-      `扫描：全市场 ${result.scan.scanned} 只 · 红钻信号 ${result.scan.rawSignals} · 候选 ${result.scan.candidates}`,
+      `扫描：全市场 ${result.scan.scanned} 只 · 动量启动信号 ${result.scan.rawSignals} · 候选 ${result.scan.candidates}`,
     );
   }
 
@@ -308,7 +308,7 @@ export async function notifyMarketDataReminder(
     `交易日：${freshness.tradeDate}`,
     freshness.reminder,
     '',
-    '更新完成后系统将自动运行「股票仓（回测策略）」；若仅手动更新 CSV，可执行：',
+    '更新完成后，系统会在交易日前 08:00 运行「股票仓（回测策略）」买入扫描；如需临时强制执行，可运行：',
     'pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts stock-backtest-auto-run --force',
   ]);
 }

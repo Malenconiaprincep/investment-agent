@@ -222,7 +222,7 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
   {
     value: 'stock',
     label: '股票策略',
-    help: '全市场 A 股前复权日线选红钻 + 动量信号；默认过滤 ST/低价/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。',
+    help: '全市场 A 股前复权日线选动量启动信号；默认过滤 ST/8 元以下/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。',
   },
   {
     value: 'etf-momentum',
@@ -738,7 +738,7 @@ export default function BacktestPage() {
       <PageHeader
         eyebrow="真实行情回测"
         title="策略回测"
-        description="同一页回放 ETF 轮动和 A 股红钻策略；A 股优先使用本地前复权 CSV，结果可直接对照逐笔交易。"
+        description="同一页回放 ETF 轮动和 A 股动量策略；A 股优先使用本地前复权 CSV，结果可直接对照逐笔交易。"
       />
 
       <nav className="page-toolbar" aria-label="页面导航">
@@ -874,7 +874,7 @@ export default function BacktestPage() {
             ) : (
               <div className="backtest-universe-note">
                 <strong>本地全市场 A 股</strong>
-                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；红钻只是入场候选，默认过滤 ST、3 元以下和近 5 日成交额低于 3000 万的票。</span>
+                <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；动量启动信号作为入场候选，默认过滤 ST、8 元以下和近 5 日成交额低于 3000 万的票。</span>
               </div>
             )}
             {stockUniverse === 'manual' && (
@@ -1243,7 +1243,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；红钻叠加动量 checklist 入场，过滤 ST/低价/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。`
+                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；动量启动信号叠加 checklist 入场，过滤 ST/8 元以下/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。`
                     : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
                   {hasDataCutoffMismatch
                     ? ` 收益概述按策略和大盘共同数据截止日 ${fmtTradeDate(comparisonEndDate)} 对齐；策略最新收益 ${fmtPct(latestStrategyReturn)}。`
