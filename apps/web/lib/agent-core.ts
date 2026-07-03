@@ -374,3 +374,16 @@ export async function fetchAgentCoreScheduledTaskLogs(input?: {
     tradeDates: data.tradeDates ?? [],
   };
 }
+
+export async function clearAgentCoreScheduledTaskLogs(): Promise<{ cleared: boolean }> {
+  const { baseUrl } = getAgentCoreConfig();
+  const response = await fetch(`${baseUrl}/scheduler/logs`, {
+    method: 'DELETE',
+    headers: buildHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentCoreError(response));
+  }
+  const data = (await response.json()) as { cleared?: boolean };
+  return { cleared: data.cleared ?? false };
+}

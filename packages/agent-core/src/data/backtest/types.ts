@@ -181,6 +181,12 @@ export type BacktestRunConfig = {
   momentumMaxHoldDays?: number;
   weakMomentumMaxHoldDays?: number;
   weakMomentumMaxHoldBenchmarkMomentum20Pct?: number;
+  benchmarkTradeDays?: number;
+  stockIdleDays?: number;
+  stockIdleDayPct?: number | null;
+  longestStockIdleDays?: number;
+  longestStockIdleStartDate?: string;
+  longestStockIdleEndDate?: string;
 };
 
 export type BacktestRunResult = {

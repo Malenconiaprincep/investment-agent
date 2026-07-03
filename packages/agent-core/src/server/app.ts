@@ -20,7 +20,11 @@ import {
   updateScheduledTask,
   type ScheduledTaskId,
 } from '../data/schedulers/task-settings.js';
-import { readRecentScheduledTaskLogs, listScheduledTaskLogTradeDates } from '../data/schedulers/scheduled-task-log.js';
+import {
+  clearScheduledTaskLogs,
+  readRecentScheduledTaskLogs,
+  listScheduledTaskLogTradeDates,
+} from '../data/schedulers/scheduled-task-log.js';
 
 const app = new Hono();
 
@@ -28,7 +32,7 @@ app.use(
   '*',
   cors({
     origin: (origin) => origin ?? '*',
-    allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 );
@@ -137,6 +141,11 @@ app.get('/scheduler/logs', (c) => {
     }),
     tradeDates: listScheduledTaskLogTradeDates(),
   });
+});
+
+app.delete('/scheduler/logs', (c) => {
+  if (!requireAuth(c.req.header('Authorization'))) return unauthorized();
+  return c.json(clearScheduledTaskLogs());
 });
 
 app.post('/cli/:module', async (c) => {

@@ -446,13 +446,12 @@ async function tickStockBacktestPaperExitMonitor(now = getBeijingNow()) {
       });
       return;
     }
-    const summary =
-      result.sells.length > 0
-        ? `卖出 ${result.sells.length} 笔（${result.sells.map((s) => `${s.bucket}:${s.symbol}`).join('、')}）`
-        : '无出场信号';
-    if (result.sells.length > 0) {
-      logInfo(`${label} 完成：${summary}`);
-    }
+    if (result.sells.length === 0) return;
+
+    const summary = `卖出 ${result.sells.length} 笔（${result.sells
+      .map((s) => `${s.bucket}:${s.symbol}`)
+      .join('、')}）`;
+    logInfo(`${label} 完成：${summary}`);
     recordTaskLog({
       taskId: 'stock-backtest-exit-monitor',
       label,

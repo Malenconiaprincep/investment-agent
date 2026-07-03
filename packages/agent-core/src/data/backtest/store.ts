@@ -22,6 +22,11 @@ export type BacktestRunRecord = {
   initialCapital: number | null;
 };
 
+export type BacktestRunDetail = {
+  record: BacktestRunRecord;
+  result: BacktestRunResult;
+};
+
 export type SaveBacktestRunOptions = {
   source?: string;
   args?: string[];
@@ -326,4 +331,51 @@ export async function listBacktestRuns(limit = 20): Promise<BacktestRunRecord[]>
         r.initial_capital == null ? null : Number(r.initial_capital),
     };
   });
+}
+
+function mapBacktestRunRecord(row: Record<string, unknown>): BacktestRunRecord {
+  return {
+    id: String(row.id),
+    strategy: String(row.strategy),
+    assetType:
+      row.asset_type === 'stock' || row.asset_type === 'etf'
+        ? row.asset_type
+        : 'mixed',
+    generatedAt: String(row.generated_at),
+    createdAt: String(row.created_at),
+    requestedDays: Number(row.requested_days),
+    startDate: row.start_date == null ? null : String(row.start_date),
+    endDate: row.end_date == null ? null : String(row.end_date),
+    tradeCount: Number(row.trade_count),
+    validTradeCount: Number(row.valid_trade_count),
+    finalReturnPct:
+      row.final_return_pct == null ? null : Number(row.final_return_pct),
+    initialCapital:
+      row.initial_capital == null ? null : Number(row.initial_capital),
+  };
+}
+
+export async function getBacktestRun(id: string): Promise<BacktestRunDetail | null> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT id, strategy, asset_type, generated_at, created_at,
+      requested_days, start_date, end_date, trade_count, valid_trade_count,
+      final_return_pct, initial_capital, result_json
+      FROM backtest_runs
+      WHERE id = ?
+      LIMIT 1`,
+    args: [id],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+
+  const parsed = JSON.parse(String(row.result_json)) as BacktestRunResult;
+  return {
+    record: mapBacktestRunRecord(row),
+    result: {
+      ...parsed,
+      runId: String(row.id),
+      persistedAt: String(row.created_at),
+    },
+  };
 }

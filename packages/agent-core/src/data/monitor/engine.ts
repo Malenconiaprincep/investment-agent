@@ -441,8 +441,13 @@ export async function runMonitorPoll(options?: {
 
   await resolveUnresolvedSymbolNames(symbolMeta);
 
+  let quoteWarning: string | null = null;
   const quotes = marketOpen
-    ? await fetchIntradayQuotes([...symbolMeta.keys()])
+    ? await fetchIntradayQuotes([...symbolMeta.keys()]).catch((error) => {
+        quoteWarning = error instanceof Error ? error.message : String(error);
+        console.warn(`[monitor] intraday quote fetch failed: ${quoteWarning}`);
+        return new Map<string, IntradayQuote>();
+      })
     : new Map<string, IntradayQuote>();
 
   const contexts = await buildSymbolContexts({
@@ -604,7 +609,9 @@ export async function runMonitorPoll(options?: {
 
   const elapsedMs = Date.now() - started;
   const summary = marketOpen
-    ? `扫描 ${contexts.length} 只，新增 ${alerts.length} 条提醒（新资讯 ${newNews.length} 条）`
+    ? `扫描 ${contexts.length} 只，新增 ${alerts.length} 条提醒（新资讯 ${newNews.length} 条）${
+        quoteWarning ? '；行情降级' : ''
+      }`
     : `非交易时段（${TRADING_HOURS_LABEL}），仅处理资讯 ${newNews.length} 条`;
 
   await saveMonitorPollRun({

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { BacktestEquityChart } from '@/components/charts/BacktestEquityChart';
 import { StockKlineChart } from '@/components/charts/StockKlineChart';
@@ -148,6 +149,12 @@ type BacktestRunConfig = {
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
   initialCapital?: number;
+  benchmarkTradeDays?: number;
+  stockIdleDays?: number;
+  stockIdleDayPct?: number | null;
+  longestStockIdleDays?: number;
+  longestStockIdleStartDate?: string;
+  longestStockIdleEndDate?: string;
 };
 
 type BacktestTrade = {
@@ -734,6 +741,12 @@ export default function BacktestPage() {
         description="同一页回放 ETF 轮动和 A 股红钻策略；A 股优先使用本地前复权 CSV，结果可直接对照逐笔交易。"
       />
 
+      <nav className="page-toolbar" aria-label="页面导航">
+        <Link href="/backtest/history" className="button button-secondary">
+          回测记录池
+        </Link>
+      </nav>
+
       <section className="action-panel backtest-controls">
         <div className="backtest-control-block">
           <div className="backtest-control-head">
@@ -1182,6 +1195,20 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
   const universeCount = result.config?.stockUniverseCount ?? result.symbols.length;
   const isMomentum =
     result.strategy === 'red-diamond-momentum' || result.strategy === 'diamond-momentum';
+  const stockIdleDays =
+    typeof result.config?.stockIdleDays === 'number' ? result.config.stockIdleDays : null;
+  const benchmarkTradeDays =
+    typeof result.config?.benchmarkTradeDays === 'number'
+      ? result.config.benchmarkTradeDays
+      : null;
+  const stockIdleDayPct =
+    typeof result.config?.stockIdleDayPct === 'number'
+      ? result.config.stockIdleDayPct
+      : null;
+  const longestStockIdleDays =
+    typeof result.config?.longestStockIdleDays === 'number'
+      ? result.config.longestStockIdleDays
+      : null;
   const chartDays = Math.max(120, Math.min(520, result.requestedDays + 90));
   const panels: Array<{ id: StockBacktestPanel; label: string; hint: string }> = [
     { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
@@ -1242,6 +1269,18 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
               <SummaryMetric label="单笔最高" value={fmtPct(result.metrics.bestReturnPct)} tone={result.metrics.bestReturnPct} />
               <SummaryMetric label="单笔最低" value={fmtPct(result.metrics.worstReturnPct)} tone={result.metrics.worstReturnPct} />
               <SummaryMetric label="平均持有" value={`${fmtNumber(result.metrics.avgHoldDays, 1)} 日`} />
+              {stockIdleDays != null && benchmarkTradeDays != null ? (
+                <SummaryMetric
+                  label="空仓交易日"
+                  value={`${stockIdleDays}/${benchmarkTradeDays} 日${stockIdleDayPct != null ? ` · ${fmtNumber(stockIdleDayPct)}%` : ''}`}
+                />
+              ) : null}
+              {longestStockIdleDays != null ? (
+                <SummaryMetric
+                  label="最长空仓"
+                  value={`${longestStockIdleDays} 日`}
+                />
+              ) : null}
             </div>
 
             <BacktestEquityChart

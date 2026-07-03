@@ -144,6 +144,15 @@ export function listScheduledTaskLogTradeDates(): string[] {
   );
 }
 
+export function clearScheduledTaskLogs(): { cleared: boolean } {
+  mkdirSync(DATA_DIR, { recursive: true });
+  const cleared =
+    existsSync(LOG_PATH) && readFileSync(LOG_PATH, 'utf-8').length > 0;
+  writeFileSync(LOG_PATH, '', 'utf-8');
+  lastPurgeMs = Date.now();
+  return { cleared };
+}
+
 export function getScheduledTaskLogPath(): string {
   return LOG_PATH;
 }

@@ -4,7 +4,11 @@ import {
 } from '../data/backtest/diamond.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
 import { runEtfTailRulesBacktest } from '../data/backtest/etf.js';
-import { saveBacktestRun } from '../data/backtest/store.js';
+import {
+  getBacktestRun,
+  listBacktestRuns,
+  saveBacktestRun,
+} from '../data/backtest/store.js';
 import { computeScreeningBacktest } from '../data/screening/backtest.js';
 import { getScreeningSession } from '../data/screening/store.js';
 
@@ -133,6 +137,19 @@ function parseStockUniverse(args: string[]): 'retail-stock' | undefined {
 export async function dispatchBacktest(args: string[]): Promise<string> {
   const command = args[0];
 
+  if (command === 'history' || command === 'list') {
+    const limit = parsePositiveInt(args[1], 40);
+    return JSON.stringify({ runs: await listBacktestRuns(Math.min(limit, 200)) });
+  }
+
+  if (command === 'get') {
+    const id = args[1]?.trim();
+    if (!id) throw new Error('请提供回测记录 id');
+    const detail = await getBacktestRun(id);
+    if (!detail) throw new Error(`Backtest run not found: ${id}`);
+    return JSON.stringify(detail);
+  }
+
   if (command === 'stock' || command === 'diamond' || command === 'diamond-momentum') {
     const universe = parseStockUniverse(args);
     const symbols = parseSymbols(args[1]);
@@ -235,6 +252,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
+    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
   );
 }

@@ -3675,6 +3675,18 @@ a:hover {
   color: var(--muted);
 }
 
+.backtest-history-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+
+.backtest-history-notes li + li {
+  margin-top: 0.4rem;
+}
+
 .empty-state {
   padding: 2.5rem 1.5rem;
   text-align: center;

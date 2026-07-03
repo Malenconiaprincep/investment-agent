@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
+  clearAgentCoreScheduledTaskLogs,
   fetchAgentCoreScheduledTaskLogs,
   fetchAgentCoreScheduledTasks,
 } from '@/lib/agent-core';
@@ -31,6 +32,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ logs, tradeDates, tasks });
   } catch (error) {
     const message = error instanceof Error ? error.message : '加载定时任务日志失败';
+    const status = message.includes('登录')
+      ? 401
+      : message.includes('Pro')
+        ? 403
+        : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function DELETE() {
+  try {
+    await requireProScheduledTasks();
+    return NextResponse.json(await clearAgentCoreScheduledTaskLogs());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '清空定时任务日志失败';
     const status = message.includes('登录')
       ? 401
       : message.includes('Pro')

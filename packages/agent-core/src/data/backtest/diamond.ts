@@ -153,6 +153,15 @@ type MarketRegimeSnapshot = {
   midBullish: boolean;
 };
 
+type StockIdleExposureStats = {
+  benchmarkTradeDays: number;
+  stockIdleDays: number;
+  stockIdleDayPct: number | null;
+  longestStockIdleDays: number;
+  longestStockIdleStartDate?: string;
+  longestStockIdleEndDate?: string;
+};
+
 function normalizeHoldDays(holdDays: number[] | undefined): number[] {
   const values = holdDays?.length ? holdDays : DEFAULT_HOLD_DAYS;
   return [...new Set(values.map((value) => Math.max(0, Math.floor(value))))]
@@ -211,6 +220,79 @@ function buildBenchmarkCurve(
       closedTrades: 0,
     };
   });
+}
+
+function computeStockIdleExposureStats(
+  trades: BacktestTrade[],
+  benchmarkCurve: BacktestEquityPoint[] | undefined,
+): StockIdleExposureStats {
+  const benchmarkDates = [
+    ...new Set(
+      (benchmarkCurve ?? []).map((point) => normalizeTradeDateKey(point.tradeDate)),
+    ),
+  ].sort();
+  if (benchmarkDates.length === 0) {
+    return {
+      benchmarkTradeDays: 0,
+      stockIdleDays: 0,
+      stockIdleDayPct: null,
+      longestStockIdleDays: 0,
+    };
+  }
+
+  const validTrades = trades
+    .filter((trade) => trade.exitDate)
+    .map((trade) => ({
+      entryDate: normalizeTradeDateKey(trade.entryDate),
+      exitDate: normalizeTradeDateKey(trade.exitDate as string),
+    }));
+
+  let stockIdleDays = 0;
+  let currentStart: string | undefined;
+  let currentEnd: string | undefined;
+  let currentDays = 0;
+  let longestStart: string | undefined;
+  let longestEnd: string | undefined;
+  let longestDays = 0;
+
+  const finishCurrentGap = () => {
+    if (!currentStart || currentDays <= 0) return;
+    if (currentDays > longestDays) {
+      longestStart = currentStart;
+      longestEnd = currentEnd;
+      longestDays = currentDays;
+    }
+    currentStart = undefined;
+    currentEnd = undefined;
+    currentDays = 0;
+  };
+
+  for (const tradeDate of benchmarkDates) {
+    const hasStockPosition = validTrades.some(
+      (trade) => trade.entryDate <= tradeDate && trade.exitDate > tradeDate,
+    );
+    if (hasStockPosition) {
+      finishCurrentGap();
+      continue;
+    }
+
+    stockIdleDays += 1;
+    currentStart ??= tradeDate;
+    currentEnd = tradeDate;
+    currentDays += 1;
+  }
+  finishCurrentGap();
+
+  return {
+    benchmarkTradeDays: benchmarkDates.length,
+    stockIdleDays,
+    stockIdleDayPct: round((stockIdleDays / benchmarkDates.length) * 100),
+    longestStockIdleDays: longestDays,
+    longestStockIdleStartDate: longestStart
+      ? formatTradeDateKey(longestStart)
+      : undefined,
+    longestStockIdleEndDate: longestEnd ? formatTradeDateKey(longestEnd) : undefined,
+  };
 }
 
 async function buildStockBenchmark(
@@ -1251,6 +1333,10 @@ export async function runDiamondBacktest(
     slots: maxConcurrentPositions,
     initialCapital,
   });
+  const idleExposureStats =
+    strategy === 'red-diamond-momentum'
+      ? computeStockIdleExposureStats(namedTrades, benchmark?.curve)
+      : undefined;
 
   return {
     strategy,
@@ -1346,6 +1432,12 @@ export async function runDiamondBacktest(
           : undefined,
       weakMomentumMaxHoldDays,
       weakMomentumMaxHoldBenchmarkMomentum20Pct,
+      benchmarkTradeDays: idleExposureStats?.benchmarkTradeDays,
+      stockIdleDays: idleExposureStats?.stockIdleDays,
+      stockIdleDayPct: idleExposureStats?.stockIdleDayPct,
+      longestStockIdleDays: idleExposureStats?.longestStockIdleDays,
+      longestStockIdleStartDate: idleExposureStats?.longestStockIdleStartDate,
+      longestStockIdleEndDate: idleExposureStats?.longestStockIdleEndDate,
     },
     equityCurve: portfolioLedger.equityCurve,
     portfolioSnapshots: portfolioLedger.snapshots,
@@ -1388,6 +1480,9 @@ export async function runDiamondBacktest(
               ? `自适应防守阈值：沪深300未满足 MA60 中期强势时，20 日动量需不低于 ${defensiveBenchmarkMomentum20Pct}%。`
               : undefined,
             `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始红钻信号 ${rawSignalCount} 个，T+2 未形成可交易入场 ${delayedEntrySkippedCount} 个，T+2 涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，T+2 过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，弱动量暂停新仓 ${weakMomentumNoEntryBlockedCount} 个，补全名称后风险过滤 ${enrichedRiskNameBlockedCount} 笔，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
+            idleExposureStats && idleExposureStats.benchmarkTradeDays > 0
+              ? `空仓暴露：按大盘基准交易日统计，${idleExposureStats.stockIdleDays}/${idleExposureStats.benchmarkTradeDays} 日无股票持仓（${idleExposureStats.stockIdleDayPct}%）；最长连续空仓 ${idleExposureStats.longestStockIdleDays} 个交易日${idleExposureStats.longestStockIdleStartDate && idleExposureStats.longestStockIdleEndDate ? `，${idleExposureStats.longestStockIdleStartDate} 至 ${idleExposureStats.longestStockIdleEndDate}` : ''}。`
+              : undefined,
             newsFilter === 'off'
               ? '股票新闻过滤默认关闭；可用 --news-filter=avoid_bearish 回测买入前近端新闻利空拦截，或 --news-filter=require_bullish 要求相关新闻净分为正。'
               : newsFilter === 'require_bullish'

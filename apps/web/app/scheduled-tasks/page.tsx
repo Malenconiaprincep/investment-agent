@@ -72,6 +72,7 @@ export default function ScheduledTasksPage() {
   const [selectedDate, setSelectedDate] = useState<string>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -108,6 +109,30 @@ export default function ScheduledTasksPage() {
     }
     void load();
   }, [canAccess, load]);
+
+  const clearLogs = useCallback(async () => {
+    if (logs.length === 0 || clearing) return;
+    const confirmed = window.confirm(
+      '确认清空最近 3 天的定时任务日志吗？此操作不会影响任务开关。',
+    );
+    if (!confirmed) return;
+
+    setClearing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/scheduled-tasks/logs', { method: 'DELETE' });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? '清空失败');
+      setLogs([]);
+      setTradeDates([]);
+      setSelectedDate('all');
+      setSelectedTaskId('all');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '清空失败');
+    } finally {
+      setClearing(false);
+    }
+  }, [clearing, logs.length]);
 
   const groupedLogs = useMemo(() => {
     const groups = new Map<string, ScheduledTaskLogEntry[]>();
@@ -164,10 +189,18 @@ export default function ScheduledTasksPage() {
         <button
           type="button"
           className="monitor-scan-status-link"
-          disabled={loading}
+          disabled={loading || clearing}
           onClick={() => void load()}
         >
           {loading ? '刷新中…' : '刷新'}
+        </button>
+        <button
+          type="button"
+          className={`${styles.clearButton} monitor-scan-status-link`}
+          disabled={loading || clearing || logs.length === 0}
+          onClick={() => void clearLogs()}
+        >
+          {clearing ? '清空中…' : '清空日志'}
         </button>
       </div>
 
