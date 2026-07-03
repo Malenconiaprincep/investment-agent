@@ -4,6 +4,10 @@
 # 前提：agent-core 已配置 .env；Web 开发时另开 pnpm agent:serve + pnpm web:dev
 # 定时任务直接调 CLI，不经过 Next.js
 
+# 百度网盘 A 股数据同步 — 先用百度网盘客户端 / BaiduPCS-Go 下载到本机目录，再导入 market-csv
+# 需在 packages/agent-core/.env 设置 INVESTMENT_AGENT_MARKET_SYNC_SOURCE，或把 --source 改成你的下载目录
+0 17 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm market-data:sync >> /tmp/market-data-sync.log 2>&1
+
 # 智能选股 — 早盘 / 午间 / 午后开盘前 / 尾盘前，自动补充跟踪池
 25 9 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule morning >> /tmp/screen-cron.log 2>&1
 35 11 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule midday >> /tmp/screen-cron.log 2>&1

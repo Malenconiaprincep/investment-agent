@@ -35,6 +35,22 @@ pnpm watchlist:snapshot
 pnpm monitor:poll
 ```
 
+## 百度网盘 A 股数据同步
+
+先用百度网盘客户端或 BaiduPCS-Go 把分享目录下载到本机，再让项目导入下载目录中的：
+
+- `daily_qfq.zip`
+- `股票列表.csv` -> `data/market-csv/meta/stock-list-listed.csv`
+- `退市股票列表.csv` -> `data/market-csv/meta/stock-list-delisted.csv`
+- `交易日历.csv` -> `data/market-csv/meta/trading-calendar.csv`（可选）
+
+```bash
+pnpm market-data:sync --source /Users/wangbo/BaiduNetdiskDownload/A股数据_zip --dry-run
+pnpm market-data:sync --source /Users/wangbo/BaiduNetdiskDownload/A股数据_zip
+```
+
+脚本会递归查找文件、解压 `daily_qfq.zip`、校验至少 5000 个股票日线 CSV，并比较源数据与当前 `data/market-csv/stock/qfq-daily` 的最新交易日。只有源数据日期更新时才替换；替换前会保留 `.backup-YYYYMMDD-HHMMSS` 备份。需要重导同一天数据时可手动加 `--force`。
+
 ## 飞书机器人推送
 
 支持两种方式（**App 优先**；都配了时走 App）：

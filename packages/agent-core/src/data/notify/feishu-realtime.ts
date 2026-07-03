@@ -30,6 +30,16 @@ function fmtPct(value: number | null | undefined): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
+export function isMonitorRealtimeTrackCandidate(
+  item: MonitorPaperRecommendation,
+): item is MonitorPaperRecommendation & { symbol: string } {
+  return Boolean(
+    item.symbol &&
+      item.level === 'auto_buy' &&
+      item.status === 'tracked',
+  );
+}
+
 export function buildStockIntradayCandidateLines(
   candidates: StockIntradayCandidate[],
 ): string[] {
@@ -61,22 +71,17 @@ export function buildMonitorRealtimeLines(input: {
     `扫描：${input.result.summary}`,
   ];
 
-  const actionable = input.recommendations.filter(
-    (item) =>
-      item.symbol &&
-      (item.level === 'auto_buy' ||
-        (item.level === 'watch' && item.status === 'bought')),
-  );
+  const actionable = input.recommendations.filter(isMonitorRealtimeTrackCandidate);
 
   if (actionable.length === 0) {
-    lines.push('本轮无新的自动买入级消息');
+    lines.push('本轮无新的自动跟踪标的');
     return lines;
   }
 
   lines.push('', `消息雷达 ${actionable.length} 条：`);
   for (const item of actionable.slice(0, 6)) {
     lines.push(
-      `· ${item.name ?? item.symbol}(${item.symbol}) ${fmtPct(item.pctChg)} · ${item.level === 'auto_buy' ? '自动买入候选' : '已触发买入'}`,
+      `· ${item.name ?? item.symbol}(${item.symbol}) ${fmtPct(item.pctChg)} · 已加入跟踪池`,
     );
     lines.push(`  ${item.reason}`);
   }
@@ -127,18 +132,17 @@ export async function notifyMonitorRealtime(input: {
   let pushed = 0;
 
   for (const item of freshRecommendations) {
-    if (!item.symbol) continue;
-    if (item.level !== 'auto_buy') continue;
+    if (!isMonitorRealtimeTrackCandidate(item)) continue;
     if (
       !shouldFeishuPushOnce(
-        buildFeishuPushKey(`monitor-${item.level}`, item.symbol, input.tradeDate),
+        buildFeishuPushKey('monitor-tracked', item.symbol, input.tradeDate),
       )
     ) {
       continue;
     }
     pushed += 1;
     await notifyFeishuPostSafe(
-      '🚨 消息雷达·买入候选',
+      '📌 消息雷达·已加入跟踪',
       buildMonitorRealtimeLines({
         result: input.result,
         recommendations: [item],
