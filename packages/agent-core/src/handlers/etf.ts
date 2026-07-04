@@ -37,11 +37,16 @@ export async function dispatchEtf(args: string[]): Promise<string> {
     const { updateEtfDailyCsvPool } = await import(
       '../data/market/local-csv/etf-daily-update.js'
     );
-    return JSON.stringify(await updateEtfDailyCsvPool(options));
+    try {
+      return JSON.stringify(await updateEtfDailyCsvPool(options));
+    } finally {
+      const { disconnectIwencaiMcp } = await import('../mastra/mcp/iwencai.js');
+      await disconnectIwencaiMcp();
+    }
   }
 
   throw new Error(
-    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--retry-rounds=N] [--retry-round-delay-ms=N] [--timeout-ms=N]',
+    'Usage: tail-pick [--force]|morning-radar [open|confirm]|latest|list [limit]|update-daily-csv [--provider=auto|tencent|infoway|iwencai] [--days=N] [--symbols=510300,512880] [--include-local|--no-include-local] [--max=N] [--delay-ms=N] [--retries=N] [--retry-rounds=N] [--retry-round-delay-ms=N] [--timeout-ms=N]',
   );
 }
 
@@ -65,6 +70,7 @@ function parseDailyCsvArgs(args: string[]): {
   symbols?: string[];
   includeLocal?: boolean;
   includeActive?: boolean;
+  provider?: 'auto' | 'tencent' | 'infoway' | 'iwencai';
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
@@ -77,6 +83,7 @@ function parseDailyCsvArgs(args: string[]): {
     symbols?: string[];
     includeLocal?: boolean;
     includeActive?: boolean;
+    provider?: 'auto' | 'tencent' | 'infoway' | 'iwencai';
     maxSymbols?: number;
     delayMs?: number;
     retryCount?: number;
@@ -96,6 +103,17 @@ function parseDailyCsvArgs(args: string[]): {
   if (args.includes('--no-include-local')) options.includeLocal = false;
   if (args.includes('--include-active')) options.includeActive = true;
   if (args.includes('--no-include-active')) options.includeActive = false;
+
+  const providerArg = args.find((item) => item.startsWith('--provider='));
+  const provider = providerArg?.split('=').slice(1).join('=').trim().toLowerCase();
+  if (
+    provider === 'auto' ||
+    provider === 'tencent' ||
+    provider === 'infoway' ||
+    provider === 'iwencai'
+  ) {
+    options.provider = provider;
+  }
 
   const maxSymbols = parseNumberArg(args, 'max');
   if (maxSymbols != null) options.maxSymbols = maxSymbols;

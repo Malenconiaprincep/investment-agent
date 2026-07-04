@@ -57,6 +57,7 @@ describe('resolvePaperMarkPrices', () => {
     vi.mocked(fetchDailyKlines).mockResolvedValue({
       quotes: [{ tradeDate: '20260625', close: 5.048, open: 5, high: 5.1, low: 4.99, pctChg: 0, vol: 1, amount: null }],
       cached: false,
+      adjustment: 'qfq',
     });
 
     const prices = await resolvePaperMarkPrices(['510300']);

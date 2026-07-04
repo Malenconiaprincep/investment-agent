@@ -21,7 +21,12 @@ function toTencentCode(symbol: string): string {
 export async function fetchDailyKlines(
   symbol: string,
   days: number,
-  options?: { forceRefresh?: boolean; timeoutMs?: number; retries?: number },
+  options?: {
+    forceRefresh?: boolean;
+    timeoutMs?: number;
+    retries?: number;
+    allowDayFallback?: boolean;
+  },
 ) {
   const cacheKey = `tx:kline:${symbol}:${days}`;
   const cached = options?.forceRefresh
@@ -37,7 +42,12 @@ export async function fetchDailyKlinesByTencentCode(
   txCode: string,
   days: number,
   displayCode = txCode,
-  options?: { forceRefresh?: boolean; timeoutMs?: number; retries?: number },
+  options?: {
+    forceRefresh?: boolean;
+    timeoutMs?: number;
+    retries?: number;
+    allowDayFallback?: boolean;
+  },
 ) {
   const cacheKey = `tx:kline:${txCode}:${days}`;
   const cached = options?.forceRefresh
@@ -54,9 +64,11 @@ export async function fetchDailyKlinesByTencentCode(
   });
   const json = (await response.json()) as KlineResponse;
 
-  const rows = json.data?.[txCode]?.qfqday ?? [];
+  const qfqRows = json.data?.[txCode]?.qfqday ?? [];
+  const dayRows = json.data?.[txCode]?.day ?? [];
+  const rows = qfqRows.length > 0 ? qfqRows : options?.allowDayFallback ? dayRows : [];
   if (rows.length === 0) {
-    if ((json.data?.[txCode]?.day?.length ?? 0) > 0) {
+    if (dayRows.length > 0) {
       throw new Error(`腾讯未返回前复权 qfqday，拒绝使用普通 day: ${displayCode}`);
     }
     throw new Error(`暂无前复权行情数据: ${displayCode}`);
@@ -64,7 +76,11 @@ export async function fetchDailyKlinesByTencentCode(
 
   const quotes = mapKlines(rows);
   setCached(cacheKey, quotes, TTL_MS);
-  return { quotes, cached: false as const, adjustment: 'qfq' as const };
+  return {
+    quotes,
+    cached: false as const,
+    adjustment: qfqRows.length > 0 ? ('qfq' as const) : ('day' as const),
+  };
 }
 
 function mapKlines(

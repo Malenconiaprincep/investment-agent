@@ -100,4 +100,106 @@ describe('etf daily csv updater', () => {
     expect(result.rows[1]?.pctChg).toBe(1);
     expect(result.rows[1]?.change).toBe(0.05);
   });
+
+  it('validates Tencent day fallback only around fetched bars', () => {
+    const { assertDayFallbackCompatibleWithQfq } = __privateEtfDailyUpdate;
+    const existing = [
+      {
+        tradeDate: '20240927',
+        symbol: '159808',
+        open: 1,
+        close: 1,
+        high: 1,
+        low: 1,
+        vol: null,
+        amount: null,
+        amplitude: null,
+        pctChg: null,
+        change: null,
+        turnover: null,
+      },
+      {
+        tradeDate: '20240930',
+        symbol: '159808',
+        open: 1.5,
+        close: 1.5,
+        high: 1.5,
+        low: 1.5,
+        vol: null,
+        amount: null,
+        amplitude: null,
+        pctChg: null,
+        change: null,
+        turnover: null,
+      },
+      {
+        tradeDate: '20260702',
+        symbol: '159808',
+        open: 2,
+        close: 2,
+        high: 2,
+        low: 2,
+        vol: null,
+        amount: null,
+        amplitude: null,
+        pctChg: null,
+        change: null,
+        turnover: null,
+      },
+    ];
+
+    expect(() =>
+      assertDayFallbackCompatibleWithQfq({
+        symbol: '159808',
+        existing,
+        fetched: [
+          {
+            tradeDate: '20260702',
+            open: 2,
+            close: 2,
+            high: 2,
+            low: 2,
+            vol: null,
+            amount: null,
+          },
+          {
+            tradeDate: '20260703',
+            open: 2.02,
+            close: 2.04,
+            high: 2.05,
+            low: 2.01,
+            vol: null,
+            amount: null,
+          },
+        ],
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertDayFallbackCompatibleWithQfq({
+        symbol: '159808',
+        existing,
+        fetched: [
+          {
+            tradeDate: '20260702',
+            open: 2,
+            close: 2,
+            high: 2,
+            low: 2,
+            vol: null,
+            amount: null,
+          },
+          {
+            tradeDate: '20260703',
+            open: 3,
+            close: 3,
+            high: 3,
+            low: 3,
+            vol: null,
+            amount: null,
+          },
+        ],
+      }),
+    ).toThrow(/异常跳变/);
+  });
 });

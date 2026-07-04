@@ -10,6 +10,7 @@ import { ETF_POOL_19 } from '../../etf/pool.js';
 import { isEtfSymbol, isStockSymbol } from '../asset-type.js';
 import { fetchDailyKlines } from '../free/tencent.js';
 import { fetchInfowayDailyKlines } from '../free/infoway.js';
+import { fetchIwencaiEtfQfqDailyKlines } from '../free/iwencai-etf.js';
 import {
   getLocalEtfDailyCsvPath,
   getLocalStockDailyCsvPath,
@@ -22,7 +23,7 @@ const DAILY_HEADER =
   '\uFEFF日期,代码,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率';
 
 type DailyCsvAssetType = 'etf' | 'stock';
-type DailyCsvProvider = 'auto' | 'tencent' | 'infoway';
+type DailyCsvProvider = 'auto' | 'tencent' | 'infoway' | 'iwencai';
 
 type DailyCsvRow = {
   tradeDate: string;
@@ -39,6 +40,16 @@ type DailyCsvRow = {
   turnover: number | null;
 };
 
+type FetchedDailyQuote = {
+  tradeDate: string;
+  open: number | null;
+  close: number | null;
+  high: number | null;
+  low: number | null;
+  vol: number | null;
+  amount: number | null;
+};
+
 export type DailyCsvUpdateItem = {
   assetType: DailyCsvAssetType;
   symbol: string;
@@ -50,6 +61,7 @@ export type DailyCsvUpdateItem = {
   addedRows: number;
   updatedRows: number;
   latestDate: string | null;
+  adjustment?: 'qfq' | 'day-validated';
   error?: string;
 };
 
@@ -175,18 +187,72 @@ function rowsEqual(a: DailyCsvRow, b: DailyCsvRow): boolean {
   );
 }
 
+function relativeDiffPct(a: number, b: number): number {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) return Number.POSITIVE_INFINITY;
+  return Math.abs(((a - b) / b) * 100);
+}
+
+function assertDayFallbackCompatibleWithQfq(input: {
+  symbol: string;
+  existing: DailyCsvRow[];
+  fetched: FetchedDailyQuote[];
+}): void {
+  if (input.existing.length === 0) {
+    throw new Error(`${input.symbol} 腾讯仅返回普通 day，且本地无前复权底库可校验`);
+  }
+
+  const existingByDate = new Map(input.existing.map((row) => [row.tradeDate, row]));
+  const overlaps = input.fetched.filter((quote) => existingByDate.has(quote.tradeDate));
+  if (overlaps.length === 0) {
+    throw new Error(`${input.symbol} 腾讯仅返回普通 day，且与本地前复权底库无重叠日期`);
+  }
+
+  for (const quote of overlaps) {
+    const existing = existingByDate.get(quote.tradeDate);
+    if (!existing?.close || !quote.close) continue;
+    const closeDiffPct = relativeDiffPct(quote.close, existing.close);
+    const openDiffPct =
+      existing.open && quote.open ? relativeDiffPct(quote.open, existing.open) : 0;
+    if (closeDiffPct > 0.2 || openDiffPct > 0.2) {
+      throw new Error(
+        `${input.symbol} 腾讯普通 day 与本地前复权底库不一致：${quote.tradeDate} close diff ${closeDiffPct.toFixed(2)}%`,
+      );
+    }
+  }
+
+  const merged = mergeRows({
+    symbol: input.symbol,
+    existing: input.existing,
+    fetched: input.fetched,
+  }).rows;
+  const fetchedDates = new Set(input.fetched.map((quote) => quote.tradeDate));
+  for (let index = 1; index < merged.length; index += 1) {
+    if (!fetchedDates.has(merged[index].tradeDate)) continue;
+    const prev = merged[index - 1].close;
+    const close = merged[index].close;
+    if (!prev || !close) continue;
+    const pct = ((close - prev) / prev) * 100;
+    if (Math.abs(pct) > 35) {
+      throw new Error(
+        `${input.symbol} 腾讯普通 day 兜底出现异常跳变：${merged[index].tradeDate} ${pct.toFixed(2)}%`,
+      );
+    }
+  }
+}
+
+function normalizeFetchedQuotes(quotes: FetchedDailyQuote[]): FetchedDailyQuote[] {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      tradeDate: normalizeTradeDate(quote.tradeDate) ?? quote.tradeDate,
+    }))
+    .filter((quote) => /^\d{8}$/.test(quote.tradeDate));
+}
+
 function mergeRows(input: {
   symbol: string;
   existing: DailyCsvRow[];
-  fetched: Array<{
-    tradeDate: string;
-    open: number | null;
-    close: number | null;
-    high: number | null;
-    low: number | null;
-    vol: number | null;
-    amount: number | null;
-  }>;
+  fetched: FetchedDailyQuote[];
 }): { rows: DailyCsvRow[]; addedRows: number; updatedRows: number } {
   const byDate = new Map(input.existing.map((row) => [row.tradeDate, row]));
   let addedRows = 0;
@@ -292,7 +358,7 @@ function resolveDailyCsvProvider(assetType: DailyCsvAssetType): DailyCsvProvider
     assetType === 'stock'
       ? process.env.STOCK_DAILY_CSV_PROVIDER?.trim().toLowerCase()
       : process.env.ETF_DAILY_CSV_PROVIDER?.trim().toLowerCase();
-  if (raw === 'tencent' || raw === 'infoway' || raw === 'auto') return raw;
+  if (raw === 'tencent' || raw === 'infoway' || raw === 'iwencai' || raw === 'auto') return raw;
   return 'auto';
 }
 
@@ -375,6 +441,7 @@ function resolveTimeoutMs(input?: number): number {
 }
 
 async function fetchDailyKlinesWithRetry(input: {
+  assetType: DailyCsvAssetType;
   symbol: string;
   days: number;
   retryCount: number;
@@ -387,6 +454,18 @@ async function fetchDailyKlinesWithRetry(input: {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
+      if (input.provider === 'iwencai') {
+        if (input.assetType !== 'etf') {
+          throw new Error('问财日线 provider 仅支持 ETF');
+        }
+        const result = await fetchIwencaiEtfQfqDailyKlines(
+          input.symbol,
+          input.days,
+          { timeout: Math.ceil(input.timeoutMs / 1000) },
+        );
+        return { ...result, attempts: attempt };
+      }
+
       const useInfoway =
         input.provider === 'infoway' ||
         (input.provider === 'auto' && Boolean(process.env.INFOWAY_API_KEY?.trim()));
@@ -397,18 +476,38 @@ async function fetchDailyKlinesWithRetry(input: {
             retries: 0,
             timeoutMs: input.timeoutMs,
           });
-          return { ...result, attempts: attempt };
+          return { ...result, adjustment: 'qfq' as const, attempts: attempt };
         } catch (error) {
           infowayError = error;
           if (input.provider === 'infoway') throw error;
         }
       }
 
-      const result = await fetchDailyKlines(input.symbol, input.days, {
-        forceRefresh: true,
-        retries: 0,
-        timeoutMs: input.timeoutMs,
-      }).catch((tencentError: unknown) => {
+      try {
+        const result = await fetchDailyKlines(input.symbol, input.days, {
+          forceRefresh: true,
+          retries: 0,
+          timeoutMs: input.timeoutMs,
+          allowDayFallback: input.assetType === 'etf',
+        });
+        return { ...result, attempts: attempt };
+      } catch (tencentError) {
+        if (input.provider === 'auto' && input.assetType === 'etf') {
+          try {
+            const fallback = await fetchIwencaiEtfQfqDailyKlines(
+              input.symbol,
+              input.days,
+              { timeout: Math.ceil(input.timeoutMs / 1000) },
+            );
+            return { ...fallback, attempts: attempt + 1 };
+          } catch (iwencaiError) {
+            const tencentMessage =
+              tencentError instanceof Error ? tencentError.message : String(tencentError);
+            const iwencaiMessage =
+              iwencaiError instanceof Error ? iwencaiError.message : String(iwencaiError);
+            throw new Error(`腾讯失败: ${tencentMessage}; 问财兜底失败: ${iwencaiMessage}`);
+          }
+        }
         if (infowayError) {
           const infowayMessage =
             infowayError instanceof Error ? infowayError.message : String(infowayError);
@@ -417,8 +516,7 @@ async function fetchDailyKlinesWithRetry(input: {
           throw new Error(`Infoway 失败: ${infowayMessage}; 腾讯兜底失败: ${tencentMessage}`);
         }
         throw tencentError;
-      });
-      return { ...result, attempts: attempt };
+      }
     } catch (error) {
       lastError = error;
       if (attempt >= maxAttempts) break;
@@ -458,7 +556,8 @@ async function updateDailyCsvSymbol(input: {
   try {
     const existing = readExistingRows(filePath, input.symbol);
     item.beforeRows = existing.length;
-    const { quotes, attempts } = await fetchDailyKlinesWithRetry({
+    const fetchResult = await fetchDailyKlinesWithRetry({
+      assetType: input.assetType,
       symbol: input.symbol,
       days: input.days,
       retryCount: input.retryCount,
@@ -466,11 +565,49 @@ async function updateDailyCsvSymbol(input: {
       timeoutMs: input.timeoutMs,
       provider: input.provider,
     });
+    const { quotes, attempts } = fetchResult;
     item.attempts += attempts;
+    let fetched = normalizeFetchedQuotes(quotes);
+    const adjustment =
+      'adjustment' in fetchResult ? fetchResult.adjustment : 'qfq';
+    if (input.assetType === 'etf' && adjustment === 'day') {
+      try {
+        assertDayFallbackCompatibleWithQfq({
+          symbol: input.symbol,
+          existing,
+          fetched,
+        });
+        item.adjustment = 'day-validated';
+      } catch (dayFallbackError) {
+        if (input.provider !== 'auto') throw dayFallbackError;
+        try {
+          const fallback = await fetchIwencaiEtfQfqDailyKlines(
+            input.symbol,
+            input.days,
+            { timeout: Math.ceil(input.timeoutMs / 1000) },
+          );
+          item.attempts += 1;
+          fetched = normalizeFetchedQuotes(fallback.quotes);
+          item.adjustment = 'qfq';
+        } catch (iwencaiError) {
+          const dayFallbackMessage =
+            dayFallbackError instanceof Error
+              ? dayFallbackError.message
+              : String(dayFallbackError);
+          const iwencaiMessage =
+            iwencaiError instanceof Error ? iwencaiError.message : String(iwencaiError);
+          throw new Error(
+            `${dayFallbackMessage}; 问财前复权兜底失败: ${iwencaiMessage}`,
+          );
+        }
+      }
+    } else if (input.assetType === 'etf') {
+      item.adjustment = 'qfq';
+    }
     const merged = mergeRows({
       symbol: input.symbol,
       existing,
-      fetched: quotes,
+      fetched,
     });
     writeDailyCsvAtomic(filePath, serializeRows(merged.rows));
     item.afterRows = merged.rows.length;
@@ -521,6 +658,7 @@ async function resolveSymbols(input: {
   symbols?: string[];
   includeLocal?: boolean;
   includeActive?: boolean;
+  provider?: DailyCsvProvider;
   maxSymbols?: number;
 }): Promise<string[]> {
   if (input.symbols?.length) {
@@ -534,7 +672,7 @@ async function resolveSymbols(input: {
   if (input.assetType === 'etf') {
     for (const item of ETF_POOL_19) symbols.add(item.symbol);
     const includeLocal =
-      input.includeLocal ?? envFlag('ETF_DAILY_CSV_INCLUDE_LOCAL', true);
+      input.includeLocal ?? envFlag('ETF_DAILY_CSV_INCLUDE_LOCAL', false);
     if (includeLocal) {
       for (const symbol of listLocalEtfDailyCsvSymbols()) symbols.add(symbol);
     }
@@ -592,7 +730,7 @@ export async function updateDailyCsvPool(options: {
     options.retryRoundDelayMs,
   );
   const timeoutMs = resolveTimeoutMs(options.timeoutMs);
-  const provider = resolveDailyCsvProvider(options.assetType);
+  const provider = options.provider ?? resolveDailyCsvProvider(options.assetType);
   const itemsBySymbol = new Map<string, DailyCsvUpdateItem>();
   const finalSymbols = new Set<string>();
   let pendingSymbols = symbols;
@@ -697,6 +835,7 @@ export async function updateEtfDailyCsvPool(options?: {
   days?: number;
   symbols?: string[];
   includeLocal?: boolean;
+  provider?: DailyCsvProvider;
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
@@ -716,6 +855,7 @@ export async function updateStockDailyCsvPool(options?: {
   symbols?: string[];
   includeLocal?: boolean;
   includeActive?: boolean;
+  provider?: DailyCsvProvider;
   maxSymbols?: number;
   delayMs?: number;
   retryCount?: number;
@@ -731,5 +871,6 @@ export async function updateStockDailyCsvPool(options?: {
 }
 
 export const __privateEtfDailyUpdate = {
+  assertDayFallbackCompatibleWithQfq,
   mergeRows,
 };
