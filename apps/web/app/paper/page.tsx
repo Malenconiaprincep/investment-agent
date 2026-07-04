@@ -18,7 +18,7 @@ type PaperBucket = 'combined' | PaperBucketKey;
 
 type Trade = {
   id: string;
-  bucket?: 'etf' | 'stock';
+  bucket?: PaperBucketKey;
   symbol: string;
   name: string;
   side: 'buy' | 'sell';
@@ -29,6 +29,32 @@ type Trade = {
   tradedAt: string;
   source: 'manual' | 'auto';
   note: string | null;
+};
+
+type StockBacktestManualCheckResult = {
+  bucket: 'stock-backtest';
+  tradeDate: string;
+  skipped?: boolean;
+  reason?: string;
+  dataFreshness?: {
+    expectedDataDate: string;
+    latestDataDate: string | null;
+    isFresh: boolean;
+  };
+  scan?: {
+    scanned: number;
+    rawSignals: number;
+    candidates: number;
+  };
+  trades?: {
+    buys: Array<{ symbol: string; name: string; shares: number; price: number; memo: string }>;
+    sells: Array<{ symbol: string; name: string; shares: number; price: number; reason: string }>;
+  };
+  equity?: {
+    totalValue: number;
+    returnPct: number;
+  };
+  error?: string;
 };
 
 function fmtMoney(v: number) {
@@ -142,6 +168,32 @@ function bucketShortLabel(bucket: PaperBucketKey) {
   return '回测+新闻';
 }
 
+function isPaperBucketKey(value: unknown): value is PaperBucketKey {
+  return (
+    value === 'etf' ||
+    value === 'stock' ||
+    value === 'stock-backtest' ||
+    value === 'stock-backtest-news'
+  );
+}
+
+function positionBucketLabel(position: unknown) {
+  if (!position || typeof position !== 'object') return '—';
+  const bucket = (position as { positionBucket?: unknown }).positionBucket;
+  return isPaperBucketKey(bucket) ? bucketShortLabel(bucket) : '—';
+}
+
+function buildManualCheckMessage(result: StockBacktestManualCheckResult) {
+  if (result.skipped) return result.reason ?? '本次检查已跳过';
+
+  const buyCount = result.trades?.buys.length ?? 0;
+  const sellCount = result.trades?.sells.length ?? 0;
+  if (buyCount > 0 || sellCount > 0) {
+    return `已按默认回测策略执行：买入 ${buyCount} 笔，卖出 ${sellCount} 笔。`;
+  }
+  return '当前没有适合的交易时机，已记录本次检查。';
+}
+
 export default function PaperTradingPage() {
   const [dual, setDual] = useState<DualPaperPayload | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -149,6 +201,10 @@ export default function PaperTradingPage() {
   const [activeBucket, setActiveBucket] = useState<PaperBucket>('combined');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [manualCheckRunning, setManualCheckRunning] = useState(false);
+  const [manualCheckResult, setManualCheckResult] =
+    useState<StockBacktestManualCheckResult | null>(null);
+  const [manualCheckError, setManualCheckError] = useState<string | null>(null);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -223,6 +279,27 @@ export default function PaperTradingPage() {
     const timer = setInterval(() => void load({ silent: true }), 60_000);
     return () => clearInterval(timer);
   }, [dual?.combined?.isTradingSession, load]);
+
+  const runStockBacktestManualCheck = useCallback(async () => {
+    setManualCheckRunning(true);
+    setManualCheckError(null);
+    setManualCheckResult(null);
+    try {
+      const response = await fetch('/api/paper/stock-backtest-manual-check', {
+        method: 'POST',
+      });
+      const data = (await response.json()) as StockBacktestManualCheckResult & {
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error ?? '回测策略手动检查失败');
+      setManualCheckResult(data);
+      await load({ silent: true });
+    } catch (err) {
+      setManualCheckError(err instanceof Error ? err.message : '回测策略手动检查失败');
+    } finally {
+      setManualCheckRunning(false);
+    }
+  }, [load]);
 
   const view = useMemo(() => {
     if (!dual?.etf || !dual?.stock || !dual?.combined) return null;
@@ -334,6 +411,76 @@ export default function PaperTradingPage() {
             </div>
           </div>
 
+          {activeBucket === 'stock-backtest' && (
+            <section className="pane-card paper-manual-check">
+              <div className="paper-manual-check-head">
+                <div>
+                  <h3 className="pane-card-title">手动选股交易</h3>
+                  <p className="muted paper-manual-check-copy">
+                    更新完日线后运行一次；同一交易日已成功检查过会自动跳过，不会重复下单。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={manualCheckRunning}
+                  onClick={() => void runStockBacktestManualCheck()}
+                >
+                  {manualCheckRunning ? '检查中…' : '检查交易机会'}
+                </button>
+              </div>
+
+              {manualCheckError && <div className="error">{manualCheckError}</div>}
+
+              {manualCheckResult && (
+                <div
+                  className={`paper-manual-check-result${
+                    manualCheckResult.skipped ? ' paper-manual-check-result--muted' : ''
+                  }`}
+                >
+                  <strong>{buildManualCheckMessage(manualCheckResult)}</strong>
+                  <div className="paper-manual-check-stats">
+                    <span>交易日 {manualCheckResult.tradeDate}</span>
+                    {manualCheckResult.dataFreshness && (
+                      <span>
+                        日线 {manualCheckResult.dataFreshness.latestDataDate ?? '未知'}
+                      </span>
+                    )}
+                    {manualCheckResult.scan && (
+                      <>
+                        <span>扫描 {manualCheckResult.scan.scanned} 只</span>
+                        <span>原始信号 {manualCheckResult.scan.rawSignals}</span>
+                        <span>候选 {manualCheckResult.scan.candidates}</span>
+                      </>
+                    )}
+                    {manualCheckResult.trades && (
+                      <>
+                        <span>买入 {manualCheckResult.trades.buys.length}</span>
+                        <span>卖出 {manualCheckResult.trades.sells.length}</span>
+                      </>
+                    )}
+                  </div>
+                  {manualCheckResult.trades &&
+                    manualCheckResult.trades.buys.length > 0 && (
+                      <div className="paper-manual-check-picks">
+                        {manualCheckResult.trades.buys.map((item) => (
+                          <span key={`${item.symbol}-${item.price}`}>
+                            {item.name}({item.symbol}) {item.shares} 股 @{' '}
+                            {fmtTradePrice(item.symbol, item.price)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  {manualCheckResult.reason && !manualCheckResult.skipped && (
+                    <p className="muted paper-manual-check-copy">
+                      {manualCheckResult.reason}
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           <section className="pane-card">
             <h3 className="pane-card-title">
               {activeBucket === 'combined' ? '全部持仓' : `${bucketLabel(activeBucket)}持仓`}
@@ -389,13 +536,9 @@ export default function PaperTradingPage() {
                   </thead>
                   <tbody>
                     {(view.positions ?? []).map((p) => (
-                        <tr key={`${'positionBucket' in p ? p.positionBucket : 'x'}-${p.symbol}`}>
+                        <tr key={`${positionBucketLabel(p)}-${p.symbol}`}>
                           {activeBucket === 'combined' && (
-                            <td>
-                              {'positionBucket' in p
-                                ? bucketShortLabel(p.positionBucket)
-                                : '—'}
-                            </td>
+                            <td>{positionBucketLabel(p)}</td>
                           )}
                           <td>{p.symbol}</td>
                           <td>
@@ -475,7 +618,7 @@ export default function PaperTradingPage() {
             <strong>股票仓（雷达）：</strong>消息雷达/跟踪池 · 红钻 + Checklist · 与回测策略仓隔离
           </li>
           <li>
-            <strong>回测策略仓：</strong>08:00 按前一交易日数据扫描 · 盘口价买入 · 交易时段自动监控出场
+            <strong>回测策略仓：</strong>08:00 按前一交易日数据扫描 · 可在日线更新后手动检查 · 交易时段自动监控出场
           </li>
           <li>
             <strong>回测+新闻仓：</strong>08:00 自动扫描并叠加新闻过滤 · 盘口价买入 · 交易时段自动监控出场
@@ -537,7 +680,7 @@ export default function PaperTradingPage() {
                     <tr key={t.id}>
                       <td className="paper-trade-time">{formatPaperTradeDisplayTime(t)}</td>
                       {activeBucket === 'combined' && (
-                        <td>{t.bucket === 'etf' ? 'ETF' : '股票'}</td>
+                        <td>{t.bucket ? bucketShortLabel(t.bucket) : '—'}</td>
                       )}
                       <td className={t.side === 'buy' ? 'return-up' : 'return-down'}>
                         {t.side === 'buy' ? '买入' : '卖出'}

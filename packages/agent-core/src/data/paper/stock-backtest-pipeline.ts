@@ -1,6 +1,10 @@
 import 'dotenv/config';
 
 import {
+  formatTradeDateKey,
+  normalizeTradeDateKey,
+} from '../backtest/date-range.js';
+import {
   scanStockStrategyEntriesForDate,
   type StockStrategyEntryCandidate,
 } from '../backtest/diamond.js';
@@ -15,6 +19,7 @@ import {
   calcAutoBuyShares,
   executePaperTrade,
   finishAutoRun,
+  getLatestAutoRunForDate,
   getLatestAutoRun,
   getPaperAccountSummary,
   listPaperPositions,
@@ -141,15 +146,27 @@ async function runStockBacktestBucketPipeline(input: {
   mode: 'entry_close' | 'preopen';
   newsFilter: 'off' | 'avoid_bearish';
   force?: boolean;
+  dedupeDaily?: boolean;
+  useLatestDataDate?: boolean;
   requirePostMarket?: boolean;
   requirePreMarket?: boolean;
 }): Promise<StockBacktestPaperResult> {
   const now = getBeijingNow();
-  const tradeDate = formatTradeDate(now);
   const dataFreshness = checkMarketDataFreshness(now);
+  const calendarTradeDate = formatTradeDate(now);
+  const tradeDate =
+    input.useLatestDataDate && dataFreshness.latestDataDate
+      ? formatTradeDateKey(dataFreshness.latestDataDate)
+      : calendarTradeDate;
   const bucketLabel = BUCKET_LABELS[input.bucket];
+  const canUseLatestDataDateOutsidePostMarket =
+    input.useLatestDataDate &&
+    !dataFreshness.isTradingDay &&
+    dataFreshness.latestDataDate != null &&
+    normalizeTradeDateKey(dataFreshness.latestDataDate) >=
+      normalizeTradeDateKey(dataFreshness.expectedDataDate);
 
-  if (!input.force && !dataFreshness.isTradingDay) {
+  if (!input.force && !input.useLatestDataDate && !dataFreshness.isTradingDay) {
     return {
       bucket: input.bucket,
       tradeDate,
@@ -159,7 +176,12 @@ async function runStockBacktestBucketPipeline(input: {
     };
   }
 
-  if (!input.force && input.requirePostMarket && !isPostMarketWindow(now)) {
+  if (
+    !input.force &&
+    input.requirePostMarket &&
+    !isPostMarketWindow(now) &&
+    !canUseLatestDataDateOutsidePostMarket
+  ) {
     return {
       bucket: input.bucket,
       tradeDate,
@@ -189,6 +211,31 @@ async function runStockBacktestBucketPipeline(input: {
     };
   }
 
+  if (input.dedupeDaily) {
+    const latestRun = await getLatestAutoRunForDate(tradeDate, input.bucket);
+    if (latestRun?.status === 'running') {
+      return {
+        bucket: input.bucket,
+        tradeDate,
+        skipped: true,
+        reason: `${bucketLabel}今日检查正在执行中，不重复启动`,
+        dataFreshness,
+      };
+    }
+    if (latestRun?.status === 'ok') {
+      return {
+        bucket: input.bucket,
+        tradeDate,
+        skipped: true,
+        reason: `${bucketLabel}今日已执行过回测策略检查，不重复交易`,
+        dataFreshness,
+        scan: latestRun.summary?.scan as StockBacktestPaperResult['scan'],
+        trades: latestRun.summary?.trades as StockBacktestPaperResult['trades'],
+        equity: latestRun.summary?.equity as StockBacktestPaperResult['equity'],
+      };
+    }
+  }
+
   const runId = await startAutoRun(tradeDate, input.bucket);
   const result: StockBacktestPaperResult = { bucket: input.bucket, tradeDate, dataFreshness };
 
@@ -196,7 +243,11 @@ async function runStockBacktestBucketPipeline(input: {
     await refreshPositionMarks(input.bucket, await listPaperPositions(input.bucket));
 
     const entryTradeDate =
-      input.mode === 'preopen' ? tradeDate : getExpectedMarketDataDate(now);
+      input.mode === 'preopen'
+        ? tradeDate
+        : input.useLatestDataDate
+          ? tradeDate
+          : getExpectedMarketDataDate(now);
 
     const exitSells =
       input.mode === 'preopen'
@@ -258,6 +309,20 @@ export async function runStockBacktestPaperPipeline(options?: {
     newsFilter: 'off',
     force: options?.force,
     requirePreMarket: !options?.force,
+  });
+}
+
+export async function runStockBacktestPaperManualCheck(options?: {
+  force?: boolean;
+}): Promise<StockBacktestPaperResult> {
+  return runStockBacktestBucketPipeline({
+    bucket: 'stock-backtest',
+    mode: 'entry_close',
+    newsFilter: 'off',
+    force: options?.force,
+    dedupeDaily: true,
+    useLatestDataDate: true,
+    requirePostMarket: !options?.force,
   });
 }
 

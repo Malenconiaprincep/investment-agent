@@ -83,6 +83,7 @@ export type PaperBucketState = {
 
 export type PaperAutoRun = {
   id: string;
+  bucket: PaperBucket;
   tradeDate: string;
   startedAt: string;
   finishedAt: string | null;
@@ -1207,21 +1208,46 @@ export async function finishAutoRun(
   });
 }
 
-export async function getLatestAutoRun(): Promise<PaperAutoRun | null> {
+function mapPaperAutoRun(row: Record<string, unknown>): PaperAutoRun {
+  return {
+    id: String(row.id),
+    bucket: resolvePaperBucket(row.bucket != null ? String(row.bucket) : 'stock'),
+    tradeDate: String(row.trade_date),
+    startedAt: String(row.started_at),
+    finishedAt: row.finished_at != null ? String(row.finished_at) : null,
+    status: row.status as PaperAutoRun['status'],
+    summary: row.summary_json ? (JSON.parse(String(row.summary_json)) as Record<string, unknown>) : null,
+  };
+}
+
+export async function getLatestAutoRun(bucket?: PaperBucket): Promise<PaperAutoRun | null> {
   const db = await getDb();
-  const result = await db.execute({
-    sql: `SELECT * FROM paper_auto_runs ORDER BY started_at DESC LIMIT 1`,
-  });
+  const result = bucket
+    ? await db.execute({
+        sql: `SELECT * FROM paper_auto_runs WHERE bucket = ? ORDER BY started_at DESC LIMIT 1`,
+        args: [bucket],
+      })
+    : await db.execute({
+        sql: `SELECT * FROM paper_auto_runs ORDER BY started_at DESC LIMIT 1`,
+      });
   const r = result.rows[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  return {
-    id: String(r.id),
-    tradeDate: String(r.trade_date),
-    startedAt: String(r.started_at),
-    finishedAt: r.finished_at != null ? String(r.finished_at) : null,
-    status: r.status as PaperAutoRun['status'],
-    summary: r.summary_json ? (JSON.parse(String(r.summary_json)) as Record<string, unknown>) : null,
-  };
+  return mapPaperAutoRun(r);
+}
+
+export async function getLatestAutoRunForDate(
+  tradeDate: string,
+  bucket: PaperBucket = 'stock',
+): Promise<PaperAutoRun | null> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT * FROM paper_auto_runs
+          WHERE bucket = ? AND trade_date = ?
+          ORDER BY started_at DESC LIMIT 1`,
+    args: [bucket, tradeDate],
+  });
+  const r = result.rows[0] as Record<string, unknown> | undefined;
+  return r ? mapPaperAutoRun(r) : null;
 }
 
 export function calcAutoBuyShares(cash: number, price: number): number {

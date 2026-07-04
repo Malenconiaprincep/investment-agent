@@ -192,7 +192,7 @@ export const PAPER_BUCKET_TABS: Array<{
 export function resolvePaperView(
   dual: DualPaperPayload,
   bucket: 'combined' | PaperBucketKey,
-): BucketSummary & { bucket: 'combined' | PaperBucketKey } {
+): Omit<BucketSummary, 'bucket'> & { bucket: 'combined' | PaperBucketKey } {
   if (bucket === 'combined') {
     return {
       bucket: 'combined',

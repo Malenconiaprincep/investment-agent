@@ -87,6 +87,15 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(result);
   }
 
+  if (command === 'stock-backtest-manual-check') {
+    const { runStockBacktestPaperManualCheck } = await import(
+      '../data/paper/stock-backtest-pipeline.js'
+    );
+    const force = args.includes('--force');
+    const result = await runStockBacktestPaperManualCheck({ force });
+    return JSON.stringify(result);
+  }
+
   if (command === 'stock-backtest-news-auto-run') {
     const { runStockBacktestNewsPaperPipeline } = await import(
       '../data/paper/stock-backtest-pipeline.js'
@@ -153,6 +162,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-news-auto-run|market-data-status|etf-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-auto-run|fix-etf-probe|trade ...',
   );
 }
