@@ -57,6 +57,20 @@ type StockBacktestManualCheckResult = {
   error?: string;
 };
 
+type StockBacktestManualCheckProgress = {
+  type: 'progress';
+  stage: string;
+  message: string;
+  detail?: string;
+  percent: number;
+  elapsedMs: number;
+};
+
+type StockBacktestManualCheckStreamEvent =
+  | StockBacktestManualCheckProgress
+  | { type: 'result'; result: StockBacktestManualCheckResult }
+  | { type: 'error'; message: string };
+
 function fmtMoney(v: number) {
   return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 }
@@ -68,6 +82,15 @@ function isEtfSymbol(symbol: string) {
 function fmtTradePrice(symbol: string, value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return '—';
   return value.toFixed(isEtfSymbol(symbol) ? 3 : 2);
+}
+
+function fmtElapsed(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return '0s';
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}m ${rest}s`;
 }
 
 function formatTradeSource(trade: Trade) {
@@ -205,6 +228,11 @@ export default function PaperTradingPage() {
   const [manualCheckResult, setManualCheckResult] =
     useState<StockBacktestManualCheckResult | null>(null);
   const [manualCheckError, setManualCheckError] = useState<string | null>(null);
+  const [manualCheckProgress, setManualCheckProgress] =
+    useState<StockBacktestManualCheckProgress | null>(null);
+  const [manualCheckProgressEvents, setManualCheckProgressEvents] = useState<
+    StockBacktestManualCheckProgress[]
+  >([]);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -284,16 +312,54 @@ export default function PaperTradingPage() {
     setManualCheckRunning(true);
     setManualCheckError(null);
     setManualCheckResult(null);
+    setManualCheckProgress(null);
+    setManualCheckProgressEvents([]);
     try {
-      const response = await fetch('/api/paper/stock-backtest-manual-check', {
+      const response = await fetch('/api/paper/stock-backtest-manual-check/stream', {
         method: 'POST',
       });
-      const data = (await response.json()) as StockBacktestManualCheckResult & {
-        error?: string;
-      };
-      if (!response.ok) throw new Error(data.error ?? '回测策略手动检查失败');
-      setManualCheckResult(data);
-      await load({ silent: true });
+      if (!response.ok || !response.body) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? '回测策略手动检查失败');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: StockBacktestManualCheckResult | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as StockBacktestManualCheckStreamEvent;
+          if (event.type === 'progress') {
+            setManualCheckProgress(event);
+            setManualCheckProgressEvents((prev) => [...prev.slice(-4), event]);
+          } else if (event.type === 'result') {
+            finalResult = event.result;
+            setManualCheckResult(event.result);
+          } else if (event.type === 'error') {
+            throw new Error(event.message);
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const event = JSON.parse(buffer) as StockBacktestManualCheckStreamEvent;
+        if (event.type === 'result') {
+          finalResult = event.result;
+          setManualCheckResult(event.result);
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      }
+
+      if (finalResult) await load({ silent: true });
     } catch (err) {
       setManualCheckError(err instanceof Error ? err.message : '回测策略手动检查失败');
     } finally {
@@ -431,6 +497,40 @@ export default function PaperTradingPage() {
               </div>
 
               {manualCheckError && <div className="error">{manualCheckError}</div>}
+
+              {(manualCheckRunning || manualCheckProgress) && (
+                <div className="paper-manual-progress" aria-live="polite">
+                  <div className="paper-manual-progress-head">
+                    <strong>{manualCheckProgress?.stage ?? '准备中'}</strong>
+                    <span>{Math.min(100, Math.max(0, manualCheckProgress?.percent ?? 1))}%</span>
+                  </div>
+                  <div className="backtest-progress-track" aria-hidden>
+                    <span
+                      style={{
+                        width: `${Math.min(100, Math.max(0, manualCheckProgress?.percent ?? 1))}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="paper-manual-progress-current">
+                    <span className="backtest-progress-pulse" aria-hidden />
+                    <div>
+                      <span>{manualCheckProgress?.message ?? '正在启动手动检查。'}</span>
+                      {manualCheckProgress?.detail && <small>{manualCheckProgress.detail}</small>}
+                    </div>
+                    <time>{fmtElapsed(manualCheckProgress?.elapsedMs ?? 0)}</time>
+                  </div>
+                  {manualCheckProgressEvents.length > 1 && (
+                    <ol className="paper-manual-progress-log">
+                      {manualCheckProgressEvents.map((event, index) => (
+                        <li key={`${event.stage}-${event.percent}-${index}`}>
+                          <span>{event.stage}</span>
+                          <small>{event.detail ?? event.message}</small>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
 
               {manualCheckResult && (
                 <div

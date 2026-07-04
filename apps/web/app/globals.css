@@ -2910,6 +2910,78 @@ a:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.paper-manual-progress {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.paper-manual-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.paper-manual-progress-head span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.paper-manual-progress-current {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.paper-manual-progress-current > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.paper-manual-progress-current span,
+.paper-manual-progress-current small,
+.paper-manual-progress-current time {
+  color: var(--muted);
+}
+
+.paper-manual-progress-current time {
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.paper-manual-progress-log {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paper-manual-progress-log li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.paper-manual-progress-log span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.paper-manual-progress-log small {
+  color: var(--muted);
+}
+
 .paper-manual-check-stats,
 .paper-manual-check-picks {
   display: flex;
