@@ -21,6 +21,7 @@ type WatchlistItem = {
     vsEntryPct: number | null;
     diamondStrength: 'red' | 'blue' | null;
     tradeDate?: string;
+    snapshotAt?: string;
   } | null;
 };
 
@@ -78,6 +79,33 @@ type MonitorPollResponse = {
   error?: string;
 };
 
+type ScheduledTaskLogEntry = {
+  taskId: string;
+  label: string;
+  tradeDate: string;
+  ranAt: string;
+  ranAtBeijing: string;
+  status: 'completed' | 'skipped' | 'failed' | 'disabled';
+  reason?: string;
+  summary?: string;
+  elapsedMs?: number;
+  source: 'background-worker' | 'manual';
+};
+
+type WatchlistRuntimeStatus = {
+  total: number;
+  latestSnapshotAt: string | null;
+  latestSnapshotTradeDate: string | null;
+  snapshotCoverage: number;
+  missingSnapshotCount: number;
+  retentionRules: Array<{ label: string; detail: string }>;
+  latestTaskLog: ScheduledTaskLogEntry | null;
+  latestIntradayTaskLog: ScheduledTaskLogEntry | null;
+  intradayIntervalMs: number;
+  intradayScheduleText: string;
+  scheduleText: string;
+};
+
 type WatchLevelKey = 'hot' | 'warm' | 'rise' | 'risk' | 'track' | 'manual';
 type FilterKey = 'all' | WatchLevelKey | 'held';
 
@@ -105,6 +133,22 @@ function fmtTime(iso: string) {
       minute: '2-digit',
       timeZone: 'Asia/Shanghai',
     });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtDateTime(iso: string | null | undefined) {
+  if (!iso) return '暂无';
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(iso));
   } catch {
     return iso;
   }
@@ -163,6 +207,14 @@ function sourceLabel(sourceType: WatchlistItem['sourceType']) {
   if (sourceType === 'screening') return '选股扫描';
   if (sourceType === 'report') return '研报';
   return '手动';
+}
+
+function taskStatusLabel(status: ScheduledTaskLogEntry['status'] | undefined) {
+  if (status === 'completed') return '已执行';
+  if (status === 'skipped') return '已跳过';
+  if (status === 'failed') return '失败';
+  if (status === 'disabled') return '已关闭';
+  return '暂无记录';
 }
 
 function watchLevel(item: WatchlistItem): WatchLevel {
@@ -263,6 +315,8 @@ export default function WatchlistPage() {
   const [query, setQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [monitorStatus, setMonitorStatus] = useState<MonitorStatus | null>(null);
+  const [watchlistStatus, setWatchlistStatus] =
+    useState<WatchlistRuntimeStatus | null>(null);
   const [monitorPolling, setMonitorPolling] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -281,6 +335,7 @@ export default function WatchlistPage() {
       ]);
       const watchlistJson = (await watchlistRes.json()) as {
         items?: WatchlistItem[];
+        status?: WatchlistRuntimeStatus | null;
         error?: string;
       };
       if (!watchlistRes.ok) {
@@ -288,6 +343,7 @@ export default function WatchlistPage() {
       }
 
       setItems(watchlistJson.items ?? []);
+      setWatchlistStatus(watchlistJson.status ?? null);
 
       if (paperRes?.ok) {
         const paper = (await paperRes.json()) as DualPaperPayload;
@@ -606,6 +662,89 @@ export default function WatchlistPage() {
               暂无资讯。开启后台轮询或点击「立即扫描」后，雷达抓取的热点新闻会显示在这里。
             </p>
           )}
+        </div>
+      </section>
+
+      <section className="watchlist-runtime" aria-label="跟踪池执行状态">
+        <div className="watchlist-runtime-head">
+          <div>
+            <h2 className="section-title">执行状态</h2>
+            <p className="muted">
+              {watchlistStatus?.latestIntradayTaskLog?.summary ??
+                watchlistStatus?.latestIntradayTaskLog?.reason ??
+                '等待盘中 15 分钟扫描执行'}
+            </p>
+          </div>
+          <Link href="/scheduled-tasks" className="button button-secondary">
+            定时任务
+          </Link>
+        </div>
+        <div className="watchlist-runtime-grid">
+          <div>
+            <span>盘中扫描</span>
+            <strong
+              className={
+                watchlistStatus?.latestIntradayTaskLog?.status === 'failed'
+                  ? 'watchlist-runtime-danger'
+                  : ''
+              }
+            >
+              {taskStatusLabel(watchlistStatus?.latestIntradayTaskLog?.status)}
+            </strong>
+            <em>
+              {watchlistStatus?.intradayScheduleText ?? '交易时段每 15 分钟'}
+            </em>
+          </div>
+          <div>
+            <span>最近扫描</span>
+            <strong>{fmtDateTime(watchlistStatus?.latestIntradayTaskLog?.ranAt)}</strong>
+            <em>
+              {watchlistStatus?.latestIntradayTaskLog?.summary ??
+                watchlistStatus?.latestIntradayTaskLog?.reason ??
+                '暂无扫描记录'}
+            </em>
+          </div>
+          <div>
+            <span>收盘快照</span>
+            <strong
+              className={
+                watchlistStatus?.latestTaskLog?.status === 'failed'
+                  ? 'watchlist-runtime-danger'
+                  : ''
+              }
+            >
+              {taskStatusLabel(watchlistStatus?.latestTaskLog?.status)}
+            </strong>
+            <em>
+              {watchlistStatus?.scheduleText ?? '交易日 15:35'} ·{' '}
+              {fmtDateTime(watchlistStatus?.latestTaskLog?.ranAt)}
+            </em>
+          </div>
+          <div>
+            <span>最近快照</span>
+            <strong>{fmtDateTime(watchlistStatus?.latestSnapshotAt)}</strong>
+            <em>{watchlistStatus?.latestSnapshotTradeDate ?? '暂无交易日'}</em>
+          </div>
+          <div>
+            <span>落库覆盖</span>
+            <strong>
+              {watchlistStatus
+                ? `${watchlistStatus.snapshotCoverage}/${watchlistStatus.total} 只`
+                : '暂无'}
+            </strong>
+            <em>
+              {watchlistStatus
+                ? watchlistStatus.missingSnapshotCount
+                  ? `${watchlistStatus.missingSnapshotCount} 只待快照`
+                  : '已覆盖当前池'
+                : '等待状态'}
+            </em>
+          </div>
+          <div>
+            <span>自动清理</span>
+            <strong>{watchlistStatus?.scheduleText ?? '交易日 15:35'}</strong>
+            <em>{watchlistStatus?.retentionRules[0]?.detail ?? '读取规则中'}</em>
+          </div>
         </div>
       </section>
 

@@ -24,8 +24,10 @@ export async function GET() {
       () => null,
     );
     const summary = summaryStdout ? JSON.parse(summaryStdout) : null;
+    const statusStdout = await runAgentCoreWatchlistJson(['status']).catch(() => null);
+    const status = statusStdout ? JSON.parse(statusStdout) : null;
     return NextResponse.json(
-      { items, summary },
+      { items, summary, status },
       {
         headers: {
           'Cache-Control': 'no-store',

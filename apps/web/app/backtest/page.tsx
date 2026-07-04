@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 
 type Strategy = 'stock' | 'diamond' | 'diamond-momentum' | 'etf' | 'etf-momentum';
 type StockUniverseMode = 'retail-stock' | 'manual';
+type StockMarketFilter = 'require_bullish' | 'avoid_bearish' | 'off';
 
 type BacktestMetrics = {
   tradeCount: number;
@@ -134,6 +135,9 @@ type BacktestRunConfig = {
   noSymbolOverlap?: boolean;
   newsFilter?: 'off' | 'avoid_bearish' | 'require_bullish';
   newsLookbackDays?: number;
+  stockMarketFilter?: StockMarketFilter;
+  minBenchmarkMomentum20Pct?: number;
+  defensiveBenchmarkMomentum20Pct?: number;
   rawSignalCount?: number;
   newsBlockedCount?: number;
   portfolioSkippedCount?: number;
@@ -351,6 +355,15 @@ function displayStrategyName(value: string) {
     'etf-momentum-rotation': 'ETF 动量轮动',
   };
   return labels[value] ?? value;
+}
+
+function displayStockMarketFilter(value: StockMarketFilter | undefined) {
+  const labels: Record<StockMarketFilter, string> = {
+    require_bullish: '强势确认',
+    avoid_bearish: '仅避开弱熊',
+    off: '关闭',
+  };
+  return value ? labels[value] : '—';
 }
 
 function fmtExitReason(value: string) {
@@ -599,6 +612,8 @@ export default function BacktestPage() {
   const [newsFilter, setNewsFilter] = useState<'avoid_bearish' | 'require_bullish' | 'off'>(
     'avoid_bearish',
   );
+  const [stockMarketFilter, setStockMarketFilter] = useState<StockMarketFilter>('require_bullish');
+  const [stockDefensiveBenchmarkMomentum, setStockDefensiveBenchmarkMomentum] = useState('3');
   const [exitMaxFail, setExitMaxFail] = useState('2');
   const [maxConcurrent, setMaxConcurrent] = useState('5');
   const [initialCapital, setInitialCapital] = useState('100000');
@@ -636,6 +651,13 @@ export default function BacktestPage() {
       params.set('symbols', symbols);
     } else if (!usingEtfStrategy) {
       params.set('universe', 'retail-stock');
+    }
+    if (!usingEtfStrategy) {
+      params.set('maxConcurrent', maxConcurrent);
+      params.set('marketFilter', stockMarketFilter);
+      if (stockMarketFilter === 'require_bullish') {
+        params.set('defensiveBenchmarkMomentum', stockDefensiveBenchmarkMomentum || '3');
+      }
     }
     if (strategy === 'etf' && includeWaitPullback) {
       params.set('includeWaitPullback', '1');
@@ -877,6 +899,44 @@ export default function BacktestPage() {
                 <span>从 stock/qfq-daily 目录读取所有普通 A 股日线；动量启动信号作为入场候选，默认过滤 ST、8 元以下和近 5 日成交额低于 3000 万的票。</span>
               </div>
             )}
+            <div className="backtest-etf-options">
+              <label className="form-field">
+                <span>大盘过滤</span>
+                <select
+                  className="input"
+                  value={stockMarketFilter}
+                  onChange={(event) => setStockMarketFilter(event.target.value as StockMarketFilter)}
+                >
+                  <option value="require_bullish">强势确认（稳健）</option>
+                  <option value="avoid_bearish">仅避开弱熊（宽松）</option>
+                  <option value="off">关闭过滤（最宽）</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span>防守动量阈值</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={stockDefensiveBenchmarkMomentum}
+                  disabled={stockMarketFilter !== 'require_bullish'}
+                  onChange={(event) => setStockDefensiveBenchmarkMomentum(event.target.value)}
+                />
+              </label>
+              <label className="form-field">
+                <span>最大同时持仓</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={maxConcurrent}
+                  onChange={(event) => setMaxConcurrent(event.target.value)}
+                />
+              </label>
+            </div>
             {stockUniverse === 'manual' && (
               <div className="backtest-symbol-presets" aria-label="股票池快捷选择">
                 {STOCK_SYMBOL_PRESETS.map((preset) => (
@@ -1209,6 +1269,11 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
     typeof result.config?.longestStockIdleDays === 'number'
       ? result.config.longestStockIdleDays
       : null;
+  const stockFilterLabel = displayStockMarketFilter(result.config?.stockMarketFilter);
+  const defensiveMomentum =
+    typeof result.config?.defensiveBenchmarkMomentum20Pct === 'number'
+      ? result.config.defensiveBenchmarkMomentum20Pct
+      : null;
   const chartDays = Math.max(120, Math.min(520, result.requestedDays + 90));
   const panels: Array<{ id: StockBacktestPanel; label: string; hint: string }> = [
     { id: 'overview', label: '收益概述', hint: '收益曲线和核心指标' },
@@ -1243,7 +1308,7 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；动量启动信号叠加 checklist 入场，过滤 ST/8 元以下/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。`
+                    ? `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；动量启动信号叠加 checklist 入场，过滤 ST/8 元以下/低成交额；大盘过滤为${stockFilterLabel}${defensiveMomentum != null && defensiveMomentum > 0 ? `，中期不强时要求沪深300 20 日动量 ≥${defensiveMomentum}%` : ''}。`
                     : `区间 ${result.startDate ?? '—'} 至 ${result.endDate ?? '—'}。默认扫描本地 ${universeCount} 只普通 A 股前复权日 K，排除 688/689 科创板；入口统一为股票策略，历史信号统计仅作为内部验证口径。`}
                   {hasDataCutoffMismatch
                     ? ` 收益概述按策略和大盘共同数据截止日 ${fmtTradeDate(comparisonEndDate)} 对齐；策略最新收益 ${fmtPct(latestStrategyReturn)}。`
@@ -1259,6 +1324,8 @@ function StockStrategyReport({ result }: { result: BacktestResult }) {
               <SummaryMetric label="大盘累计收益" value={fmtPct(benchmarkReturn)} tone={benchmarkReturn} />
               <SummaryMetric label="超额收益" value={fmtPct(excessReturn)} tone={excessReturn} />
               <SummaryMetric label="股票池" value={`${universeCount} 只`} />
+              <SummaryMetric label="最大持仓" value={`${result.config?.maxConcurrentPositions ?? 5} 只`} />
+              <SummaryMetric label="大盘过滤" value={stockFilterLabel} />
               <SummaryMetric label="策略年化收益" value={fmtPct(annualReturn)} tone={annualReturn} />
               <SummaryMetric label="最大回撤" value={fmtPct(maxDrawdown)} tone={maxDrawdown} inverse />
               <SummaryMetric label="夏普比率" value={fmtNumber(sharpe, 3)} />

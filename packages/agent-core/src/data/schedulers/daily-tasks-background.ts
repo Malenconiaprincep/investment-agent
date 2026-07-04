@@ -22,6 +22,7 @@ import {
 import { runStockBacktestPaperExitMonitor } from '../paper/stock-backtest-exit.js';
 import { checkMarketDataFreshness } from '../paper/market-data-freshness.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
+import { runDailyWatchlistSnapshot } from '../watchlist/jobs.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 import {
@@ -622,6 +623,24 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
+    id: 'watchlist-snapshot',
+    label: '跟踪池快照',
+    hour: 15,
+    minute: 35,
+    run: async () => {
+      const result = await runDailyWatchlistSnapshot();
+      const errors = result.results.filter((item) => 'error' in item).length;
+      const diamondSignals = result.results.filter(
+        (item) => 'diamondStrength' in item && item.diamondStrength,
+      ).length;
+      return {
+        skipped: result.count === 0,
+        reason: result.count === 0 ? '跟踪池为空' : undefined,
+        summary: `刷新 ${result.count} 只 · 钻石 ${diamondSignals} 只 · 清理 ${result.purge.removed} 只 · 保护 ${result.purge.protected} 只 · 失败 ${errors} 只`,
+      };
+    },
+  },
+  {
     id: STOCK_DAILY_SYNC_TASK_ID,
     label: STOCK_DAILY_SYNC_LABEL,
     hour: 17,
@@ -947,6 +966,7 @@ export function startDailyTasksBackgroundWorker() {
     `08:00 行情数据提醒 / 回测策略仓买入 / 回测+新闻仓买入`,
     `交易时段 回测策略分仓出场监控（策略仓+新闻仓）`,
     `15:30 ETF 日线更新`,
+    `15:35 跟踪池快照`,
     `17:00 股票日线更新`,
   ].join(' · ');
 

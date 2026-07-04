@@ -22,9 +22,15 @@ import {
   scanSymbolsDiamondSignals,
   scanWatchlistDiamondSignals,
 } from '../data/watchlist/jobs.js';
+import { describeWatchlistRetentionRules } from '../data/watchlist/retention.js';
+import { readRecentScheduledTaskLogs } from '../data/schedulers/scheduled-task-log.js';
 import { generateWeeklyReview } from '../data/watchlist/weekly-review.js';
 import { listScreeningSessions, getScreeningSession } from '../data/screening/store.js';
 import { todayDateKey } from '../data/backtest/date-range.js';
+import {
+  getStockIntradayMonitorIntervalMs,
+  STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT,
+} from '../data/paper/trading-calendar.js';
 
 type WatchlistListItem = Awaited<ReturnType<typeof listWatchlistItems>>[number];
 type LatestWatchlistSnapshot = Awaited<ReturnType<typeof listLatestSnapshots>>[number];
@@ -196,6 +202,42 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
     return JSON.stringify(await runDailyWatchlistSnapshot());
   }
 
+  if (command === 'status') {
+    const items = await listWatchlistItems();
+    const snapshots = await listLatestSnapshots();
+    const snapshotSymbols = new Set(snapshots.map((snapshot) => snapshot.symbol));
+    const latestSnapshot = snapshots
+      .slice()
+      .sort((a, b) => b.snapshotAt.localeCompare(a.snapshotAt))[0];
+    const latestTaskLog =
+      readRecentScheduledTaskLogs({
+        taskId: 'watchlist-snapshot',
+        limit: 1,
+      })[0] ?? null;
+    const latestIntradayTaskLog =
+      readRecentScheduledTaskLogs({
+        taskId: 'stock-intraday-monitor',
+        limit: 1,
+      })[0] ?? null;
+    const intradayIntervalMs = getStockIntradayMonitorIntervalMs();
+
+    return JSON.stringify({
+      total: items.length,
+      latestSnapshotAt: latestSnapshot?.snapshotAt ?? null,
+      latestSnapshotTradeDate: latestSnapshot?.tradeDate ?? null,
+      snapshotCoverage: snapshotSymbols.size,
+      missingSnapshotCount: items.filter((item) => !snapshotSymbols.has(item.symbol)).length,
+      retentionRules: describeWatchlistRetentionRules(),
+      latestTaskLog,
+      latestIntradayTaskLog,
+      intradayIntervalMs,
+      intradayScheduleText: `交易时段每 ${Math.round(
+        intradayIntervalMs / 60_000 || STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT,
+      )} 分钟`,
+      scheduleText: '交易日 15:35',
+    });
+  }
+
   if (command === 'diamond-scan') {
     const mode = args[1] ?? 'watchlist';
     if (mode === 'watchlist') {
@@ -241,6 +283,6 @@ export async function dispatchWatchlist(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: list|add|remove|get|kline|stock-chart|snapshot-daily|diamond-scan|diamond-list|weekly-generate|weekly-list|weekly-get|today-summary',
+    'Usage: list|add|remove|get|kline|stock-chart|snapshot-daily|status|diamond-scan|diamond-list|weekly-generate|weekly-list|weekly-get|today-summary',
   );
 }
