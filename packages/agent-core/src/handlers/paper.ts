@@ -114,6 +114,15 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(checkMarketDataFreshness());
   }
 
+  if (command === 'etf-observation') {
+    const { buildEtfObservationReport } = await import(
+      '../data/paper/etf-observation.js'
+    );
+    return JSON.stringify(
+      await buildEtfObservationReport({ persist: args.includes('--snapshot') }),
+    );
+  }
+
   if (command === 'etf-auto-run') {
     const { runEtfPaperAutoPipeline } = await import('../data/paper/etf-paper-pipeline.js');
     const { notifyEtfPaperMonitor } = await import('../data/notify/feishu-daily.js');
@@ -162,6 +171,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-observation [--snapshot]|etf-auto-run|fix-etf-probe|trade ...',
   );
 }

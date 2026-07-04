@@ -22,6 +22,7 @@ import {
 import { runStockBacktestPaperExitMonitor } from '../paper/stock-backtest-exit.js';
 import { checkMarketDataFreshness } from '../paper/market-data-freshness.js';
 import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
+import { buildEtfObservationReport } from '../paper/etf-observation.js';
 import { runDailyWatchlistSnapshot } from '../watchlist/jobs.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
@@ -623,6 +624,21 @@ const DAILY_TASKS: DailyTaskDef[] = [
     },
   },
   {
+    id: 'etf-observation-snapshot',
+    label: 'ETF 观察快照',
+    hour: 15,
+    minute: 45,
+    run: async () => {
+      const report = await buildEtfObservationReport({ persist: true });
+      const failed = report.latest.checks.filter((check) => check.status === 'fail');
+      const warned = report.latest.checks.filter((check) => check.status === 'warn');
+      return {
+        skipped: false,
+        summary: `总分 ${report.latest.score} · ${report.latest.overallStatus} · 已观察 ${report.elapsedDays}/56 天 · 失败 ${failed.length} 项 · 预警 ${warned.length} 项`,
+      };
+    },
+  },
+  {
     id: 'watchlist-snapshot',
     label: '跟踪池快照',
     hour: 15,
@@ -967,6 +983,7 @@ export function startDailyTasksBackgroundWorker() {
     `交易时段 回测策略分仓出场监控（策略仓+新闻仓）`,
     `15:30 ETF 日线更新`,
     `15:35 跟踪池快照`,
+    `15:45 ETF 观察快照`,
     `17:00 股票日线更新`,
   ].join(' · ');
 

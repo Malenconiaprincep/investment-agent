@@ -749,6 +749,9 @@ export default function PaperTradingPage() {
         <Link href="/signals" className="button button-secondary">
           信号提醒
         </Link>
+        <Link href="/paper/etf-observation" className="button button-secondary">
+          ETF 观察
+        </Link>
         <Link href="/reviews" className="button button-secondary">
           每周复盘
         </Link>

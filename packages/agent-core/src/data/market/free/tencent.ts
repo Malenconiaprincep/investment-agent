@@ -54,14 +54,17 @@ export async function fetchDailyKlinesByTencentCode(
   });
   const json = (await response.json()) as KlineResponse;
 
-  const rows = json.data?.[txCode]?.qfqday ?? json.data?.[txCode]?.day ?? [];
+  const rows = json.data?.[txCode]?.qfqday ?? [];
   if (rows.length === 0) {
-    throw new Error(`暂无行情数据: ${displayCode}`);
+    if ((json.data?.[txCode]?.day?.length ?? 0) > 0) {
+      throw new Error(`腾讯未返回前复权 qfqday，拒绝使用普通 day: ${displayCode}`);
+    }
+    throw new Error(`暂无前复权行情数据: ${displayCode}`);
   }
 
   const quotes = mapKlines(rows);
   setCached(cacheKey, quotes, TTL_MS);
-  return { quotes, cached: false as const };
+  return { quotes, cached: false as const, adjustment: 'qfq' as const };
 }
 
 function mapKlines(

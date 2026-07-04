@@ -36,6 +36,10 @@ import {
   roundToLot,
 } from './trading-calendar.js';
 
+const ETF_BUY_MAX_SPREAD_PCT = 0.5;
+const ETF_BUY_HALF_POSITION_MIN_PREMIUM_PCT = 2;
+const ETF_BUY_SKIP_PREMIUM_PCT = 4;
+
 export type EtfPaperPipelineResult = {
   tradeDate: string;
   skipped?: boolean;
@@ -44,6 +48,15 @@ export type EtfPaperPipelineResult = {
   stopLosses?: Array<{ symbol: string; name: string; shares: number; price: number }>;
   sells?: Array<{ symbol: string; name: string; shares: number; price: number }>;
   buys?: Array<{ symbol: string; name: string; shares: number; price: number }>;
+  buySkips?: Array<{
+    symbol: string;
+    name: string;
+    reason: string;
+    price?: number;
+    prevClose?: number;
+    premiumPct?: number;
+    spreadPct?: number;
+  }>;
   targets?: Array<{
     symbol: string;
     name: string;
@@ -85,6 +98,115 @@ function calcEtfSlotShares(input: {
   currentMarketValue?: number;
 }): number {
   return calcEtfPaperBuyShares(input);
+}
+
+function roundPct(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function isPositive(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value) && value > 0;
+}
+
+function computeSpreadPct(input: {
+  bid1: number | null;
+  ask1: number | null;
+}): number | null {
+  if (!isPositive(input.bid1) || !isPositive(input.ask1)) return null;
+  if (input.ask1 < input.bid1) return null;
+  const mid = (input.ask1 + input.bid1) / 2;
+  if (mid <= 0) return null;
+  return roundPct(((input.ask1 - input.bid1) / mid) * 100);
+}
+
+async function resolvePreviousClose(
+  symbol: string,
+  tradeDate: string,
+): Promise<number | null> {
+  const data = await getDailyQuote(symbol, 10);
+  const tradeKey = tradeDate.replace(/-/g, '');
+  const prior = data.quotes
+    .filter((bar) => bar.close != null && bar.close > 0)
+    .map((bar) => ({
+      tradeDate: bar.tradeDate.replace(/-/g, ''),
+      close: bar.close!,
+    }))
+    .filter((bar) => bar.tradeDate < tradeKey)
+    .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate))[0];
+  if (prior) return prior.close;
+  return data.latestClose != null && data.latestClose > 0 ? data.latestClose : null;
+}
+
+export function evaluateEtfBuyExecutionGuard(input: {
+  shares: number;
+  price: number;
+  bid1: number | null;
+  ask1: number | null;
+  prevClose: number | null;
+}): {
+  action: 'buy' | 'half' | 'skip';
+  shares: number;
+  reason?: string;
+  premiumPct?: number;
+  spreadPct?: number;
+} {
+  const spreadPct = computeSpreadPct({ bid1: input.bid1, ask1: input.ask1 });
+  if (spreadPct == null) {
+    return {
+      action: 'skip',
+      shares: 0,
+      reason: '盘口买一/卖一缺失或倒挂，暂缓买入',
+    };
+  }
+  if (spreadPct > ETF_BUY_MAX_SPREAD_PCT) {
+    return {
+      action: 'skip',
+      shares: 0,
+      reason: `盘口价差 ${spreadPct.toFixed(2)}% > ${ETF_BUY_MAX_SPREAD_PCT}%`,
+      spreadPct,
+    };
+  }
+
+  if (!isPositive(input.prevClose)) {
+    return {
+      action: 'skip',
+      shares: 0,
+      reason: '缺少上一交易日收盘价，暂缓买入',
+      spreadPct,
+    };
+  }
+
+  const premiumPct = roundPct(((input.price - input.prevClose) / input.prevClose) * 100);
+  if (premiumPct > ETF_BUY_SKIP_PREMIUM_PCT) {
+    return {
+      action: 'skip',
+      shares: 0,
+      reason: `买入价较昨收上涨 ${premiumPct.toFixed(2)}% > ${ETF_BUY_SKIP_PREMIUM_PCT}%`,
+      premiumPct,
+      spreadPct,
+    };
+  }
+
+  if (premiumPct > ETF_BUY_HALF_POSITION_MIN_PREMIUM_PCT) {
+    const halfShares = roundToLot(Math.floor(input.shares / 2));
+    return {
+      action: halfShares >= 100 ? 'half' : 'skip',
+      shares: halfShares,
+      reason:
+        halfShares >= 100
+          ? `买入价较昨收上涨 ${premiumPct.toFixed(2)}%，半仓执行`
+          : '半仓不足 100 股整手，暂缓买入',
+      premiumPct,
+      spreadPct,
+    };
+  }
+
+  return {
+    action: 'buy',
+    shares: input.shares,
+    premiumPct,
+    spreadPct,
+  };
 }
 
 async function autoStopLossEtfPositions(tradeDate: string) {
@@ -220,6 +342,7 @@ export async function runEtfPaperAutoPipeline(options?: {
     const targetSymbols = new Set(plan.targets.map((item) => item.symbol));
     const sells: NonNullable<EtfPaperPipelineResult['sells']> = [];
     const buys: NonNullable<EtfPaperPipelineResult['buys']> = [];
+    const buySkips: NonNullable<EtfPaperPipelineResult['buySkips']> = [];
 
     for (const pos of summary.positions) {
       if (targetSymbols.has(pos.symbol)) continue;
@@ -261,7 +384,7 @@ export async function runEtfPaperAutoPipeline(options?: {
       const currentMv =
         existing?.marketValue ??
         (existing?.shares && execution.price ? existing.shares * execution.price : 0);
-      const shares = calcEtfSlotShares({
+      const plannedShares = calcEtfSlotShares({
         totalEquity: refreshed.totalValue,
         deployableScale: plan.regimeExposureScale,
         price: execution.price,
@@ -269,6 +392,30 @@ export async function runEtfPaperAutoPipeline(options?: {
         isProbeEntry,
         currentMarketValue: currentMv,
       });
+      if (plannedShares < 100) continue;
+
+      const prevClose = await resolvePreviousClose(symbol, tradeDate);
+      const guard = evaluateEtfBuyExecutionGuard({
+        shares: plannedShares,
+        price: execution.price,
+        bid1: execution.quote.bid1,
+        ask1: execution.quote.ask1,
+        prevClose,
+      });
+      if (guard.action === 'skip') {
+        buySkips.push({
+          symbol: target.symbol,
+          name: target.name,
+          reason: guard.reason ?? 'ETF 买入执行保护跳过',
+          price: execution.price,
+          prevClose: prevClose ?? undefined,
+          premiumPct: guard.premiumPct,
+          spreadPct: guard.spreadPct,
+        });
+        continue;
+      }
+
+      const shares = guard.shares;
       if (shares < 100) continue;
       if (execution.price * shares > refreshed.account.cash) continue;
 
@@ -285,6 +432,12 @@ export async function runEtfPaperAutoPipeline(options?: {
           ? 'ETF 动量调仓加仓（宽基槽位）'
           : 'ETF 动量调仓加仓';
 
+      const executionGuardNote = guard.reason
+        ? `执行保护：${guard.reason}`
+        : guard.premiumPct != null || guard.spreadPct != null
+          ? `执行保护：较昨收 ${guard.premiumPct?.toFixed(2) ?? 'NA'}%，价差 ${guard.spreadPct?.toFixed(2) ?? 'NA'}%`
+          : '';
+
       await executePaperTrade({
         bucket: 'etf',
         symbol: target.symbol,
@@ -294,7 +447,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         price: execution.price,
         tradeDate,
         source: 'auto',
-        note: `${baseNote}${rotationNote}`,
+        note: [baseNote + rotationNote, executionGuardNote].filter(Boolean).join(' · '),
         skipSessionCheck: true,
         useOrderBookPrice: false,
       });
@@ -308,6 +461,7 @@ export async function runEtfPaperAutoPipeline(options?: {
 
     result.sells = sells;
     result.buys = buys;
+    result.buySkips = buySkips;
 
     const refreshedAfter = await getPaperAccountSummary('etf');
     const allTargetsHeld = plan.targets.every((target) =>
@@ -315,11 +469,15 @@ export async function runEtfPaperAutoPipeline(options?: {
     );
     const hadActivity = sells.length > 0 || buys.length > 0;
 
-    if (hadActivity || allTargetsHeld) {
+    const hasPendingProtectedBuys = buySkips.length > 0 && !allTargetsHeld;
+
+    if ((hadActivity && !hasPendingProtectedBuys) || allTargetsHeld) {
       await savePaperBucketState({
         bucket: 'etf',
         lastRebalanceDate: tradeDate,
       });
+    } else if (hasPendingProtectedBuys) {
+      result.reason = '部分目标因买入执行保护暂缓，下一轮盘中监听继续尝试';
     } else {
       result.reason =
         '调仓日但未成交（盘口价异常、预算不足或无法凑足 100 股整手）';

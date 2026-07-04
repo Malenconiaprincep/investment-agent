@@ -12,6 +12,7 @@ export type ScheduledTaskId =
   | 'etf-morning-confirm'
   | 'etf-tail-pick'
   | 'etf-daily-csv-update'
+  | 'etf-observation-snapshot'
   | 'watchlist-snapshot'
   | 'stock-daily-csv-update'
   | 'stock-paper'
@@ -111,6 +112,13 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     label: 'ETF 日线更新',
     description: '收盘后更新 ETF 池与本地已有 ETF 前复权日线 CSV，供回测和模拟盘复用',
     scheduleText: '交易日 15:30',
+    defaultEnabled: true,
+  },
+  {
+    id: 'etf-observation-snapshot',
+    label: 'ETF 观察快照',
+    description: '收盘后汇总数据、自动交易、回撤和策略行为，沉淀实盘前观察日志',
+    scheduleText: '交易日 15:45',
     defaultEnabled: true,
   },
   {
