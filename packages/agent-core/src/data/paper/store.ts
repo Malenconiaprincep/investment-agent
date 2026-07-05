@@ -22,6 +22,7 @@ import { calcStopLoss } from './momentum.js';
 import {
   getSellableCutoffTradeDate,
   bucketSettlementRuleLabel,
+  getPaperSettlementRule,
 } from './settlement.js';
 
 export type PaperAccount = {
@@ -929,7 +930,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
       latestPrice,
       markPriceSource: mark?.source ?? null,
       settlementRule: isEtfSymbol(pos.symbol)
-        ? 't0'
+        ? getPaperSettlementRule(pos.symbol)
         : bucket === 'stock-backtest'
           ? 't2'
           : 't1',

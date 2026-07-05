@@ -8,11 +8,18 @@ import {
 } from './settlement.js';
 
 describe('paper settlement rules', () => {
-  it('treats A-share ETFs as T+0', () => {
-    expect(getStockSettlementDelayDays('etf', '510300')).toBe(0);
-    expect(usesT1Settlement('510300')).toBe(false);
-    expect(settlementRuleLabel('510300')).toBe('T+0');
-    expect(bucketSettlementRuleLabel('etf', '510300')).toBe('T+0');
+  it('treats domestic equity ETFs as T+1', () => {
+    expect(getStockSettlementDelayDays('etf', '510300')).toBe(1);
+    expect(usesT1Settlement('510300')).toBe(true);
+    expect(settlementRuleLabel('510300')).toBe('T+1');
+    expect(bucketSettlementRuleLabel('etf', '510300')).toBe('T+1');
+  });
+
+  it('treats known cross-border ETFs as T+0', () => {
+    expect(getStockSettlementDelayDays('etf', '513100')).toBe(0);
+    expect(usesT1Settlement('513100')).toBe(false);
+    expect(settlementRuleLabel('513100')).toBe('T+0');
+    expect(bucketSettlementRuleLabel('etf', '159941')).toBe('T+0');
   });
 
   it('treats radar stock bucket as T+1', () => {
