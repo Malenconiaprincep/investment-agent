@@ -101,5 +101,228 @@
       "downDays": 3,
       "observationDays": 6
     }
+  },
+  {
+    "id": "2026-07-05-1783214897132",
+    "tradeDate": "2026-07-05",
+    "generatedAt": "2026-07-05T01:28:17.132Z",
+    "score": 100,
+    "overallStatus": "pass",
+    "checks": [
+      {
+        "id": "data",
+        "label": "数据稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 前复权日线未发现明显断点，最新日期满足预期。",
+        "details": [
+          "检查 20/20 个 ETF 前复权日线文件，期望最新交易日 2026-07-03。",
+          "本地最新日期 2026-07-03。"
+        ],
+        "metrics": {
+          "checked": 20,
+          "missing": 0,
+          "stale": 0,
+          "jumps": 0,
+          "latestDate": "2026-07-03",
+          "expectedDate": "2026-07-03"
+        }
+      },
+      {
+        "id": "autoTrade",
+        "label": "自动交易稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "自动交易链路未发现重复成交、资金异常或任务失败。",
+        "details": [
+          "ETF 仓现金 15414.40，持仓市值 32205.50，总资产 47619.90。",
+          "最近自动成交 4 笔，执行保护备注 0 笔。",
+          "今日非交易日，不要求 ETF 监听或日线更新任务日志。"
+        ],
+        "metrics": {
+          "recentTrades": 4,
+          "duplicateCount": 0,
+          "missingNotes": 0,
+          "buyProtectionNotes": 0,
+          "failedTaskLogs": 0,
+          "cash": 15414.4,
+          "totalValue": 47619.9
+        }
+      },
+      {
+        "id": "drawdown",
+        "label": "回撤可接受",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 仓最大回撤仍在 -8% 以内。",
+        "details": [
+          "已记录 6 个 ETF 净值点，区间 2026-06-29 至 2026-07-05。",
+          "当前观察期最大回撤 -7.35%。"
+        ],
+        "metrics": {
+          "maxDrawdownPct": -7.35,
+          "points": 6
+        }
+      },
+      {
+        "id": "behavior",
+        "label": "策略行为符合预期",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 买卖理由可追溯，行为与动量轮动规则一致。",
+        "details": [
+          "最近 ETF 自动买入 4 笔，自动卖出 0 笔。",
+          "最近买入理由：ETF 动量补账：按 2026-06-29 策略目标建仓，5万本金/70%仓位"
+        ],
+        "metrics": {
+          "autoTrades": 4,
+          "buyTrades": 4,
+          "sellTrades": 0,
+          "missingReason": 0
+        }
+      },
+      {
+        "id": "roughMarket",
+        "label": "至少经历一次不顺行情",
+        "status": "pass",
+        "score": 100,
+        "message": "已经经历过一定回撤或多个下跌日，可观察系统是否按规则处理。",
+        "details": [
+          "观察期下跌净值日 3 天。",
+          "观察期最大回撤 -7.35%。"
+        ],
+        "metrics": {
+          "downDays": 3,
+          "maxDrawdownPct": -7.35
+        }
+      }
+    ],
+    "newRuleExecution": {
+      "tradeDate": "2026-07-05",
+      "effectiveDate": "2026-07-06",
+      "status": "pending",
+      "message": "新规 2026-07-06 起观察，当前还未进入观察期。",
+      "details": [
+        "记录 14:45 ETF 尾盘推荐价、当天收盘价、模拟盘成交价之间的偏离，用来判断是否需要改成 15:05-15:30 盘后固定价格执行。"
+      ],
+      "recommendations": [],
+      "trades": [],
+      "metrics": {
+        "recommendationCount": 0,
+        "tradeCount": 0,
+        "maxSignalToCloseAbsPct": null,
+        "maxTradeToCloseAbsPct": null
+      }
+    },
+    "metrics": {
+      "returnPct": -4.76,
+      "totalValue": 47619.9,
+      "maxDrawdownPct": -7.35,
+      "downDays": 3,
+      "observationDays": 7
+    }
+  },
+  {
+    "id": "2026-07-06-1783323914253",
+    "tradeDate": "2026-07-06",
+    "generatedAt": "2026-07-06T07:45:14.253Z",
+    "score": 100,
+    "overallStatus": "pass",
+    "checks": [
+      {
+        "id": "data",
+        "label": "数据稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 前复权日线未发现明显断点，最新日期满足预期。",
+        "details": [
+          "检查 20/20 个 ETF 前复权日线文件，期望最新交易日 2026-07-03。",
+          "本地最新日期 2026-07-06。"
+        ],
+        "metrics": {
+          "checked": 20,
+          "missing": 0,
+          "stale": 0,
+          "jumps": 0,
+          "latestDate": "2026-07-06",
+          "expectedDate": "2026-07-03"
+        }
+      },
+      {
+        "id": "autoTrade",
+        "label": "自动交易稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "自动交易链路未发现重复成交、资金异常或任务失败。",
+        "details": [
+          "ETF 仓现金 15414.40，持仓市值 32108.00，总资产 47522.40。",
+          "最近自动成交 4 笔，执行保护备注 0 笔。",
+          "今日任务日志：ETF 日线更新完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成。"
+        ],
+        "metrics": {
+          "recentTrades": 4,
+          "duplicateCount": 0,
+          "missingNotes": 0,
+          "buyProtectionNotes": 0,
+          "failedTaskLogs": 0,
+          "cash": 15414.4,
+          "totalValue": 47522.4
+        }
+      },
+      {
+        "id": "drawdown",
+        "label": "回撤可接受",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 仓最大回撤仍在 -8% 以内。",
+        "details": [
+          "已记录 6 个 ETF 净值点，区间 2026-06-29 至 2026-07-06。",
+          "当前观察期最大回撤 -7.53%。"
+        ],
+        "metrics": {
+          "maxDrawdownPct": -7.53,
+          "points": 6
+        }
+      },
+      {
+        "id": "behavior",
+        "label": "策略行为符合预期",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 买卖理由可追溯，行为与动量轮动规则一致。",
+        "details": [
+          "最近 ETF 自动买入 4 笔，自动卖出 0 笔。",
+          "最近买入理由：ETF 动量补账：按 2026-06-29 策略目标建仓，5万本金/70%仓位"
+        ],
+        "metrics": {
+          "autoTrades": 4,
+          "buyTrades": 4,
+          "sellTrades": 0,
+          "missingReason": 0
+        }
+      },
+      {
+        "id": "roughMarket",
+        "label": "至少经历一次不顺行情",
+        "status": "pass",
+        "score": 100,
+        "message": "已经经历过一定回撤或多个下跌日，可观察系统是否按规则处理。",
+        "details": [
+          "观察期下跌净值日 4 天。",
+          "观察期最大回撤 -7.53%。"
+        ],
+        "metrics": {
+          "downDays": 4,
+          "maxDrawdownPct": -7.53
+        }
+      }
+    ],
+    "metrics": {
+      "returnPct": -4.96,
+      "totalValue": 47522.4,
+      "maxDrawdownPct": -7.53,
+      "downDays": 4,
+      "observationDays": 8
+    }
   }
 ]

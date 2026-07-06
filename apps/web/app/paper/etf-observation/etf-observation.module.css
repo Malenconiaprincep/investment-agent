@@ -144,6 +144,79 @@
   gap: 1rem;
 }
 
+.ruleSection {
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ruleSummary {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.4fr) repeat(3, minmax(8rem, 0.8fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.ruleSummary p {
+  margin: 0;
+  color: var(--text);
+}
+
+.ruleSummary div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ruleSummary strong {
+  font-size: 1.05rem;
+}
+
+.ruleDetails {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.compactTableWrap {
+  display: grid;
+  gap: 0.6rem;
+  overflow-x: auto;
+}
+
+.compactTableWrap h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.compactTable {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.compactTable th,
+.compactTable td {
+  padding: 0.65rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.compactTable th {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.compactTable tr:last-child td {
+  border-bottom: none;
+}
+
 .sectionHead {
   display: flex;
   align-items: baseline;
@@ -166,7 +239,7 @@
 
 .timelineRow {
   display: grid;
-  grid-template-columns: minmax(9rem, 1.1fr) auto repeat(3, minmax(6rem, 0.8fr));
+  grid-template-columns: minmax(9rem, 1.1fr) auto repeat(4, minmax(6rem, 0.8fr));
   align-items: center;
   gap: 1rem;
   padding: 0.85rem 1rem;
@@ -189,7 +262,8 @@
 
 @media (max-width: 900px) {
   .heroStats,
-  .checkGrid {
+  .checkGrid,
+  .ruleSummary {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -209,7 +283,8 @@
   }
 
   .heroStats,
-  .checkGrid {
+  .checkGrid,
+  .ruleSummary {
     grid-template-columns: 1fr;
   }
 

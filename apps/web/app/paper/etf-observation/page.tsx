@@ -17,6 +17,41 @@ type ObservationCheck = {
   metrics?: Record<string, number | string | null>;
 };
 
+type NewRuleExecutionObservation = {
+  tradeDate: string;
+  effectiveDate: string;
+  status: ObservationStatus;
+  message: string;
+  details: string[];
+  recommendations: Array<{
+    symbol: string;
+    name: string;
+    status: 'passed' | 'near_pass' | 'failed';
+    signalPrice: number;
+    buyZoneLow: number;
+    buyZoneHigh: number;
+    closePrice: number | null;
+    signalToClosePct: number | null;
+    note: string;
+  }>;
+  trades: Array<{
+    symbol: string;
+    name: string;
+    side: 'buy' | 'sell';
+    shares: number;
+    tradePrice: number;
+    closePrice: number | null;
+    tradeToClosePct: number | null;
+    note: string | null;
+  }>;
+  metrics: {
+    recommendationCount: number;
+    tradeCount: number;
+    maxSignalToCloseAbsPct: number | null;
+    maxTradeToCloseAbsPct: number | null;
+  };
+};
+
 type ObservationSnapshot = {
   id: string;
   tradeDate: string;
@@ -24,6 +59,7 @@ type ObservationSnapshot = {
   score: number;
   overallStatus: ObservationStatus;
   checks: ObservationCheck[];
+  newRuleExecution?: NewRuleExecutionObservation;
   metrics: {
     returnPct: number;
     totalValue: number;
@@ -68,6 +104,11 @@ function fmtMoney(value: number) {
 function fmtPct(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return '—';
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function fmtPrice(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(3);
 }
 
 function statusClass(status: ObservationStatus) {
@@ -214,6 +255,111 @@ export default function EtfObservationPage() {
             ))}
           </section>
 
+          {latest.newRuleExecution && (
+            <section className={styles.ruleSection}>
+              <div className={styles.sectionHead}>
+                <div>
+                  <h2>新规后尾盘执行观察</h2>
+                  <span className="muted">
+                    自 {latest.newRuleExecution.effectiveDate} 起记录尾盘信号、收盘价和模拟成交偏离
+                  </span>
+                </div>
+                <span className={statusClass(latest.newRuleExecution.status)}>
+                  {STATUS_LABEL[latest.newRuleExecution.status]}
+                </span>
+              </div>
+              <div className={styles.ruleSummary}>
+                <p>{latest.newRuleExecution.message}</p>
+                <div>
+                  <span className="muted">信号最大偏离</span>
+                  <strong>{fmtPct(latest.newRuleExecution.metrics.maxSignalToCloseAbsPct)}</strong>
+                </div>
+                <div>
+                  <span className="muted">成交最大偏离</span>
+                  <strong>{fmtPct(latest.newRuleExecution.metrics.maxTradeToCloseAbsPct)}</strong>
+                </div>
+                <div>
+                  <span className="muted">记录样本</span>
+                  <strong>
+                    {latest.newRuleExecution.metrics.recommendationCount} 信号 /{' '}
+                    {latest.newRuleExecution.metrics.tradeCount} 成交
+                  </strong>
+                </div>
+              </div>
+              <ul className={styles.ruleDetails}>
+                {latest.newRuleExecution.details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+
+              {latest.newRuleExecution.recommendations.length > 0 && (
+                <div className={styles.compactTableWrap}>
+                  <h3>尾盘信号偏离</h3>
+                  <table className={styles.compactTable}>
+                    <thead>
+                      <tr>
+                        <th>代码</th>
+                        <th>名称</th>
+                        <th>信号价</th>
+                        <th>买入区</th>
+                        <th>收盘价</th>
+                        <th>偏离</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {latest.newRuleExecution.recommendations.map((item) => (
+                        <tr key={`${item.symbol}-${item.signalPrice}`}>
+                          <td>{item.symbol}</td>
+                          <td>{item.name}</td>
+                          <td>{fmtPrice(item.signalPrice)}</td>
+                          <td>
+                            {fmtPrice(item.buyZoneLow)}–{fmtPrice(item.buyZoneHigh)}
+                          </td>
+                          <td>{fmtPrice(item.closePrice)}</td>
+                          <td className={item.signalToClosePct && Math.abs(item.signalToClosePct) > 1 ? 'return-down' : undefined}>
+                            {fmtPct(item.signalToClosePct)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {latest.newRuleExecution.trades.length > 0 && (
+                <div className={styles.compactTableWrap}>
+                  <h3>模拟成交偏离</h3>
+                  <table className={styles.compactTable}>
+                    <thead>
+                      <tr>
+                        <th>代码</th>
+                        <th>方向</th>
+                        <th>数量</th>
+                        <th>成交价</th>
+                        <th>收盘价</th>
+                        <th>偏离</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {latest.newRuleExecution.trades.map((item) => (
+                        <tr key={`${item.symbol}-${item.side}-${item.shares}-${item.tradePrice}`}>
+                          <td>{item.symbol}</td>
+                          <td>{item.side === 'buy' ? '买入' : '卖出'}</td>
+                          <td>{item.shares}</td>
+                          <td>{fmtPrice(item.tradePrice)}</td>
+                          <td>{fmtPrice(item.closePrice)}</td>
+                          <td className={item.tradeToClosePct && Math.abs(item.tradeToClosePct) > 1 ? 'return-down' : undefined}>
+                            {fmtPct(item.tradeToClosePct)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
           <section className={styles.timelineSection}>
             <div className={styles.sectionHead}>
               <h2>观察日志</h2>
@@ -232,6 +378,10 @@ export default function EtfObservationPage() {
                   <span>分数 {item.score}</span>
                   <span>收益 {fmtPct(item.metrics.returnPct)}</span>
                   <span>回撤 {fmtPct(item.metrics.maxDrawdownPct)}</span>
+                  <span>
+                    新规偏离{' '}
+                    {fmtPct(item.newRuleExecution?.metrics.maxSignalToCloseAbsPct)}
+                  </span>
                 </div>
               ))}
             </div>

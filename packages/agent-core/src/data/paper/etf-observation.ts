@@ -7,16 +7,20 @@ import {
 import path from 'node:path';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 import { ETF_POOL_19 } from '../etf/pool.js';
+import { listEtfTailPickRuns } from '../etf/store.js';
+import type { EtfTailPickCandidate } from '../etf/rules.js';
 import {
   getLocalEtfDailyCsvPath,
   parseLocalDailyCsv,
   readLocalDailyCsvLatestTradeDate,
 } from '../market/local-csv/etf-daily.js';
+import { getDailyQuote } from '../market/services.js';
 import { readRecentScheduledTaskLogs } from '../schedulers/scheduled-task-log.js';
 import {
   getPaperAccountSummary,
   listEquitySnapshots,
   listPaperTrades,
+  type PaperTrade,
 } from './store.js';
 import { formatTradeDate, getBeijingNow } from './trading-calendar.js';
 
@@ -39,12 +43,52 @@ export type EtfObservationSnapshot = {
   score: number;
   overallStatus: EtfObservationStatus;
   checks: EtfObservationCheck[];
+  newRuleExecution: EtfNewRuleExecutionObservation;
   metrics: {
     returnPct: number;
     totalValue: number;
     maxDrawdownPct: number | null;
     downDays: number;
     observationDays: number;
+  };
+};
+
+export type EtfNewRuleRecommendationObservation = {
+  symbol: string;
+  name: string;
+  status: EtfTailPickCandidate['status'];
+  signalPrice: number;
+  buyZoneLow: number;
+  buyZoneHigh: number;
+  closePrice: number | null;
+  signalToClosePct: number | null;
+  note: string;
+};
+
+export type EtfNewRuleTradeObservation = {
+  symbol: string;
+  name: string;
+  side: PaperTrade['side'];
+  shares: number;
+  tradePrice: number;
+  closePrice: number | null;
+  tradeToClosePct: number | null;
+  note: string | null;
+};
+
+export type EtfNewRuleExecutionObservation = {
+  tradeDate: string;
+  effectiveDate: string;
+  status: EtfObservationStatus;
+  message: string;
+  details: string[];
+  recommendations: EtfNewRuleRecommendationObservation[];
+  trades: EtfNewRuleTradeObservation[];
+  metrics: {
+    recommendationCount: number;
+    tradeCount: number;
+    maxSignalToCloseAbsPct: number | null;
+    maxTradeToCloseAbsPct: number | null;
   };
 };
 
@@ -61,6 +105,7 @@ export type EtfObservationReport = {
 
 const OBSERVATION_LOG_PATH = path.join(DATA_DIR, 'etf-observation-log.json');
 const OBSERVATION_DAYS = 56;
+const A_SHARE_NEW_TRADING_RULE_DATE = '2026-07-06';
 const DATA_JUMP_WARN_PCT = 35;
 const DRAWDOWN_WARN_PCT = -8;
 const DRAWDOWN_FAIL_PCT = -12;
@@ -188,6 +233,168 @@ function countDownDays(points: Array<{ totalValue: number }>): number {
     if (points[index].totalValue < points[index - 1].totalValue) count += 1;
   }
   return count;
+}
+
+function roundNullablePct(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Number(value.toFixed(2));
+}
+
+function calcPct(from: number | null | undefined, to: number | null | undefined): number | null {
+  if (!from || !to || from <= 0 || to <= 0) return null;
+  return roundNullablePct(((to - from) / from) * 100);
+}
+
+function maxAbsPct(values: Array<number | null>): number | null {
+  const finite = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (finite.length === 0) return null;
+  return Number(Math.max(...finite.map((value) => Math.abs(value))).toFixed(2));
+}
+
+async function loadClosePriceBySymbol(
+  symbols: string[],
+  tradeDate: string,
+): Promise<Map<string, number | null>> {
+  const tradeKey = compactDateKey(tradeDate);
+  const entries = await Promise.all(
+    [...new Set(symbols)].map(async (symbol) => {
+      try {
+        const daily = await getDailyQuote(symbol, 10);
+        const bar = daily.quotes.find(
+          (quote) => compactDateKey(quote.tradeDate) === tradeKey,
+        );
+        return [symbol, bar?.close ?? null] as const;
+      } catch {
+        return [symbol, null] as const;
+      }
+    }),
+  );
+  return new Map(entries);
+}
+
+async function buildNewRuleExecutionObservation(input: {
+  tradeDate: string;
+  trades: PaperTrade[];
+}): Promise<EtfNewRuleExecutionObservation> {
+  const details = [
+    '记录 14:45 ETF 尾盘推荐价、当天收盘价、模拟盘成交价之间的偏离，用来判断是否需要改成 15:05-15:30 盘后固定价格执行。',
+  ];
+
+  if (compactDateKey(input.tradeDate) < compactDateKey(A_SHARE_NEW_TRADING_RULE_DATE)) {
+    return {
+      tradeDate: input.tradeDate,
+      effectiveDate: A_SHARE_NEW_TRADING_RULE_DATE,
+      status: 'pending',
+      message: `新规 ${A_SHARE_NEW_TRADING_RULE_DATE} 起观察，当前还未进入观察期。`,
+      details,
+      recommendations: [],
+      trades: [],
+      metrics: {
+        recommendationCount: 0,
+        tradeCount: 0,
+        maxSignalToCloseAbsPct: null,
+        maxTradeToCloseAbsPct: null,
+      },
+    };
+  }
+
+  const tailRun = (await listEtfTailPickRuns(20)).find(
+    (run) => toDateKey(run.tradeDate) === input.tradeDate,
+  );
+  const candidates = (tailRun?.candidates ?? [])
+    .filter((candidate) => candidate.status === 'passed' || candidate.status === 'near_pass')
+    .slice(0, 8);
+  const todayTrades = input.trades
+    .filter((trade) => toDateKey(trade.tradeDate) === input.tradeDate)
+    .slice(0, 20);
+  const closeBySymbol = await loadClosePriceBySymbol(
+    [
+      ...candidates.map((candidate) => candidate.symbol),
+      ...todayTrades.map((trade) => trade.symbol),
+    ],
+    input.tradeDate,
+  );
+
+  const recommendations = candidates.map((candidate) => {
+    const closePrice = closeBySymbol.get(candidate.symbol) ?? null;
+    const signalToClosePct = calcPct(candidate.price, closePrice);
+    return {
+      symbol: candidate.symbol,
+      name: candidate.name,
+      status: candidate.status,
+      signalPrice: candidate.price,
+      buyZoneLow: candidate.operationPlan.buyZoneLow,
+      buyZoneHigh: candidate.operationPlan.buyZoneHigh,
+      closePrice,
+      signalToClosePct,
+      note:
+        closePrice == null
+          ? '尚未拿到当天收盘价，等待日线更新。'
+          : Math.abs(signalToClosePct ?? 0) > 1
+            ? '尾盘信号价与收盘价偏离超过 1%，需要观察集合竞价滑点。'
+            : '尾盘信号价与收盘价偏离可接受。',
+    };
+  });
+
+  const trades = todayTrades.map((trade) => {
+    const closePrice = closeBySymbol.get(trade.symbol) ?? null;
+    return {
+      symbol: trade.symbol,
+      name: trade.name,
+      side: trade.side,
+      shares: trade.shares,
+      tradePrice: trade.price,
+      closePrice,
+      tradeToClosePct: calcPct(trade.price, closePrice),
+      note: trade.note,
+    };
+  });
+
+  const maxSignalToCloseAbsPct = maxAbsPct(
+    recommendations.map((item) => item.signalToClosePct),
+  );
+  const maxTradeToCloseAbsPct = maxAbsPct(trades.map((item) => item.tradeToClosePct));
+  if (tailRun) {
+    details.push(
+      `已读取 ${tailRun.tradeDate} 尾盘推荐：通过 ${tailRun.passedCount} 个，接近通过 ${tailRun.nearPassCount} 个。`,
+    );
+  } else {
+    details.push('当天还没有 ETF 尾盘推荐记录。');
+  }
+  if (todayTrades.length) {
+    details.push(`当天 ETF 模拟盘成交 ${todayTrades.length} 笔。`);
+  } else {
+    details.push('当天暂无 ETF 模拟盘成交。');
+  }
+
+  let status: EtfObservationStatus = 'pending';
+  let message = '等待尾盘推荐、收盘价和模拟成交样本沉淀。';
+  const worst = Math.max(maxSignalToCloseAbsPct ?? 0, maxTradeToCloseAbsPct ?? 0);
+  if (recommendations.length > 0 || trades.length > 0) {
+    if (worst > 1) {
+      status = 'warn';
+      message = '尾盘信号/成交与收盘价偏离超过 1%，继续观察是否需要改用盘后固定价。';
+    } else {
+      status = 'pass';
+      message = '尾盘信号/成交与收盘价偏离暂时可接受。';
+    }
+  }
+
+  return {
+    tradeDate: input.tradeDate,
+    effectiveDate: A_SHARE_NEW_TRADING_RULE_DATE,
+    status,
+    message,
+    details,
+    recommendations,
+    trades,
+    metrics: {
+      recommendationCount: recommendations.length,
+      tradeCount: trades.length,
+      maxSignalToCloseAbsPct,
+      maxTradeToCloseAbsPct,
+    },
+  };
 }
 
 function checkEtfCsvData(input: {
@@ -550,6 +757,10 @@ export async function buildEtfObservationReport(options?: {
     await checkStrategyBehavior(),
     checkRoughMarket(equityPoints),
   ];
+  const newRuleExecution = await buildNewRuleExecutionObservation({
+    tradeDate,
+    trades,
+  });
   const score = calcScore(checks);
   const snapshot: EtfObservationSnapshot = {
     id: `${tradeDate}-${Date.now()}`,
@@ -558,6 +769,7 @@ export async function buildEtfObservationReport(options?: {
     score,
     overallStatus: resolveOverallStatus(checks),
     checks,
+    newRuleExecution,
     metrics: {
       returnPct: summary.returnPct,
       totalValue: summary.totalValue,
