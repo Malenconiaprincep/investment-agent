@@ -228,6 +228,14 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         rebalanceDays: parseFlagInt(args, '--rebalance'),
         trendMaDays: parseFlagInt(args, '--trend-ma'),
         initialCapital: parseFlagNumber(args, '--capital'),
+        cashFallbackInWeakRegime: parseBooleanFlag(args, '--cash-fallback-weak'),
+        exitOnTrendBreak: parseBooleanFlag(args, '--exit-on-trend-break'),
+        tPlusEnabled: parseBooleanFlag(args, '--t-plus'),
+        tPlusBuyDipPct: parseFlagNumber(args, '--t-plus-buy-dip'),
+        tPlusMinProfitPct: parseFlagNumber(args, '--t-plus-min-profit'),
+        tPlusBudgetPct: parsePercentFlag(args, '--t-plus-budget'),
+        tPlusMaxTradesPerDay: parseFlagInt(args, '--t-plus-max-trades'),
+        netRebalance: parseBooleanFlag(args, '--net-rebalance'),
       }),
     );
   }
@@ -252,6 +260,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] | screening <id> [days]',
+    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] [--cash-fallback-weak] [--exit-on-trend-break] [--t-plus] [--t-plus-buy-dip=N] [--t-plus-min-profit=N] [--t-plus-budget=N] [--t-plus-max-trades=N] | screening <id> [days]',
   );
 }

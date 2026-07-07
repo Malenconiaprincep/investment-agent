@@ -34,4 +34,37 @@ describe('backtest args', () => {
       '--news-lookback=5',
     ]);
   });
+
+  it('passes ETF momentum variant options to the agent-core CLI', () => {
+    const params = new URLSearchParams({
+      strategy: 'etf-momentum',
+      startDate: '2025-01-01',
+      endDate: '2025-12-31',
+      initialCapital: '100000',
+      cashFallbackWeak: '1',
+      exitOnTrendBreak: '1',
+      netRebalance: '1',
+      tPlus: '1',
+      tPlusBuyDip: '1.5',
+      tPlusMinProfit: '0.6',
+      tPlusBudgetPct: '20',
+      tPlusMaxTradesPerDay: '2',
+    });
+
+    expect(getBacktestArgsFromSearchParams(params)).toEqual([
+      'etf-momentum',
+      '365',
+      '--from=2025-01-01',
+      '--to=2025-12-31',
+      '--capital=100000',
+      '--cash-fallback-weak',
+      '--exit-on-trend-break',
+      '--net-rebalance',
+      '--t-plus',
+      '--t-plus-buy-dip=1.5',
+      '--t-plus-min-profit=0.6',
+      '--t-plus-budget=20',
+      '--t-plus-max-trades=2',
+    ]);
+  });
 });

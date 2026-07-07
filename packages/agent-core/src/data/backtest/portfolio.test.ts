@@ -148,4 +148,47 @@ describe('portfolio ledger', () => {
     expect(ledger.snapshots[2]?.totalValue).toBe(120_000);
     expect(ledger.snapshots[2]?.positions).toHaveLength(0);
   });
+
+  it('applies ETF commission and slippage to portfolio cash flows', () => {
+    const ledger = buildPortfolioLedger(
+      [
+        trade({
+          symbol: '510300',
+          entryDate: '20260101',
+          entryPrice: 10,
+          exitDate: '20260103',
+          exitPrice: 11,
+          returnPct: 10,
+          signal: {
+            symbol: '510300',
+            name: '沪深300ETF',
+            assetType: 'etf',
+            strategy: 'etf-tail-rules',
+            tradeDate: '20260101',
+            entryPrice: 10,
+            metadata: {
+              pricePath: [
+                { tradeDate: '20260101', close: 10 },
+                { tradeDate: '20260103', close: 11 },
+              ],
+            },
+          },
+        }),
+      ],
+      {
+        slots: 1,
+        initialCapital: 10_000,
+        etfTradingCosts: {
+          commissionRate: 0.001,
+          slippageRate: 0.01,
+        },
+      },
+    );
+
+    expect(ledger.snapshots[0]?.cash).toBe(900.91);
+    expect(ledger.snapshots[0]?.positions[0]?.shares).toBe(900);
+    expect(ledger.snapshots[0]?.positions[0]?.costAmount).toBe(9099.09);
+    expect(ledger.snapshots[0]?.totalValue).toBe(9900.91);
+    expect(ledger.snapshots[1]?.totalValue).toBe(10692.11);
+  });
 });

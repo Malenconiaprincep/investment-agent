@@ -17,8 +17,17 @@ export type BacktestChartPoint = {
   returnPct: number;
 };
 
+export type BacktestChartSeries = {
+  name: string;
+  curve: BacktestChartPoint[];
+  finalReturnPct?: number | null;
+  color?: string;
+};
+
 type BacktestEquityChartProps = {
   strategy: BacktestChartPoint[];
+  strategyName?: string;
+  strategySeries?: BacktestChartSeries[];
   benchmark?: {
     name: string;
     curve: BacktestChartPoint[];
@@ -31,9 +40,23 @@ type ChartTooltip = {
   x: number;
   y: number;
   date: string;
-  strategy: number | null;
+  series: Array<{
+    name: string;
+    color: string;
+    value: number | null;
+  }>;
   benchmark: number | null;
 };
+
+type SeriesRef = {
+  name: string;
+  color: string;
+  series: ISeriesApi<'Line'>;
+};
+
+const DEFAULT_STRATEGY_COLOR = '#d4a017';
+const BENCHMARK_COLOR = '#7da2ff';
+const STRATEGY_COLORS = ['#d4a017', '#5cb87a', '#e07070', '#9b8cff', '#68c4d4'];
 
 function normalizeTradeDate(value: string): string {
   return value.trim().replace(/-/g, '').slice(0, 8);
@@ -93,20 +116,45 @@ function toSeriesData(points: BacktestChartPoint[]) {
     .sort((a, b) => (a.time as number) - (b.time as number));
 }
 
+function buildTimeline(lines: BacktestChartSeries[], benchmark?: BacktestEquityChartProps['benchmark']) {
+  const dates = new Set<string>();
+  if (benchmark?.curve.length) {
+    for (const point of benchmark.curve) dates.add(normalizeTradeDate(point.tradeDate));
+  } else {
+    for (const line of lines) {
+      for (const point of line.curve) dates.add(normalizeTradeDate(point.tradeDate));
+    }
+  }
+  return [...dates].sort((a, b) => a.localeCompare(b));
+}
+
 export function BacktestEquityChart({
   strategy,
+  strategyName = '策略',
+  strategySeries,
   benchmark,
   height = 280,
 }: BacktestEquityChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const strategySeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const strategySeriesRefs = useRef<SeriesRef[]>([]);
   const benchmarkSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const benchmarkNameRef = useRef(benchmark?.name ?? '大盘');
   const [tooltip, setTooltip] = useState<ChartTooltip | null>(null);
 
   benchmarkNameRef.current = benchmark?.name ?? '大盘';
+  const lines: BacktestChartSeries[] =
+    strategySeries?.length
+      ? strategySeries
+      : [
+          {
+            name: strategyName,
+            curve: strategy,
+            finalReturnPct: strategy.at(-1)?.returnPct ?? null,
+            color: DEFAULT_STRATEGY_COLOR,
+          },
+        ];
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -150,30 +198,6 @@ export function BacktestEquityChart({
       },
     });
 
-    const strategySeries = chart.addSeries(LineSeries, {
-      color: '#d4a017',
-      lineWidth: 2,
-      title: '策略',
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: true,
-      crosshairMarkerRadius: 4,
-      crosshairMarkerBorderColor: '#d4a017',
-      crosshairMarkerBackgroundColor: '#d4a017',
-    });
-
-    const benchmarkSeries = chart.addSeries(LineSeries, {
-      color: '#7da2ff',
-      lineWidth: 2,
-      title: benchmark?.name ?? '大盘',
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: true,
-      crosshairMarkerRadius: 4,
-      crosshairMarkerBorderColor: '#7da2ff',
-      crosshairMarkerBackgroundColor: '#7da2ff',
-    });
-
     const handleCrosshairMove = (param: MouseEventParams) => {
       if (
         !param.time ||
@@ -187,18 +211,27 @@ export function BacktestEquityChart({
         return;
       }
 
-      const strategyData = param.seriesData.get(strategySeries) as
+      const seriesValues = strategySeriesRefs.current.map((item) => {
+        const data = param.seriesData.get(item.series) as
+          | { value?: number }
+          | undefined;
+        return {
+          name: item.name,
+          color: item.color,
+          value: data?.value ?? null,
+        };
+      });
+      const benchmarkData = benchmarkSeriesRef.current
+        ? (param.seriesData.get(benchmarkSeriesRef.current) as
         | { value?: number }
-        | undefined;
-      const benchmarkData = param.seriesData.get(benchmarkSeries) as
-        | { value?: number }
-        | undefined;
+        | undefined)
+        : undefined;
 
       setTooltip({
         x: param.point.x,
         y: param.point.y,
         date: fmtTradeDateFromTime(param.time as number),
-        strategy: strategyData?.value ?? null,
+        series: seriesValues,
         benchmark: benchmarkData?.value ?? null,
       });
     };
@@ -206,8 +239,6 @@ export function BacktestEquityChart({
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
     chartRef.current = chart;
-    strategySeriesRef.current = strategySeries;
-    benchmarkSeriesRef.current = benchmarkSeries;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -222,46 +253,71 @@ export function BacktestEquityChart({
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
-      strategySeriesRef.current = null;
+      strategySeriesRefs.current = [];
       benchmarkSeriesRef.current = null;
       setTooltip(null);
     };
-  }, [benchmark?.name, height]);
+  }, [height]);
 
   useEffect(() => {
-    if (!strategySeriesRef.current || strategy.length === 0) return;
+    if (!chartRef.current) return;
 
-    const benchmarkDates = benchmark?.curve.map((point) => point.tradeDate) ?? [];
-    const timeline =
-      benchmarkDates.length > 0
-        ? benchmarkDates
-        : strategy.map((point) => point.tradeDate);
+    for (const item of strategySeriesRefs.current) {
+      chartRef.current.removeSeries(item.series);
+    }
+    strategySeriesRefs.current = [];
+    if (benchmarkSeriesRef.current) {
+      chartRef.current.removeSeries(benchmarkSeriesRef.current);
+      benchmarkSeriesRef.current = null;
+    }
 
-    const strategyData =
-      benchmarkDates.length > 0
-        ? expandStrategyDaily(strategy, timeline)
-        : toSeriesData(strategy);
+    const visibleLines = lines.filter((line) => line.curve.length > 0);
+    if (visibleLines.length === 0) return;
+    const timeline = buildTimeline(visibleLines, benchmark);
 
-    strategySeriesRef.current.setData(strategyData);
+    visibleLines.forEach((line, index) => {
+      const color = line.color ?? STRATEGY_COLORS[index % STRATEGY_COLORS.length];
+      const series = chartRef.current!.addSeries(LineSeries, {
+        color,
+        lineWidth: 2,
+        title: line.name,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBorderColor: color,
+        crosshairMarkerBackgroundColor: color,
+      });
+      const data = timeline.length > 0 ? expandStrategyDaily(line.curve, timeline) : toSeriesData(line.curve);
+      series.setData(data);
+      strategySeriesRefs.current.push({ name: line.name, color, series });
+    });
 
-    if (benchmarkSeriesRef.current && benchmark?.curve.length) {
-      benchmarkSeriesRef.current.setData(toSeriesData(benchmark.curve));
-      benchmarkSeriesRef.current.applyOptions({ visible: true, title: benchmark.name });
-    } else {
-      benchmarkSeriesRef.current?.setData([]);
-      benchmarkSeriesRef.current?.applyOptions({ visible: false });
+    if (benchmark?.curve.length) {
+      const benchmarkSeries = chartRef.current.addSeries(LineSeries, {
+        color: BENCHMARK_COLOR,
+        lineWidth: 2,
+        title: benchmark.name,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBorderColor: BENCHMARK_COLOR,
+        crosshairMarkerBackgroundColor: BENCHMARK_COLOR,
+      });
+      benchmarkSeries.setData(toSeriesData(benchmark.curve));
+      benchmarkSeriesRef.current = benchmarkSeries;
     }
 
     chartRef.current?.timeScale().fitContent();
-  }, [benchmark, strategy]);
+  }, [benchmark, lines]);
 
-  if (strategy.length === 0) {
+  if (lines.every((line) => line.curve.length === 0)) {
     return (
       <div className="chart-empty chart-empty--compact">暂无足够交易生成收益曲线</div>
     );
   }
 
-  const strategyFinal = strategy.at(-1)?.returnPct ?? null;
   const benchmarkName = benchmark?.name ?? '大盘';
 
   return (
@@ -277,9 +333,15 @@ export function BacktestEquityChart({
             }}
           >
             <span className="equity-chart-tooltip-date">{tooltip.date}</span>
-            <span className="equity-chart-tooltip-row equity-chart-tooltip-row--strategy">
-              策略 {fmtPct(tooltip.strategy)}
-            </span>
+            {tooltip.series.map((item) => (
+              <span
+                key={item.name}
+                className="equity-chart-tooltip-row"
+                style={{ color: item.color }}
+              >
+                {item.name} {fmtPct(item.value)}
+              </span>
+            ))}
             {benchmark && (
               <span className="equity-chart-tooltip-row equity-chart-tooltip-row--benchmark">
                 {benchmarkName} {fmtPct(tooltip.benchmark)}
@@ -289,10 +351,15 @@ export function BacktestEquityChart({
         )}
       </div>
       <div className="equity-chart-legend">
-        <span className="equity-legend-item">
-          <i className="equity-legend-swatch equity-legend-swatch--strategy" />
-          策略 {fmtPct(strategyFinal)}
-        </span>
+        {lines.map((line, index) => (
+          <span key={line.name} className="equity-legend-item">
+            <i
+              className="equity-legend-swatch"
+              style={{ background: line.color ?? STRATEGY_COLORS[index % STRATEGY_COLORS.length] }}
+            />
+            {line.name} {fmtPct(line.finalReturnPct ?? line.curve.at(-1)?.returnPct ?? null)}
+          </span>
+        ))}
         {benchmark ? (
           <span className="equity-legend-item">
             <i className="equity-legend-swatch equity-legend-swatch--benchmark" />
@@ -304,7 +371,7 @@ export function BacktestEquityChart({
           </span>
         )}
       </div>
-      <p className="muted equity-chart-hint">鼠标移到曲线上，会在光标上方显示日期和两条线的累计收益。</p>
+      <p className="muted equity-chart-hint">鼠标移到曲线上，会在光标上方显示日期和各条线的累计收益。</p>
     </div>
   );
 }

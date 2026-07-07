@@ -1,4 +1,9 @@
 import { normalizeTradeDateKey } from './date-range.js';
+import {
+  calcEtfBuyLotsByBudget,
+  calcEtfSellProceeds,
+  type EtfTradingCostRates,
+} from '../etf/trading-cost.js';
 import type {
   BacktestEquityPoint,
   BacktestPortfolioSnapshot,
@@ -19,10 +24,26 @@ function calcPositionSize(input: {
   assetType: BacktestTrade['assetType'];
   budget: number;
   price: number;
+  costRates?: EtfTradingCostRates;
 }): { shares: number; costAmount: number } | null {
   if (input.budget <= 0 || input.price <= 0) return null;
 
   const lotSize = lotSizeForAsset(input.assetType);
+  if (input.assetType === 'etf' && input.costRates) {
+    const lots = calcEtfBuyLotsByBudget({
+      budget: input.budget,
+      price: input.price,
+      lotSize,
+      ...input.costRates,
+    });
+    return lots
+      ? {
+          shares: lots.shares,
+          costAmount: lots.totalCost,
+        }
+      : null;
+  }
+
   const lots = Math.floor(input.budget / (input.price * lotSize));
   const shares = lots * lotSize;
   if (!Number.isFinite(shares) || shares <= 0) return null;
@@ -129,6 +150,7 @@ export function buildPortfolioLedger(
   options: {
     slots?: number;
     initialCapital?: number;
+    etfTradingCosts?: EtfTradingCostRates;
   } = {},
 ): PortfolioLedger {
   const valid = trades.filter(
@@ -202,8 +224,8 @@ export function buildPortfolioLedger(
       closedTrades,
       positions: positions.map((position) => {
         const tradeReturnPct =
-          position.trade.entryPrice > 0
-            ? round(((position.lastPrice - position.trade.entryPrice) / position.trade.entryPrice) * 100)
+          position.costAmount > 0
+            ? round(((position.marketValue - position.costAmount) / position.costAmount) * 100)
             : null;
         return {
           symbol: position.trade.symbol,
@@ -238,7 +260,13 @@ export function buildPortfolioLedger(
     const position = active.get(key);
     if (!position) return false;
     const proceeds =
-      position.costAmount * (1 + (trade.returnPct as number) / 100);
+      trade.assetType === 'etf' && options.etfTradingCosts && trade.exitPrice != null
+        ? calcEtfSellProceeds({
+            shares: position.shares,
+            price: trade.exitPrice,
+            ...options.etfTradingCosts,
+          }).netProceeds
+        : position.costAmount * (1 + (trade.returnPct as number) / 100);
     cash += proceeds;
     active.delete(key);
     closedTrades += 1;
@@ -262,6 +290,7 @@ export function buildPortfolioLedger(
         assetType: trade.assetType,
         budget: targetBudget,
         price: trade.entryPrice,
+        costRates: options.etfTradingCosts,
       });
       if (!positionSize) continue;
       cash -= positionSize.costAmount;

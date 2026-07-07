@@ -71,8 +71,55 @@ type StockBacktestManualCheckStreamEvent =
   | { type: 'result'; result: StockBacktestManualCheckResult }
   | { type: 'error'; message: string };
 
+type DailyEquityRow = {
+  tradeDate: string;
+  status: 'profit' | 'loss' | 'flat';
+  dailyPnl: number;
+  dailyPct: number;
+  totalValue: number;
+  totalReturnAmount: number;
+  totalReturnPct: number;
+};
+
+type DailyTradeBucketKey = PaperBucketKey | 'unknown';
+
+type DailyTradeBucketGroup = {
+  bucket: DailyTradeBucketKey;
+  label: string;
+  trades: Trade[];
+  buyAmount: number;
+  sellAmount: number;
+  netCashFlow: number;
+};
+
+type DailyTradeGroup = {
+  tradeDate: string;
+  trades: Trade[];
+  bucketGroups: DailyTradeBucketGroup[];
+  buyAmount: number;
+  sellAmount: number;
+  netCashFlow: number;
+};
+
 function fmtMoney(v: number) {
   return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+}
+
+function fmtSignedMoney(v: number) {
+  if (v === 0) return '0';
+  return `${v > 0 ? '+' : ''}${fmtMoney(v)}`;
+}
+
+function fmtSignedPct(v: number) {
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return '0.00%';
+  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+function returnClass(value: number) {
+  if (value > 0) return 'return-up';
+  if (value < 0) return 'return-down';
+  return 'muted';
 }
 
 function isEtfSymbol(symbol: string) {
@@ -180,6 +227,151 @@ function mergeEquityCurves(curves: EquityPoint[][]): EquityPoint[] {
   });
 }
 
+function buildDailyEquityRows(points: EquityPoint[]): DailyEquityRow[] {
+  const byDate = new Map<string, EquityPoint>();
+  for (const point of points) {
+    byDate.set(normalizeEquityTradeDate(point.tradeDate), {
+      ...point,
+      tradeDate: normalizeEquityTradeDate(point.tradeDate),
+    });
+  }
+
+  const sorted = [...byDate.values()].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
+  return sorted
+    .map((point, index) => {
+      const initialCash = pointInitialCash(point);
+      const previousTotalValue =
+        index > 0 ? sorted[index - 1].totalValue : initialCash;
+      const dailyPnl = Number((point.totalValue - previousTotalValue).toFixed(2));
+      const dailyPct =
+        previousTotalValue > 0
+          ? Number(((dailyPnl / previousTotalValue) * 100).toFixed(2))
+          : 0;
+      const totalReturnAmount = Number((point.totalValue - initialCash).toFixed(2));
+      const status: DailyEquityRow['status'] =
+        dailyPnl > 0 ? 'profit' : dailyPnl < 0 ? 'loss' : 'flat';
+
+      return {
+        tradeDate: point.tradeDate,
+        status,
+        dailyPnl,
+        dailyPct,
+        totalValue: point.totalValue,
+        totalReturnAmount,
+        totalReturnPct: point.returnPct,
+      };
+    })
+    .reverse();
+}
+
+function formatTradeTimeOnly(trade: Trade): string {
+  const display = formatPaperTradeDisplayTime(trade);
+  return display.split(' ').pop() ?? display;
+}
+
+function addTradeToBucketGroup(
+  buckets: Map<DailyTradeBucketKey, DailyTradeBucketGroup>,
+  trade: Trade,
+  fallbackBucket?: PaperBucketKey,
+) {
+  const bucket = trade.bucket ?? fallbackBucket ?? 'unknown';
+  const label = bucket === 'unknown' ? '未分仓' : bucketShortLabel(bucket);
+  const group =
+    buckets.get(bucket) ??
+    {
+      bucket,
+      label,
+      trades: [],
+      buyAmount: 0,
+      sellAmount: 0,
+      netCashFlow: 0,
+    };
+
+  group.trades.push(trade);
+  if (trade.side === 'buy') group.buyAmount += trade.amount;
+  else group.sellAmount += trade.amount;
+  group.netCashFlow = group.sellAmount - group.buyAmount;
+  buckets.set(bucket, group);
+}
+
+function finalizeTradeBucketGroup(group: DailyTradeBucketGroup): DailyTradeBucketGroup {
+  return {
+    ...group,
+    buyAmount: Number(group.buyAmount.toFixed(2)),
+    sellAmount: Number(group.sellAmount.toFixed(2)),
+    netCashFlow: Number(group.netCashFlow.toFixed(2)),
+    trades: [...group.trades].sort((a, b) => {
+      const aTime = formatTradeTimeOnly(a);
+      const bTime = formatTradeTimeOnly(b);
+      return aTime.localeCompare(bTime) || a.id.localeCompare(b.id);
+    }),
+  };
+}
+
+function buildDailyTradeGroups(
+  trades: Trade[],
+  fallbackBucket?: PaperBucketKey,
+): DailyTradeGroup[] {
+  const groups = new Map<string, DailyTradeGroup>();
+  for (const trade of trades) {
+    const tradeDate = normalizeEquityTradeDate(trade.tradeDate);
+    const group =
+      groups.get(tradeDate) ??
+      {
+        tradeDate,
+        trades: [],
+        bucketGroups: [],
+        buyAmount: 0,
+        sellAmount: 0,
+        netCashFlow: 0,
+      };
+
+    group.trades.push(trade);
+    if (trade.side === 'buy') group.buyAmount += trade.amount;
+    else group.sellAmount += trade.amount;
+    group.netCashFlow = group.sellAmount - group.buyAmount;
+    groups.set(tradeDate, group);
+  }
+
+  const bucketOrder: DailyTradeBucketKey[] = [
+    'etf',
+    'stock',
+    'stock-backtest',
+    'stock-backtest-news',
+    'unknown',
+  ];
+
+  return [...groups.values()]
+    .map((group) => {
+      const buckets = new Map<DailyTradeBucketKey, DailyTradeBucketGroup>();
+      for (const trade of group.trades) {
+        addTradeToBucketGroup(buckets, trade, fallbackBucket);
+      }
+
+      const bucketGroups = [...buckets.values()]
+        .map(finalizeTradeBucketGroup)
+        .sort(
+          (a, b) =>
+            bucketOrder.indexOf(a.bucket) - bucketOrder.indexOf(b.bucket) ||
+            a.label.localeCompare(b.label),
+        );
+
+      return {
+        ...group,
+        bucketGroups,
+        buyAmount: Number(group.buyAmount.toFixed(2)),
+        sellAmount: Number(group.sellAmount.toFixed(2)),
+        netCashFlow: Number(group.netCashFlow.toFixed(2)),
+        trades: [...group.trades].sort((a, b) => {
+          const aTime = formatTradeTimeOnly(a);
+          const bTime = formatTradeTimeOnly(b);
+          return aTime.localeCompare(bTime) || a.id.localeCompare(b.id);
+        }),
+      };
+    })
+    .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+}
+
 function bucketLabel(bucket: PaperBucket) {
   return PAPER_BUCKET_TABS.find((item) => item.key === bucket)?.label ?? bucket;
 }
@@ -246,8 +438,8 @@ export default function PaperTradingPage() {
         fetch('/api/paper'),
         fetch(
           activeBucket === 'combined'
-            ? '/api/paper/trades?limit=50'
-            : `/api/paper/trades?limit=50${bucketQuery}`,
+            ? '/api/paper/trades?limit=200'
+            : `/api/paper/trades?limit=200${bucketQuery}`,
         ),
         activeBucket === 'combined'
           ? Promise.all(
@@ -391,6 +583,18 @@ export default function PaperTradingPage() {
   const returnAmount =
     view != null ? view.totalValue - view.account.initialCash : 0;
   const positionCount = view?.positions?.length ?? 0;
+  const dailyEquityRows = useMemo(
+    () => buildDailyEquityRows(equity ?? []),
+    [equity],
+  );
+  const dailyTradeGroups = useMemo(
+    () =>
+      buildDailyTradeGroups(
+        trades,
+        activeBucket === 'combined' ? undefined : activeBucket,
+      ),
+    [activeBucket, trades],
+  );
 
   return (
     <main className="page page--list">
@@ -698,6 +902,153 @@ export default function PaperTradingPage() {
           <section className="pane-card paper-equity-section">
             <h3 className="pane-card-title">收益曲线</h3>
             <EquityChart points={equity ?? []} />
+            {dailyEquityRows.length > 0 && (
+              <div className="paper-daily-equity">
+                <div className="paper-daily-equity-head">
+                  <h4>每日收益</h4>
+                  <span className="muted">按交易日倒序</span>
+                </div>
+                <div className="table-scroll-wrap">
+                  <table className="candidate-table paper-daily-equity-table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>结果</th>
+                        <th>当日盈亏</th>
+                        <th>当日涨跌</th>
+                        <th>总资产</th>
+                        <th>累计收益</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyEquityRows.map((row) => (
+                        <tr key={row.tradeDate}>
+                          <td>{row.tradeDate}</td>
+                          <td>
+                            <span
+                              className={`paper-daily-status paper-daily-status--${row.status}`}
+                            >
+                              {row.status === 'profit'
+                                ? '赚'
+                                : row.status === 'loss'
+                                  ? '亏'
+                                  : '平'}
+                            </span>
+                          </td>
+                          <td className={returnClass(row.dailyPnl)}>
+                            {fmtSignedMoney(row.dailyPnl)}
+                          </td>
+                          <td className={returnClass(row.dailyPct)}>
+                            {fmtSignedPct(row.dailyPct)}
+                          </td>
+                          <td>{fmtMoney(row.totalValue)}</td>
+                          <td className={returnClass(row.totalReturnAmount)}>
+                            {fmtSignedMoney(row.totalReturnAmount)}
+                            <span className="paper-daily-return-pct">
+                              {fmtSignedPct(row.totalReturnPct)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            <div className="paper-daily-trades">
+              <div className="paper-daily-equity-head">
+                <h4>每日交易明细</h4>
+                <span className="muted">按交易日倒序 · 展示最近 {trades.length} 笔</span>
+              </div>
+              {dailyTradeGroups.length === 0 ? (
+                <div className="empty-state">暂无成交记录。</div>
+              ) : (
+                <div className="paper-daily-trade-groups">
+                  {dailyTradeGroups.map((group) => (
+                    <div className="paper-daily-trade-group" key={group.tradeDate}>
+                      <div className="paper-daily-trade-group-head">
+                        <strong>{group.tradeDate}</strong>
+                        <div className="paper-daily-trade-summary">
+                          <span>买入 {fmtMoney(group.buyAmount)}</span>
+                          <span>卖出 {fmtMoney(group.sellAmount)}</span>
+                          <span className={returnClass(group.netCashFlow)}>
+                            净现金流 {fmtSignedMoney(group.netCashFlow)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="paper-daily-trade-buckets">
+                        {group.bucketGroups.map((bucketGroup) => (
+                          <div
+                            className={`paper-daily-trade-bucket paper-daily-trade-bucket--${bucketGroup.bucket}`}
+                            key={`${group.tradeDate}-${bucketGroup.bucket}`}
+                          >
+                            <div className="paper-daily-trade-bucket-head">
+                              <div>
+                                <strong>{bucketGroup.label}</strong>
+                                <span>{bucketGroup.trades.length} 笔</span>
+                              </div>
+                              <div className="paper-daily-trade-summary">
+                                <span>买 {fmtMoney(bucketGroup.buyAmount)}</span>
+                                <span>卖 {fmtMoney(bucketGroup.sellAmount)}</span>
+                                <span className={returnClass(bucketGroup.netCashFlow)}>
+                                  净 {fmtSignedMoney(bucketGroup.netCashFlow)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="table-scroll-wrap">
+                              <table className="candidate-table paper-daily-trades-table">
+                                <thead>
+                                  <tr>
+                                    <th>时间</th>
+                                    <th>方向</th>
+                                    <th>标的</th>
+                                    <th className="paper-num">数量</th>
+                                    <th className="paper-num">价格</th>
+                                    <th className="paper-num">金额</th>
+                                    <th>来源 / 备注</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {bucketGroup.trades.map((trade) => (
+                                    <tr key={trade.id}>
+                                      <td className="paper-trade-time">
+                                        {formatTradeTimeOnly(trade)}
+                                      </td>
+                                      <td
+                                        className={
+                                          trade.side === 'buy' ? 'return-up' : 'return-down'
+                                        }
+                                      >
+                                        {trade.side === 'buy' ? '买入' : '卖出'}
+                                      </td>
+                                      <td className="paper-trade-symbol">
+                                        {trade.name}
+                                        <span className="muted"> ({trade.symbol})</span>
+                                      </td>
+                                      <td className="paper-num">{trade.shares}</td>
+                                      <td className="paper-num">
+                                        {fmtTradePrice(trade.symbol, trade.price)}
+                                      </td>
+                                      <td className="paper-num">{fmtMoney(trade.amount)}</td>
+                                      <td className="paper-trade-note">
+                                        <span className="paper-trade-source">
+                                          {formatTradeSource(trade)}
+                                        </span>
+                                        {formatTradeNote(trade.note)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </>
       )}

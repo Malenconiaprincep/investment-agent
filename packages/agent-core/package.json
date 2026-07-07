@@ -32,6 +32,8 @@
     "backtest:stock-robustness": "tsx src/cli/backtest-stock-robustness.ts",
     "backtest:robustness": "tsx src/cli/backtest-robustness.ts",
     "backtest:walk-forward": "tsx src/cli/backtest-walk-forward.ts",
+    "backtest:etf-compare3": "tsx src/cli/backtest-etf-compare3.ts",
+    "backtest:etf-tplus": "tsx src/cli/backtest-etf-tplus.ts",
     "screen:schedule": "tsx src/cli/scheduled-screen.ts",
     "monitor:poll": "tsx src/cli/scheduled-monitor.ts",
     "monitor:watch": "tsx src/cli/monitor-watch.ts",

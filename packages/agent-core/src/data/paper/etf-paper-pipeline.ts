@@ -237,6 +237,7 @@ async function autoStopLossEtfPositions(tradeDate: string) {
         note: `ETF 动量止损 ${returnPct.toFixed(2)}%`,
         skipSessionCheck: true,
         useOrderBookPrice: false,
+        priceIncludesSpread: true,
       });
       cooldownUntil[pos.symbol] = tradeDate;
       stops.push({
@@ -362,6 +363,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         note: 'ETF 动量调仓卖出',
         skipSessionCheck: true,
         useOrderBookPrice: false,
+        priceIncludesSpread: true,
       });
       sells.push({
         symbol: pos.symbol,
@@ -450,6 +452,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         note: [baseNote + rotationNote, executionGuardNote].filter(Boolean).join(' · '),
         skipSessionCheck: true,
         useOrderBookPrice: false,
+        priceIncludesSpread: true,
       });
       buys.push({
         symbol: target.symbol,
@@ -535,6 +538,7 @@ export async function rebalanceEtfToProbePosition(): Promise<{
       skipSessionCheck: true,
       skipT1Check: true,
       useOrderBookPrice: false,
+      priceIncludesSpread: true,
     });
 
     adjusted.push({

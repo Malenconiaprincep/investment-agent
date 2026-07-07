@@ -3,6 +3,12 @@ import {
   buildEtfTailPickCandidate,
   type EtfTailPickCandidate,
 } from '../etf/rules.js';
+import {
+  calcEtfBuyCost,
+  calcEtfSellProceeds,
+  ETF_COMMISSION_RATE,
+  ETF_SLIPPAGE_RATE,
+} from '../etf/trading-cost.js';
 import type { OhlcvBar } from '../market/indicators.js';
 import { fetchIntradayQuotes } from '../market/free/intraday-quote.js';
 import { fetchDailyKlinesByTencentCode } from '../market/free/tencent.js';
@@ -15,7 +21,6 @@ import {
   barsWithClose,
   buildPricePath,
   buildTradeGroups,
-  calcReturnPct,
   findBarIndex,
   summarizeTrades,
 } from './engine.js';
@@ -123,6 +128,23 @@ function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
 }
 
+function calcEtfNetReturnPct(entryPrice: number, exitPrice: number): number | null {
+  if (entryPrice <= 0 || exitPrice <= 0) return null;
+  const buy = calcEtfBuyCost({
+    price: entryPrice,
+    shares: 1,
+    commissionRate: ETF_COMMISSION_RATE,
+    slippageRate: ETF_SLIPPAGE_RATE,
+  });
+  const sell = calcEtfSellProceeds({
+    price: exitPrice,
+    shares: 1,
+    commissionRate: ETF_COMMISSION_RATE,
+    slippageRate: ETF_SLIPPAGE_RATE,
+  });
+  return round(((sell.netProceeds - buy.totalCost) / buy.totalCost) * 100);
+}
+
 function resolveMaxHoldDays(input: RunEtfBacktestInput): number {
   if (input.maxHoldDays != null && Number.isFinite(input.maxHoldDays)) {
     return Math.max(1, Math.floor(input.maxHoldDays));
@@ -182,7 +204,7 @@ function createEtfStrategyTrade(
       exitDate,
       exitPrice,
       holdDays: entryIndex - exitIndex,
-      returnPct: calcReturnPct(signal.entryPrice, exitPrice),
+      returnPct: calcEtfNetReturnPct(signal.entryPrice, exitPrice),
       exitReason,
       signal: {
         ...signal,
@@ -674,11 +696,17 @@ export async function runEtfTailRulesBacktest(
     rawSignalCount: rawTrades.length,
     newsBlockedCount,
     portfolioSkippedCount,
+    commissionRate: ETF_COMMISSION_RATE,
+    slippageRate: ETF_SLIPPAGE_RATE,
     initialCapital,
   };
   const portfolioLedger = buildPortfolioLedger(sortedTrades, {
     slots: maxConcurrentPositions,
     initialCapital,
+    etfTradingCosts: {
+      commissionRate: ETF_COMMISSION_RATE,
+      slippageRate: ETF_SLIPPAGE_RATE,
+    },
   });
 
   return {
@@ -749,6 +777,7 @@ export async function runEtfTailRulesBacktest(
       `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计该区间内触发的买入信号。`,
       `ETF 回测复用现有 8 条尾盘规则；尾盘买入后最早 T+${minSettlementDays} 起按策略出场：技术止损、止盈价、规则失效（允许 ${exitMaxFailCount} 条规则失败），或最多持有 ${maxHoldDays} 个交易日兜底。`,
       `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一 ETF 不重复开仓' : ''}；原始信号 ${config.rawSignalCount} 笔，新闻拦截 ${newsBlockedCount} 笔，组合过滤后 ${sortedTrades.length} 笔。`,
+      `交易成本：单边佣金 ${(ETF_COMMISSION_RATE * 100).toFixed(2)}%、滑点 ${(ETF_SLIPPAGE_RATE * 100).toFixed(2)}%；买卖均计入组合权益。`,
       newsFilter === 'off'
         ? '新闻过滤已关闭。'
         : newsFilter === 'require_bullish'

@@ -1,4 +1,12 @@
 import { ETF_POOL_19 } from '../etf/pool.js';
+import {
+  calcEtfBuyCost,
+  calcEtfBuyLotsByBudget,
+  calcEtfSellProceeds,
+  ETF_COMMISSION_RATE,
+  ETF_LOT_SIZE,
+  ETF_SLIPPAGE_RATE,
+} from '../etf/trading-cost.js';
 import { getDailyQuote } from '../market/services.js';
 import type { EtfRotationContext } from '../paper/etf-rotation-news.js';
 import {
@@ -44,10 +52,19 @@ export type RunEtfMomentumBacktestInput = {
   exitOnTrendBreak?: boolean;
   initialCapital?: number;
   maxPerTheme?: number | null;
+  tPlusEnabled?: boolean;
+  tPlusBuyDipPct?: number;
+  tPlusMinProfitPct?: number;
+  tPlusBudgetPct?: number;
+  tPlusMaxTradesPerDay?: number;
+  netRebalance?: boolean;
 };
 
 type MomentumBar = {
   tradeDate: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
 };
 
@@ -74,8 +91,8 @@ const BENCHMARK_SYMBOL = '510300';
 const MARKET_REGIME_MA_DAYS = 20;
 const BULL_RELAXED_TREND_MA_DAYS = 10;
 const POSITION_STOP_LOSS_PCT = -12;
-const COMMISSION_RATE = 0.0003;
-const SLIPPAGE_RATE = 0.0005;
+const COMMISSION_RATE = ETF_COMMISSION_RATE;
+const SLIPPAGE_RATE = ETF_SLIPPAGE_RATE;
 const VOL_LOOKBACK_DAYS = 20;
 const TARGET_ANNUAL_VOL_PCT = 15;
 const MIN_VOL_EXPOSURE = 0.7;
@@ -86,7 +103,10 @@ const BEAR_REGIME_MAX_EXPOSURE = 0.25;
 const BULL_BENCHMARK_SLOT_MOMENTUM_PCT = 8;
 const BULL_BENCHMARK_SLOT_COUNT = 1;
 const DEFAULT_MAX_PER_THEME = 2;
-const ETF_LOT_SIZE = 100;
+const DEFAULT_T_PLUS_BUY_DIP_PCT = 1.5;
+const DEFAULT_T_PLUS_MIN_PROFIT_PCT = 0.6;
+const DEFAULT_T_PLUS_BUDGET_PCT = 0.2;
+const DEFAULT_T_PLUS_MAX_TRADES_PER_DAY = 2;
 
 const ETF_THEME_BY_SYMBOL: Record<string, string> = {
   '512880': 'brokerage',
@@ -126,6 +146,11 @@ type SimPosition = {
   plannedExitIndex: number;
 };
 
+type TPlusStats = {
+  tradeCount: number;
+  totalProfit: number;
+};
+
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
 }
@@ -150,14 +175,31 @@ function clampPositiveInt(
 function toHistory(
   symbol: string,
   name: string,
-  quotes: Array<{ tradeDate: string; close: number | null }>,
+  quotes: Array<{
+    tradeDate: string;
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
+    close: number | null;
+  }>,
 ): EtfHistory {
   const bars = quotes
-    .filter((bar): bar is { tradeDate: string; close: number } => {
+    .filter(
+      (bar): bar is {
+        tradeDate: string;
+        open?: number | null;
+        high?: number | null;
+        low?: number | null;
+        close: number;
+      } => {
       return bar.close != null && bar.close > 0;
-    })
+      },
+    )
     .map((bar) => ({
       tradeDate: normalizeTradeDateKey(bar.tradeDate),
+      open: bar.open != null && bar.open > 0 ? bar.open : bar.close,
+      high: bar.high != null && bar.high > 0 ? bar.high : bar.close,
+      low: bar.low != null && bar.low > 0 ? bar.low : bar.close,
       close: bar.close,
     }))
     .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate));
@@ -367,16 +409,19 @@ function buyShares(input: {
   initialCapital: number;
 }): { shares: number; spent: number } | null {
   if (input.cash <= 0 || input.price <= 0 || input.initialCapital <= 0) return null;
-  const adjustedPrice = input.price * (1 + input.slippageRate);
   const actualBudget = input.cash * input.initialCapital;
-  const actualCostPerLot = adjustedPrice * (1 + input.commissionRate) * ETF_LOT_SIZE;
-  const lots = Math.floor(actualBudget / actualCostPerLot);
-  const actualShares = lots * ETF_LOT_SIZE;
-  if (!Number.isFinite(actualShares) || actualShares <= 0) return null;
+  const bought = calcEtfBuyLotsByBudget({
+    budget: actualBudget,
+    price: input.price,
+    lotSize: ETF_LOT_SIZE,
+    commissionRate: input.commissionRate,
+    slippageRate: input.slippageRate,
+  });
+  if (!bought) return null;
 
   return {
-    shares: actualShares / input.initialCapital,
-    spent: (actualShares * adjustedPrice * (1 + input.commissionRate)) / input.initialCapital,
+    shares: bought.shares / input.initialCapital,
+    spent: bought.totalCost / input.initialCapital,
   };
 }
 
@@ -387,12 +432,7 @@ function sellProceeds(input: {
   slippageRate: number;
 }): number {
   if (input.shares <= 0 || input.price <= 0) return 0;
-  return (
-    input.shares
-    * input.price
-    * (1 - input.slippageRate)
-    * (1 - input.commissionRate)
-  );
+  return calcEtfSellProceeds(input).netProceeds;
 }
 
 function findBarAtOrBefore(
@@ -436,6 +476,73 @@ function isPositionTrendBroken(
     .map((item) => item.close);
   const trendMa = avg(trendSlice);
   return trendMa != null && bar.close < trendMa;
+}
+
+function applyTPlusTrade(input: {
+  position: SimPosition;
+  bar: MomentumBar & { index: number };
+  cash: number;
+  buyDipPct: number;
+  minProfitPct: number;
+  budgetPct: number;
+  commissionRate: number;
+  slippageRate: number;
+  initialCapital: number;
+}): {
+  cash: number;
+  profit: number;
+  traded: boolean;
+  trade?: NonNullable<BacktestPortfolioSnapshot['tPlusTrades']>[number];
+} {
+  if (input.position.isBenchmarkFill || input.cash <= 0 || input.bar.index <= 0) {
+    return { cash: input.cash, profit: 0, traded: false };
+  }
+
+  const prevClose = input.position.history.bars[input.bar.index - 1]?.close;
+  if (!prevClose || prevClose <= 0) return { cash: input.cash, profit: 0, traded: false };
+
+  const buyPrice = prevClose * (1 - input.buyDipPct / 100);
+  if (input.bar.low > buyPrice) return { cash: input.cash, profit: 0, traded: false };
+
+  const minSellPrice = buyPrice * (1 + input.minProfitPct / 100);
+  if (input.bar.close < minSellPrice) return { cash: input.cash, profit: 0, traded: false };
+
+  const positionValue = input.position.shares * input.bar.close;
+  const budget = Math.min(input.cash, positionValue * input.budgetPct);
+  const bought = buyShares({
+    cash: budget,
+    price: buyPrice,
+    commissionRate: input.commissionRate,
+    slippageRate: input.slippageRate,
+    initialCapital: input.initialCapital,
+  });
+  if (!bought) return { cash: input.cash, profit: 0, traded: false };
+
+  const proceeds = sellProceeds({
+    shares: bought.shares,
+    price: input.bar.close,
+    commissionRate: input.commissionRate,
+    slippageRate: input.slippageRate,
+  });
+  const profit = proceeds - bought.spent;
+  if (profit <= 0) return { cash: input.cash, profit: 0, traded: false };
+
+  return {
+    cash: input.cash + profit,
+    profit,
+    traded: true,
+    trade: {
+      symbol: input.position.symbol,
+      name: input.position.name,
+      buyPrice: round(buyPrice, 4),
+      sellPrice: round(input.bar.close, 4),
+      shares: round(bought.shares * input.initialCapital, 2),
+      spent: round(bought.spent * input.initialCapital, 2),
+      proceeds: round(proceeds * input.initialCapital, 2),
+      profit: round(profit * input.initialCapital, 2),
+      profitPct: bought.spent > 0 ? round((profit / bought.spent) * 100) : null,
+    },
+  };
 }
 
 function resolveTargetSlots(input: {
@@ -633,14 +740,23 @@ function simulateDailyPortfolio(input: {
   exitOnTrendBreak: boolean;
   initialCapital: number;
   maxPerTheme?: number | null;
+  tPlusEnabled: boolean;
+  tPlusBuyDipPct: number;
+  tPlusMinProfitPct: number;
+  tPlusBudgetPct: number;
+  tPlusMaxTradesPerDay: number;
+  netRebalance: boolean;
 }): {
   trades: BacktestTrade[];
   equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }>;
   portfolioSnapshots: BacktestPortfolioSnapshot[];
+  tPlusStats: TPlusStats;
 } {
   const trades: BacktestTrade[] = [];
   const equityPoints: Array<{ tradeDate: string; equity: number; closedTrades: number }> = [];
   const portfolioSnapshots: BacktestPortfolioSnapshot[] = [];
+  const tPlusStats: TPlusStats = { tradeCount: 0, totalProfit: 0 };
+  let currentTPlusTrades: NonNullable<BacktestPortfolioSnapshot['tPlusTrades']> = [];
   let cash = 1;
   let positions: SimPosition[] = [];
   let closedTrades = 0;
@@ -739,8 +855,55 @@ function simulateDailyPortfolio(input: {
       totalValue: round(totalEquity * input.initialCapital, 2),
       returnPct: round((totalEquity - 1) * 100),
       closedTrades,
+      ...(currentTPlusTrades.length > 0 ? { tPlusTrades: currentTPlusTrades } : {}),
       positions: [...aggregatedPositions.values()],
     });
+  };
+
+  const sellPositionShares = (
+    position: SimPosition,
+    tradeDate: string,
+    price: number,
+    sharesToSell: number,
+    exitReason: BacktestTrade['exitReason'],
+  ): SimPosition | null => {
+    const shares = Math.min(position.shares, sharesToSell);
+    if (shares <= 0 || position.shares <= 0) return position;
+    const ratio = Math.min(1, shares / position.shares);
+    const soldBasis = position.grossBasis * ratio;
+    const soldPosition: SimPosition = {
+      ...position,
+      shares,
+      grossBasis: soldBasis,
+    };
+    trades.push(
+      closeSimPosition({
+        position: soldPosition,
+        exitDate: tradeDate,
+        exitPrice: price,
+        exitReason,
+        topN: input.topN,
+        momentumDays: input.momentumDays,
+        rebalanceDays: input.rebalanceDays,
+        commissionRate: input.commissionRate,
+        slippageRate: input.slippageRate,
+      }),
+    );
+    cash += sellProceeds({
+      shares,
+      price,
+      commissionRate: input.commissionRate,
+      slippageRate: input.slippageRate,
+    });
+    closedTrades += 1;
+
+    const remainingShares = position.shares - shares;
+    if (remainingShares * input.initialCapital < ETF_LOT_SIZE / 2) return null;
+    return {
+      ...position,
+      shares: remainingShares,
+      grossBasis: Math.max(0, position.grossBasis - soldBasis),
+    };
   };
 
   for (let dateIndex = 0; dateIndex < input.allDates.length; dateIndex += 1) {
@@ -762,6 +925,8 @@ function simulateDailyPortfolio(input: {
     const isRebalanceDay = daysSinceRebalance >= requiredRebalanceDays;
 
     const remainingPositions: SimPosition[] = [];
+    let tPlusTradesToday = 0;
+    currentTPlusTrades = [];
     for (const position of positions) {
       const bar = position.history.byDate.get(tradeDate);
       if (!bar) {
@@ -830,11 +995,35 @@ function simulateDailyPortfolio(input: {
       }
 
       remainingPositions.push(position);
+
+      if (
+        input.tPlusEnabled
+        && tPlusTradesToday < input.tPlusMaxTradesPerDay
+        && !isRebalanceDay
+      ) {
+        const tPlus = applyTPlusTrade({
+          position,
+          bar,
+          cash,
+          buyDipPct: input.tPlusBuyDipPct,
+          minProfitPct: input.tPlusMinProfitPct,
+          budgetPct: input.tPlusBudgetPct,
+          commissionRate: input.commissionRate,
+          slippageRate: input.slippageRate,
+          initialCapital: input.initialCapital,
+        });
+        if (tPlus.traded) {
+          cash = tPlus.cash;
+          tPlusStats.tradeCount += 1;
+          tPlusStats.totalProfit += tPlus.profit;
+          tPlusTradesToday += 1;
+          if (tPlus.trade) currentTPlusTrades.push(tPlus.trade);
+        }
+      }
     }
     positions = remainingPositions;
 
     if (isRebalanceDay) {
-      closeAllPositions(tradeDate, 'fixed_hold');
       daysSinceRebalance = 0;
 
       const benchmarkBar = benchmarkBarForSchedule;
@@ -884,49 +1073,172 @@ function simulateDailyPortfolio(input: {
         allowBenchmarkFallback: !(input.cashFallbackInWeakRegime && weakRegime),
         maxPerTheme: input.maxPerTheme,
       });
-      const totalEquity = cash;
+      if (!input.netRebalance) {
+        closeAllPositions(tradeDate, 'fixed_hold');
+      }
+
+      const totalEquity = input.netRebalance ? markPortfolioEquity(tradeDate) : cash;
       const deployable = totalEquity * regimeExposureScale;
       const slotBudget = deployable / input.topN;
-      cash = totalEquity - slotBudget * targetSlots.length;
       const plannedExitIndex = Math.min(
         dateIndex + requiredRebalanceDays,
         input.allDates.length - 1,
       );
 
-      for (const slot of targetSlots) {
-        const entryBar = slot.history.byDate.get(tradeDate);
-        if (!entryBar || slotBudget <= 0) {
-          cash += slotBudget;
-          continue;
+      if (input.netRebalance) {
+        const targetBySymbol = new Map<string, {
+          slot: (typeof targetSlots)[number];
+          entryBar: MomentumBar & { index: number };
+          targetShares: number;
+        }>();
+        for (const slot of targetSlots) {
+          const entryBar = slot.history.byDate.get(tradeDate);
+          if (!entryBar || slotBudget <= 0) continue;
+          const target = buyShares({
+            cash: slotBudget,
+            price: entryBar.close,
+            commissionRate: input.commissionRate,
+            slippageRate: input.slippageRate,
+            initialCapital: input.initialCapital,
+          });
+          if (!target) continue;
+          const existing = targetBySymbol.get(slot.history.symbol);
+          if (existing) {
+            existing.targetShares += target.shares;
+          } else {
+            targetBySymbol.set(slot.history.symbol, {
+              slot,
+              entryBar,
+              targetShares: target.shares,
+            });
+          }
         }
 
-        const bought = buyShares({
-          cash: slotBudget,
-          price: entryBar.close,
-          commissionRate: input.commissionRate,
-          slippageRate: input.slippageRate,
-          initialCapital: input.initialCapital,
-        });
-        if (!bought) {
-          cash += slotBudget;
-          continue;
+        const currentSharesBySymbol = new Map<string, number>();
+        for (const position of positions) {
+          const current = currentSharesBySymbol.get(position.symbol) ?? 0;
+          currentSharesBySymbol.set(position.symbol, current + position.shares);
         }
-        cash += Math.max(0, slotBudget - bought.spent);
+        const excessSharesBySymbol = new Map<string, number>();
+        for (const [symbol, currentShares] of currentSharesBySymbol) {
+          const targetShares = targetBySymbol.get(symbol)?.targetShares ?? 0;
+          excessSharesBySymbol.set(symbol, Math.max(0, currentShares - targetShares));
+        }
 
-        positions.push({
-          symbol: slot.history.symbol,
-          name: slot.history.name,
-          history: slot.history,
-          entryDate: tradeDate,
-          entryIndex: entryBar.index,
-          entryPrice: entryBar.close,
-          shares: bought.shares,
-          grossBasis: bought.spent,
-          isBenchmarkFill: slot.isBenchmarkFill,
-          pick: slot.pick,
-          effectiveTrendMaDays: slot.effectiveTrendMaDays,
-          plannedExitIndex,
-        });
+        const rebalancedPositions: SimPosition[] = [];
+        for (const position of positions) {
+          const bar = position.history.byDate.get(tradeDate);
+          const target = targetBySymbol.get(position.symbol);
+          if (!bar) {
+            rebalancedPositions.push(position);
+            continue;
+          }
+          const excessShares = excessSharesBySymbol.get(position.symbol) ?? 0;
+          const sharesToSell = target ? Math.min(position.shares, excessShares) : position.shares;
+          const remaining =
+            sharesToSell > 0
+              ? sellPositionShares(position, tradeDate, bar.close, sharesToSell, 'fixed_hold')
+              : position;
+          if (sharesToSell > 0) {
+            excessSharesBySymbol.set(position.symbol, Math.max(0, excessShares - sharesToSell));
+          }
+          if (!remaining) continue;
+          if (target) {
+            remaining.pick = target.slot.pick;
+            remaining.isBenchmarkFill = target.slot.isBenchmarkFill;
+            remaining.effectiveTrendMaDays = target.slot.effectiveTrendMaDays;
+            remaining.plannedExitIndex = plannedExitIndex;
+          }
+          rebalancedPositions.push(remaining);
+        }
+        positions = rebalancedPositions;
+
+        const afterSellSharesBySymbol = new Map<string, number>();
+        for (const position of positions) {
+          const current = afterSellSharesBySymbol.get(position.symbol) ?? 0;
+          afterSellSharesBySymbol.set(position.symbol, current + position.shares);
+        }
+        const minLotShares = ETF_LOT_SIZE / input.initialCapital;
+        for (const target of targetBySymbol.values()) {
+          const currentShares = afterSellSharesBySymbol.get(target.slot.history.symbol) ?? 0;
+          const rawDeltaShares = target.targetShares - currentShares;
+          const actualDeltaShares =
+            Math.floor((rawDeltaShares * input.initialCapital) / ETF_LOT_SIZE)
+            * ETF_LOT_SIZE;
+          const deltaShares = actualDeltaShares / input.initialCapital;
+          if (deltaShares < minLotShares) continue;
+
+          const exactCost = calcEtfBuyCost({
+            shares: deltaShares,
+            price: target.entryBar.close,
+            commissionRate: input.commissionRate,
+            slippageRate: input.slippageRate,
+          }).totalCost;
+          const bought =
+            exactCost <= cash
+              ? { shares: deltaShares, spent: exactCost }
+              : buyShares({
+                  cash,
+                  price: target.entryBar.close,
+                  commissionRate: input.commissionRate,
+                  slippageRate: input.slippageRate,
+                  initialCapital: input.initialCapital,
+                });
+          if (!bought) continue;
+          cash -= bought.spent;
+          positions.push({
+            symbol: target.slot.history.symbol,
+            name: target.slot.history.name,
+            history: target.slot.history,
+            entryDate: tradeDate,
+            entryIndex: target.entryBar.index,
+            entryPrice: target.entryBar.close,
+            shares: bought.shares,
+            grossBasis: bought.spent,
+            isBenchmarkFill: target.slot.isBenchmarkFill,
+            pick: target.slot.pick,
+            effectiveTrendMaDays: target.slot.effectiveTrendMaDays,
+            plannedExitIndex,
+          });
+        }
+      }
+      else {
+        cash = totalEquity - slotBudget * targetSlots.length;
+        for (const slot of targetSlots) {
+          const entryBar = slot.history.byDate.get(tradeDate);
+          if (!entryBar || slotBudget <= 0) {
+            cash += slotBudget;
+            continue;
+          }
+
+          const bought = buyShares({
+            cash: slotBudget,
+            price: entryBar.close,
+            commissionRate: input.commissionRate,
+            slippageRate: input.slippageRate,
+            initialCapital: input.initialCapital,
+          });
+          if (!bought) {
+            cash += slotBudget;
+            continue;
+          }
+          cash += Math.max(0, slotBudget - bought.spent);
+
+          positions.push({
+            symbol: slot.history.symbol,
+            name: slot.history.name,
+            history: slot.history,
+            entryDate: tradeDate,
+            entryIndex: entryBar.index,
+            entryPrice: entryBar.close,
+            shares: bought.shares,
+            grossBasis: bought.spent,
+            isBenchmarkFill: slot.isBenchmarkFill,
+            pick: slot.pick,
+            effectiveTrendMaDays: slot.effectiveTrendMaDays,
+            plannedExitIndex,
+          });
+        }
       }
     }
 
@@ -940,7 +1252,7 @@ function simulateDailyPortfolio(input: {
     closeAllPositions(lastDate, 'end_of_data');
   }
 
-  return { trades, equityPoints, portfolioSnapshots };
+  return { trades, equityPoints, portfolioSnapshots, tPlusStats };
 }
 
 function buildMomentumEquityCurve(
@@ -1271,6 +1583,26 @@ export async function runEtfMomentumBacktest(
   );
   const cashFallbackInWeakRegime = input.cashFallbackInWeakRegime === true;
   const exitOnTrendBreak = input.exitOnTrendBreak === true;
+  const tPlusEnabled = input.tPlusEnabled === true;
+  const tPlusBuyDipPct =
+    input.tPlusBuyDipPct != null && Number.isFinite(input.tPlusBuyDipPct)
+      ? Math.max(0.1, input.tPlusBuyDipPct)
+      : DEFAULT_T_PLUS_BUY_DIP_PCT;
+  const tPlusMinProfitPct =
+    input.tPlusMinProfitPct != null && Number.isFinite(input.tPlusMinProfitPct)
+      ? Math.max(0.1, input.tPlusMinProfitPct)
+      : DEFAULT_T_PLUS_MIN_PROFIT_PCT;
+  const tPlusBudgetPct =
+    input.tPlusBudgetPct != null && Number.isFinite(input.tPlusBudgetPct)
+      ? Math.max(0.01, Math.min(1, input.tPlusBudgetPct))
+      : DEFAULT_T_PLUS_BUDGET_PCT;
+  const tPlusMaxTradesPerDay = clampPositiveInt(
+    input.tPlusMaxTradesPerDay,
+    DEFAULT_T_PLUS_MAX_TRADES_PER_DAY,
+    1,
+    10,
+  );
+  const netRebalance = input.netRebalance === true;
   const initialCapital =
     input.initialCapital != null && Number.isFinite(input.initialCapital)
       ? Math.max(1, input.initialCapital)
@@ -1320,7 +1652,7 @@ export async function runEtfMomentumBacktest(
     .filter((date) => isTradeDateInRange(date, dateRange))
     .sort();
 
-  const { trades, equityPoints, portfolioSnapshots } = simulateDailyPortfolio({
+  const { trades, equityPoints, portfolioSnapshots, tPlusStats } = simulateDailyPortfolio({
     allDates,
     histories,
     benchmarkHistory,
@@ -1342,6 +1674,12 @@ export async function runEtfMomentumBacktest(
     exitOnTrendBreak,
     initialCapital,
     maxPerTheme,
+    tPlusEnabled,
+    tPlusBuyDipPct,
+    tPlusMinProfitPct,
+    tPlusBudgetPct,
+    tPlusMaxTradesPerDay,
+    netRebalance,
   });
 
   const sortedTrades = trades.sort((a, b) => {
@@ -1416,6 +1754,14 @@ export async function runEtfMomentumBacktest(
       bullBenchmarkSlotCount,
       cashFallbackInWeakRegime,
       exitOnTrendBreak,
+      tPlusEnabled,
+      tPlusBuyDipPct,
+      tPlusMinProfitPct,
+      tPlusBudgetPct,
+      tPlusMaxTradesPerDay,
+      tPlusTradeCount: tPlusStats.tradeCount,
+      tPlusTotalProfitPct: round(tPlusStats.totalProfit * 100),
+      netRebalance,
       stopLossPct: POSITION_STOP_LOSS_PCT,
       stopCooldownDays: STOP_COOLDOWN_DAYS,
       maxPerTheme,
@@ -1446,6 +1792,12 @@ export async function runEtfMomentumBacktest(
       cashFallbackInWeakRegime
         ? `弱市中动量标的不足或止损冷却释放的槽位不再用 ${BENCHMARK_SYMBOL} 兜底，保留现金等待下一次调仓。`
         : `动量标的不足 ${topN} 只或止损冷却释放槽位时，仍用 ${BENCHMARK_SYMBOL} 基准 ETF 兜底。`,
+      tPlusEnabled
+        ? `正 T 叠加：持仓 ETF 日内低点较昨收回撤至少 ${tPlusBuyDipPct}% 且收盘较买入触发价反弹至少 ${tPlusMinProfitPct}% 时，用该持仓市值最多 ${tPlusBudgetPct * 100}% 做一次日内成本优化；每日最多 ${tPlusMaxTradesPerDay} 笔，计入佣金和滑点。`
+        : '默认不启用做 T 叠加；主策略只做轮动、止损和调仓。',
+      netRebalance
+        ? '调仓成交：同一 ETF 连续入选时只交易目标份额与当前份额的差额，续持部分不重复计算卖出/买入成本。'
+        : '调仓成交：调仓日按旧口径先卖出全部持仓，再按目标组合重新买入。',
       '该策略不使用新闻过滤，避免历史新闻覆盖不足和标题情绪噪声影响回测。',
       '收益曲线为日线组合净值，基准为沪深300ETF同期买入持有收益。',
       usedLocalCsv

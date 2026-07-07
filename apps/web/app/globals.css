@@ -1010,12 +1010,50 @@ a:hover {
 .backtest-control-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem 0.75rem;
 }
 
 .backtest-control-head strong {
   color: var(--text);
+}
+
+.backtest-control-head--split {
+  justify-content: space-between;
+}
+
+.backtest-control-head--split > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.backtest-control-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.backtest-inline-action {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.backtest-inline-action:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .backtest-strategy-grid {
@@ -1060,6 +1098,104 @@ a:hover {
   border-color: var(--accent);
   background: var(--accent-muted);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.backtest-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.backtest-variant-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 5.8rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.018);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.backtest-variant-card:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.backtest-variant-card--active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-elevated));
+}
+
+.backtest-variant-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.backtest-variant-card-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.backtest-variant-card-head strong {
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.backtest-variant-color {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.backtest-variant-card-head em {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  border-radius: 999px;
+  color: var(--accent-hover);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.backtest-variant-card small {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.backtest-variant-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.backtest-variant-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
 }
 
 .backtest-days-row {
@@ -1378,6 +1514,116 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.result-variant-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.result-variant-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.result-variant-tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.result-variant-tab--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: var(--accent-muted);
+}
+
+.result-variant-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.result-variant-tab-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  white-space: nowrap;
+}
+
+.result-variant-tab-name i {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.result-variant-tab strong {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.backtest-comparison-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.backtest-comparison-diff-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.75rem;
+}
+
+.backtest-comparison-diff-head strong {
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.backtest-comparison-diff-head span {
+  font-size: 0.8125rem;
+}
+
+.backtest-comparison-table th:nth-child(n + 2),
+.backtest-comparison-table td:nth-child(n + 2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.backtest-comparison-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.backtest-comparison-name i {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
 .backtest-capital-row {
   display: flex;
   flex-wrap: wrap;
@@ -1405,6 +1651,122 @@ a:hover {
   margin-top: 1rem;
   color: var(--muted);
   font-size: 0.8125rem;
+}
+
+.portfolio-tplus-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.875rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.portfolio-tplus-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.portfolio-tplus-timeline-head strong {
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.portfolio-tplus-timeline-head span {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.portfolio-tplus-timeline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  max-height: 8.75rem;
+  overflow: auto;
+}
+
+.portfolio-tplus-date-chip {
+  display: inline-grid;
+  grid-template-columns: auto auto auto auto auto;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  max-width: 18rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.portfolio-tplus-date-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.portfolio-tplus-date-chip i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.portfolio-tplus-date-chip strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.portfolio-tplus-date-chip em {
+  color: var(--accent-hover);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.portfolio-tplus-date-chip b {
+  font-weight: 750;
+}
+
+.portfolio-tplus-date-chip small {
+  grid-column: 2 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-tplus-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.35rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-hover);
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.portfolio-tplus-date-badge em {
+  font-style: normal;
+}
+
+.portfolio-tplus-date-badge--compact {
+  min-height: 1.2rem;
+  padding: 0.08rem 0.35rem;
+  font-size: 0.7rem;
 }
 
 .portfolio-view-switch {
@@ -1478,7 +1840,7 @@ a:hover {
 
 .portfolio-snapshot summary {
   display: grid;
-  grid-template-columns: minmax(7rem, 1fr) minmax(8rem, auto) minmax(5.75rem, auto) minmax(6.25rem, auto) minmax(7.5rem, auto) minmax(5.5rem, auto);
+  grid-template-columns: minmax(7rem, 1fr) minmax(8rem, auto) minmax(5.75rem, auto) minmax(6.25rem, auto) minmax(7.5rem, auto) minmax(4rem, auto) minmax(5.5rem, auto);
   gap: 0.75rem;
   align-items: center;
   padding: 0.75rem 0.875rem;
@@ -1506,6 +1868,85 @@ a:hover {
 
 .portfolio-position-table {
   border-top: 1px solid var(--border);
+}
+
+.portfolio-position-table th:nth-child(n + 5),
+.portfolio-position-table td:nth-child(n + 5) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.portfolio-position-table th:nth-child(2),
+.portfolio-position-table td:nth-child(2) {
+  min-width: 14rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.portfolio-position-row--sold {
+  color: var(--muted);
+}
+
+.portfolio-activity-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.portfolio-activity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 1.45rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.portfolio-activity-badge strong {
+  color: inherit;
+  font-weight: 750;
+}
+
+.portfolio-activity-badge em {
+  color: inherit;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-activity-badge--buy {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border));
+  background: color-mix(in srgb, var(--success) 11%, transparent);
+}
+
+.portfolio-activity-badge--sell {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.portfolio-activity-badge--rebalance {
+  color: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.portfolio-activity-badge--tplus {
+  color: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.portfolio-activity-badge--hold {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .portfolio-action-summary {
@@ -1609,6 +2050,100 @@ a:hover {
 
 .portfolio-action-chip--sell strong {
   color: var(--danger);
+}
+
+.portfolio-action-chip--rebalance strong {
+  color: var(--accent-hover);
+}
+
+.portfolio-tplus-panel,
+.portfolio-comparison-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.portfolio-tplus-head,
+.portfolio-comparison-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.portfolio-tplus-head h3,
+.portfolio-comparison-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.portfolio-tplus-head span,
+.portfolio-comparison-head span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.portfolio-tplus-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.portfolio-tplus-chip {
+  display: grid;
+  gap: 0.2rem;
+  min-width: min(100%, 18rem);
+  padding: 0.55rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated));
+}
+
+.portfolio-tplus-chip strong {
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.portfolio-tplus-chip span,
+.portfolio-tplus-chip small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.portfolio-comparison-table th:nth-child(n + 2),
+.portfolio-comparison-table td:nth-child(n + 2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.portfolio-comparison-table td:nth-child(6),
+.portfolio-comparison-table td:nth-child(7) {
+  min-width: 14rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.portfolio-share-diff-list,
+.portfolio-tplus-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.25rem 0.5rem;
+}
+
+.portfolio-tplus-inline {
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.portfolio-tplus-inline small {
+  color: var(--muted);
 }
 
 .portfolio-snapshot-empty {
@@ -2874,6 +3409,220 @@ a:hover {
 
 .paper-equity-section {
   margin-bottom: 1.25rem;
+}
+
+.paper-daily-equity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.paper-daily-equity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.paper-daily-equity-head h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.paper-daily-equity-head span {
+  font-size: 0.8125rem;
+}
+
+.paper-daily-equity-table th:nth-child(n + 3),
+.paper-daily-equity-table td:nth-child(n + 3) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.paper-daily-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding: 0.125rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.paper-daily-status--profit {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+
+.paper-daily-status--loss {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.paper-daily-return-pct {
+  display: inline-block;
+  min-width: 4.5rem;
+  margin-left: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.paper-daily-trades {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.paper-daily-trade-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.paper-daily-trade-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.125rem;
+}
+
+.paper-daily-trade-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.paper-daily-trade-group-head strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.paper-daily-trade-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem 0.875rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.paper-daily-trade-buckets {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.paper-daily-trade-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.paper-daily-trade-bucket-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.paper-daily-trade-bucket-head > div:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.paper-daily-trade-bucket-head strong {
+  display: inline-flex;
+  align-items: center;
+  min-width: 4rem;
+  padding: 0.125rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.paper-daily-trade-bucket-head span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.paper-daily-trade-bucket--etf .paper-daily-trade-bucket-head strong {
+  border-color: color-mix(in srgb, var(--link) 34%, var(--border));
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+  color: #9bc7e3;
+}
+
+.paper-daily-trade-bucket--stock .paper-daily-trade-bucket-head strong {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-hover);
+}
+
+.paper-daily-trade-bucket--stock-backtest .paper-daily-trade-bucket-head strong,
+.paper-daily-trade-bucket--stock-backtest-news .paper-daily-trade-bucket-head strong {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: #8fd4a8;
+}
+
+.paper-daily-trades-table .paper-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.paper-daily-trades-table .paper-trade-time {
+  white-space: nowrap;
+}
+
+.paper-daily-trades-table .paper-trade-symbol {
+  min-width: 10rem;
+  white-space: nowrap;
+}
+
+.paper-daily-trades-table .paper-trade-note {
+  min-width: 18rem;
+  max-width: 42rem;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.paper-trade-source {
+  display: inline-flex;
+  margin-right: 0.5rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .paper-daily-equity-head,
+  .paper-daily-trade-group-head,
+  .paper-daily-trade-bucket-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .paper-daily-trade-summary {
+    justify-content: flex-start;
+  }
 }
 
 .paper-manual-check {

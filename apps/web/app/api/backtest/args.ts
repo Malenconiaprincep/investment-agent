@@ -66,6 +66,28 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     if (rebalance) args.push(`--rebalance=${rebalance}`);
     if (trendMa) args.push(`--trend-ma=${trendMa}`);
     if (initialCapital) args.push(`--capital=${initialCapital}`);
+    if (searchParams.get('cashFallbackWeak') === '1') {
+      args.push('--cash-fallback-weak');
+    }
+    if (searchParams.get('exitOnTrendBreak') === '1') {
+      args.push('--exit-on-trend-break');
+    }
+    if (searchParams.get('netRebalance') === '1') {
+      args.push('--net-rebalance');
+    }
+    if (searchParams.get('tPlus') === '1') {
+      args.push('--t-plus');
+      const tPlusBuyDip = searchParams.get('tPlusBuyDip');
+      const tPlusMinProfit = searchParams.get('tPlusMinProfit');
+      const tPlusBudgetPct = searchParams.get('tPlusBudgetPct');
+      const tPlusMaxTradesPerDay = searchParams.get('tPlusMaxTradesPerDay');
+      if (tPlusBuyDip) args.push(`--t-plus-buy-dip=${tPlusBuyDip}`);
+      if (tPlusMinProfit) args.push(`--t-plus-min-profit=${tPlusMinProfit}`);
+      if (tPlusBudgetPct) args.push(`--t-plus-budget=${tPlusBudgetPct}`);
+      if (tPlusMaxTradesPerDay) {
+        args.push(`--t-plus-max-trades=${tPlusMaxTradesPerDay}`);
+      }
+    }
     return args;
   }
 

@@ -90,6 +90,17 @@ export type BacktestPortfolioSnapshot = {
   totalValue: number;
   returnPct: number;
   closedTrades: number;
+  tPlusTrades?: Array<{
+    symbol: string;
+    name: string;
+    buyPrice: number;
+    sellPrice: number;
+    shares: number;
+    spent: number;
+    proceeds: number;
+    profit: number;
+    profitPct: number | null;
+  }>;
   positions: BacktestPositionSnapshot[];
 };
 
@@ -157,6 +168,14 @@ export type BacktestRunConfig = {
   bullBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
+  tPlusEnabled?: boolean;
+  tPlusBuyDipPct?: number;
+  tPlusMinProfitPct?: number;
+  tPlusBudgetPct?: number;
+  tPlusMaxTradesPerDay?: number;
+  tPlusTradeCount?: number;
+  tPlusTotalProfitPct?: number | null;
+  netRebalance?: boolean;
   stopLossPct?: number;
   stopCooldownDays?: number;
   maxPerTheme?: number | null;

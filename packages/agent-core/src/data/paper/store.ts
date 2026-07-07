@@ -1,5 +1,11 @@
 import { formatTradeDateKey } from '../backtest/date-range.js';
 import { createClient, type Client } from '@libsql/client';
+import {
+  calcEtfBuyCost,
+  calcEtfSellProceeds,
+  ETF_COMMISSION_RATE,
+  ETF_SLIPPAGE_RATE,
+} from '../etf/trading-cost.js';
 import { getPrimaryLibsqlOptions } from '../libsql-config.js';
 import { isEtfSymbol } from '../market/asset-type.js';
 import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
@@ -675,6 +681,7 @@ export async function executePaperTrade(input: {
   skipSessionCheck?: boolean;
   skipT1Check?: boolean;
   useOrderBookPrice?: boolean;
+  priceIncludesSpread?: boolean;
 }): Promise<{ trade: PaperTrade; account: PaperAccount & { bucket: PaperBucket } }> {
   const bucket = input.bucket ?? 'stock';
   const tradeDate = input.tradeDate ?? formatTradeDate();
@@ -684,10 +691,12 @@ export async function executePaperTrade(input: {
 
   let price = input.price;
   let priceSourceNote = '';
+  let priceIncludesSpread = input.priceIncludesSpread === true;
   if (price == null || !Number.isFinite(price) || input.useOrderBookPrice) {
     const execution = await resolvePaperExecutionPrice(input.symbol, input.side);
     price = execution.price;
     priceSourceNote = execution.priceSource;
+    priceIncludesSpread = true;
   }
   if (price == null || !Number.isFinite(price) || price <= 0) {
     throw new Error('无法获取有效成交价');
@@ -704,10 +713,37 @@ export async function executePaperTrade(input: {
 
   const db = await getDb();
   const account = await getOrCreatePaperAccount(bucket);
-  const amount = Number((shares * price).toFixed(2));
+  const isEtfTrade = bucket === 'etf';
+  const paperSlippageRate = isEtfTrade && !priceIncludesSpread ? ETF_SLIPPAGE_RATE : 0;
+  const etfBuyCost =
+    isEtfTrade && input.side === 'buy'
+      ? calcEtfBuyCost({
+          price,
+          shares,
+          commissionRate: ETF_COMMISSION_RATE,
+          slippageRate: paperSlippageRate,
+        })
+      : null;
+  const etfSellCost =
+    isEtfTrade && input.side === 'sell'
+      ? calcEtfSellProceeds({
+          price,
+          shares,
+          commissionRate: ETF_COMMISSION_RATE,
+          slippageRate: paperSlippageRate,
+        })
+      : null;
+  const amount = Number(
+    (etfBuyCost?.totalCost ?? etfSellCost?.netProceeds ?? shares * price).toFixed(2),
+  );
   const pos = await getPosition(input.symbol, bucket);
   const noteSuffix = priceSourceNote ? `成交价=${priceSourceNote}` : '';
-  const mergedNote = [input.note, noteSuffix].filter(Boolean).join(' · ') || null;
+  const costNote = isEtfTrade
+    ? paperSlippageRate > 0
+      ? `交易成本=佣金 ${(ETF_COMMISSION_RATE * 100).toFixed(2)}% + 滑点 ${(ETF_SLIPPAGE_RATE * 100).toFixed(2)}%`
+      : `交易成本=佣金 ${(ETF_COMMISSION_RATE * 100).toFixed(2)}%，盘口价差已体现在成交价`
+    : '';
+  const mergedNote = [input.note, noteSuffix, costNote].filter(Boolean).join(' · ') || null;
 
   if (input.side === 'buy') {
     if (account.cash < amount) {
@@ -725,7 +761,7 @@ export async function executePaperTrade(input: {
         ? price
         : Number(
             (
-              ((pos?.avgCost ?? 0) * (pos?.shares ?? 0) + price * shares) /
+              ((pos?.avgCost ?? 0) * (pos?.shares ?? 0) + amount) /
               newShares
             ).toFixed(4),
           );
@@ -750,7 +786,7 @@ export async function executePaperTrade(input: {
       bucket,
       symbol: input.symbol,
       shares,
-      buyPrice: price,
+      buyPrice: etfBuyCost ? amount / shares : price,
       buyDate: tradeDate,
     });
 
