@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { dispatchFeedback } from '../handlers/feedback.js';
 

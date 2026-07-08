@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import type { WorkflowStreamEvent } from '@mastra/core/stream';
 import { saveScreeningSession } from '../data/screening/store.js';

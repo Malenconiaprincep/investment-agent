@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { saveResearchReport } from '../data/reports/store.js';
 import { mastra } from '../mastra/index.js';

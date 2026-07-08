@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { formatTradeDate, getBeijingNow } from '../data/paper/trading-calendar.js';
 import { runStockIntradayScan } from '../data/paper/stock-intraday-scan.js';

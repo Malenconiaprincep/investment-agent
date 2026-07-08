@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { getDailyQuote } from '../data/market/services.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';

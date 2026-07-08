@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';

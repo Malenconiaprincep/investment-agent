@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import type { ScreenStreamEvent } from '../api/run-sector-screen-stream.js';
 import { runSectorScreenStream } from '../api/run-sector-screen-stream.js';

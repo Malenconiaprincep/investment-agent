@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
 import type { BacktestRunResult } from '../data/backtest/types.js';

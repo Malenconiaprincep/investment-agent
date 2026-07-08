@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { isIwencaiMcpConfigured } from '../mastra/mcp/iwencai.js';
 import { mastra } from '../mastra/index.js';

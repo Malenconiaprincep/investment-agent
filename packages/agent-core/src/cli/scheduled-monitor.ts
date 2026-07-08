@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import 'dotenv/config';
+import '../config/load-env.js';
 import { runMonitorPollManaged } from '../data/monitor/engine.js';
 
 /** 盘中每 5–15 分钟：cd /path && pnpm monitor:poll */

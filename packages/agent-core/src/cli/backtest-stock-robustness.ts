@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runDiamondBacktest } from '../data/backtest/diamond.js';
 import type { BacktestRunResult } from '../data/backtest/types.js';

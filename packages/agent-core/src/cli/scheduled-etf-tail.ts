@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runEtfTailPick } from '../data/etf/tail-picker.js';
 import { DATA_DIR } from '../mastra/config/paths.js';

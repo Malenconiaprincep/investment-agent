@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
 import { formatTradeDateKey, todayDateKey } from '../data/backtest/date-range.js';

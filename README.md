@@ -169,6 +169,25 @@ docs/changesets/YYYY-MM-DD-short-title.md
 
 changeset 记录改动背景、影响范围、预期指标、验证结果、观察指标和回滚方案。每周复盘时，把 changeset 的预期和「工作总结」历史快照对照，判断系统是变好、变差还是需要继续观察。格式说明见 [docs/changesets/README.md](docs/changesets/README.md)。
 
+## 投研 LLM Wiki 与每日日报
+
+系统会把工作总结、数据更新、定时任务、回测和 changeset 固化成可长期检索的 Wiki 日报：
+
+```bash
+pnpm wiki:daily
+pnpm wiki:daily -- --dry-run --stdout
+```
+
+输出位置：
+
+```text
+docs/wiki/daily/YYYY-MM-DD.md
+docs/wiki/daily/YYYY-MM-DD.json
+docs/wiki/manifest.json
+```
+
+日报是日级事实账本，专题 Wiki 用来沉淀方法论。结构说明见 [docs/wiki/README.md](docs/wiki/README.md)，回测口径见 [docs/wiki/topics/backtesting.md](docs/wiki/topics/backtesting.md)。
+
 ## 本地桌面应用
 
 桌面版（Electron）打包命令：

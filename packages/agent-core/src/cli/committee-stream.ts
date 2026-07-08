@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import type { CommitteeStreamEvent } from '../api/run-committee-stream.js';
 import { runCommitteeStream } from '../api/run-committee-stream.js';

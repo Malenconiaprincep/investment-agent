@@ -50,6 +50,7 @@ export type FeishuConfigStatus = {
   etfMonitorTradesEnabled: boolean;
   monitorRealtime: boolean;
   stockIntraday: boolean;
+  preopenScreen: boolean;
 };
 
 export type TokenKeyStatus = {
@@ -277,6 +278,7 @@ const FEISHU_TOGGLE_DEFAULTS: Record<FeishuToggleKey, '0' | '1'> = {
   FEISHU_NOTIFY_ETF_MONITOR: '1',
   FEISHU_NOTIFY_MONITOR: '1',
   FEISHU_NOTIFY_STOCK_INTRADAY: '1',
+  FEISHU_NOTIFY_PREOPEN_SCREEN: '1',
 };
 
 function resolveFeishuToggleValue(
@@ -318,6 +320,11 @@ export function getFeishuConfigStatus(
       resolveFeishuToggleValue(
         'FEISHU_NOTIFY_STOCK_INTRADAY',
         values.FEISHU_NOTIFY_STOCK_INTRADAY?.trim() ?? '',
+      ) === '1',
+    preopenScreen:
+      resolveFeishuToggleValue(
+        'FEISHU_NOTIFY_PREOPEN_SCREEN',
+        values.FEISHU_NOTIFY_PREOPEN_SCREEN?.trim() ?? '',
       ) === '1',
   };
 }

@@ -5,6 +5,10 @@ import {
   isFeishuNotifyEnabled,
   listFeishuChats,
 } from '../data/notify/feishu.js';
+import {
+  AGENT_CORE_ENV_SOURCES,
+  resolveAgentCoreEnvWritePath,
+} from '../config/load-env.js';
 import { getFeishuTenantAccessToken, sendFeishuAppPost } from '../lib/feishu-app.js';
 import { sendFeishuPost } from '../lib/feishu-webhook.js';
 
@@ -25,6 +29,9 @@ export async function dispatchNotify(args: string[]): Promise<string> {
       webhookHost: webhook ? new URL(webhook.webhookUrl).hostname : null,
       hasWebhookSecret: Boolean(webhook?.secret),
       etfMonitorTradesEnabled: process.env.FEISHU_NOTIFY_ETF_MONITOR !== '0',
+      preopenScreenEnabled: process.env.FEISHU_NOTIFY_PREOPEN_SCREEN !== '0',
+      envPath: resolveAgentCoreEnvWritePath(),
+      envSources: AGENT_CORE_ENV_SOURCES,
     });
   }
 

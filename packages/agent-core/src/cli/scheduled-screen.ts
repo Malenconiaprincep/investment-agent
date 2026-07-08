@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runSectorScreenStream } from '../api/run-sector-screen-stream.js';
 import { appendFileSync, mkdirSync } from 'node:fs';

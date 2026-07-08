@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { runResearchWorkflow } from '../api/run-research-workflow.js';
 

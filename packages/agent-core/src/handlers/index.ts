@@ -9,6 +9,7 @@ import { dispatchEtf } from './etf.js';
 import { dispatchBacktest } from './backtest.js';
 import { dispatchNotify } from './notify.js';
 import { dispatchWorkSummary } from './work-summary.js';
+import { dispatchWiki } from './wiki.js';
 
 export type CliModule =
   | 'watchlist'
@@ -21,7 +22,8 @@ export type CliModule =
   | 'etf'
   | 'backtest'
   | 'notify'
-  | 'work-summary';
+  | 'work-summary'
+  | 'wiki';
 
 const DISPATCHERS: Record<CliModule, (args: string[]) => Promise<string>> = {
   watchlist: dispatchWatchlist,
@@ -35,6 +37,7 @@ const DISPATCHERS: Record<CliModule, (args: string[]) => Promise<string>> = {
   backtest: dispatchBacktest,
   notify: dispatchNotify,
   'work-summary': dispatchWorkSummary,
+  wiki: dispatchWiki,
 };
 
 export async function dispatchCliModule(

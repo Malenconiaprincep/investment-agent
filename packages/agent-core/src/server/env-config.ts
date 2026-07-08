@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import dotenv from 'dotenv';
+import { resolveAgentCoreEnvWritePath } from '../config/load-env.js';
 import { AI_API_KEY_ENVS, AI_MODEL_ENV } from '../mastra/config/model-providers.js';
 
 export const CONFIGURABLE_KEYS = [
@@ -22,6 +23,7 @@ export const CONFIGURABLE_KEYS = [
   'FEISHU_NOTIFY_ETF_TAIL_PICK',
   'FEISHU_NOTIFY_MONITOR',
   'FEISHU_NOTIFY_STOCK_INTRADAY',
+  'FEISHU_NOTIFY_PREOPEN_SCREEN',
 ] as const;
 
 export type ConfigurableKey = (typeof CONFIGURABLE_KEYS)[number];
@@ -36,15 +38,7 @@ export type EnvConfigStatus = {
 };
 
 function resolveEnvPath(): string | null {
-  const explicit =
-    process.env.DOTENV_CONFIG_PATH?.trim() ||
-    process.env.INVESTMENT_AGENT_ENV_PATH?.trim();
-  if (explicit) return explicit;
-
-  const cwdEnv = `${process.cwd()}/.env`;
-  if (existsSync(cwdEnv)) return cwdEnv;
-
-  return null;
+  return resolveAgentCoreEnvWritePath();
 }
 
 function maskSecret(value: string): string {
@@ -103,6 +97,7 @@ function serializeEnvFile(values: Record<string, string>): string {
         'FEISHU_NOTIFY_ETF_TAIL_PICK',
         'FEISHU_NOTIFY_MONITOR',
         'FEISHU_NOTIFY_STOCK_INTRADAY',
+        'FEISHU_NOTIFY_PREOPEN_SCREEN',
       ],
     },
   ];

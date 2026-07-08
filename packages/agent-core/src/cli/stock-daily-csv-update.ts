@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { updateStockDailyCsvPool } from '../data/market/local-csv/etf-daily-update.js';
 

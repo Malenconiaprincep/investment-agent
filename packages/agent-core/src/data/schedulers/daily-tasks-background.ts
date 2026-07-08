@@ -44,6 +44,7 @@ import {
   syncMarketData,
   type MarketDataSyncResult,
 } from '../../cli/sync-market-data.js';
+import { generateDailyWikiReport } from '../wiki/daily-report.js';
 import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
@@ -729,6 +730,19 @@ const DAILY_TASKS: DailyTaskDef[] = [
       };
     },
   },
+  {
+    id: 'work-summary-snapshot',
+    label: '工作总结与 Wiki 日报',
+    hour: 17,
+    minute: 20,
+    run: async () => {
+      const result = await generateDailyWikiReport({ persistWorkSummary: true });
+      return {
+        skipped: false,
+        summary: `日报 ${result.report.date} · 评分 ${result.report.workSummary.current.overallScore}/${result.report.workSummary.current.grade} · ${result.report.paths.markdown}`,
+      };
+    },
+  },
 ];
 
 async function tickStockBacktestPaperExitMonitor(now = getBeijingNow()) {
@@ -1115,6 +1129,7 @@ export function startDailyTasksBackgroundWorker() {
     `15:35 跟踪池快照`,
     `15:45 ETF 观察快照`,
     `17:00 股票日线更新`,
+    `17:20 工作总结与 Wiki 日报`,
   ].join(' · ');
 
   logInfo(`已启动本机定时任务（北京时间）：${schedule}`);

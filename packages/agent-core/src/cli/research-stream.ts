@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import type { ResearchStreamEvent } from '../api/run-research-workflow-stream.js';
 import { runResearchWorkflowStream } from '../api/run-research-workflow-stream.js';

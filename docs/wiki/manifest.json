@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-08T14:23:42.042Z",
+  "latest": {
+    "date": "2026-07-08",
+    "generatedAt": "2026-07-08T14:23:42.042Z",
+    "markdownPath": "docs/wiki/daily/2026-07-08.md",
+    "jsonPath": "docs/wiki/daily/2026-07-08.json",
+    "overallScore": 64,
+    "grade": "C",
+    "paperReturnPct": -1.26,
+    "riskScore": 0,
+    "taskFailures": 0
+  },
+  "reportCount": 1,
+  "reports": [
+    {
+      "date": "2026-07-08",
+      "generatedAt": "2026-07-08T14:23:42.042Z",
+      "markdownPath": "docs/wiki/daily/2026-07-08.md",
+      "jsonPath": "docs/wiki/daily/2026-07-08.json",
+      "overallScore": 64,
+      "grade": "C",
+      "paperReturnPct": -1.26,
+      "riskScore": 0,
+      "taskFailures": 0
+    }
+  ]
+}

@@ -40,6 +40,7 @@ type TokenConfigStatus = {
     etfMonitorTradesEnabled: boolean;
     monitorRealtime: boolean;
     stockIntraday: boolean;
+    preopenScreen: boolean;
   };
   restartRequired?: boolean;
 };
@@ -133,6 +134,11 @@ const FEISHU_TOGGLE_FIELDS: Array<{
     key: 'FEISHU_NOTIFY_STOCK_INTRADAY',
     label: '股票盘中信号推送',
     hint: '交易时段扫描红钻+动量达标标的',
+  },
+  {
+    key: 'FEISHU_NOTIFY_PREOPEN_SCREEN',
+    label: '盘前智能选股通知',
+    hint: '交易日 08:30 发送数据校验后的智能选股',
   },
 ];
 

@@ -58,6 +58,7 @@
     "paper:schedule": "pnpm --filter @investment-agent/agent-core paper:schedule",
     "paper:etf-schedule": "pnpm --filter @investment-agent/agent-core paper:etf-schedule",
     "paper:stock-schedule": "pnpm --filter @investment-agent/agent-core paper:stock-schedule",
+    "wiki:daily": "pnpm --filter @investment-agent/agent-core wiki:daily",
     "design:audit": "npx impeccable detect apps/web/app apps/web/components",
     "eval:all": "pnpm --filter @investment-agent/agent-core eval:all"
   },

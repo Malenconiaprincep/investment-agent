@@ -11,6 +11,7 @@ export const FEISHU_TOGGLE_KEYS = [
   'FEISHU_NOTIFY_ETF_MONITOR',
   'FEISHU_NOTIFY_MONITOR',
   'FEISHU_NOTIFY_STOCK_INTRADAY',
+  'FEISHU_NOTIFY_PREOPEN_SCREEN',
 ] as const;
 
 export type FeishuNotifyKey = (typeof FEISHU_NOTIFY_KEYS)[number];

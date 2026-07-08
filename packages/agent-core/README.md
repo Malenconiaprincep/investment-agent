@@ -33,7 +33,10 @@ pnpm paper:etf-schedule    # ETF 仓（交易时段监听；agent:serve 默认�
 pnpm paper:stock-schedule  # 股票仓，建议 15:05
 pnpm watchlist:snapshot
 pnpm monitor:poll
+pnpm wiki:daily            # 生成 docs/wiki/daily/YYYY-MM-DD 日报
 ```
+
+`agent:serve` 内置的交易日 17:20 任务会自动运行“工作总结与 Wiki 日报”，把短保留期任务日志、行情更新日志、工作总结、changeset 和回测摘要固化到 `docs/wiki/daily/`。
 
 ## A 股日线更新
 
@@ -73,7 +76,7 @@ pnpm market-data:sync --source /Users/wangbo/BaiduNetdiskDownload/A股数据_zip
 1. [open.feishu.cn](https://open.feishu.cn) 创建企业自建应用
 2. 开通权限：`im:message:send_as_bot`、`im:chat:readonly`
 3. 发布应用，把机器人拉进目标群
-4. `.env` 配置：
+4. `packages/agent-core/.env.local` 配置（本地优先读取；`.env` 仍作为兜底）：
 
 ```bash
 FEISHU_APP_ID=cli_xxxxxxxx
@@ -96,6 +99,7 @@ FEISHU_NOTIFY_STOCK_INTRADAY=0         # 关闭交易时段股票动量扫描推
 FEISHU_NOTIFY_MONITOR=0              # 关闭消息雷达实时推送
 FEISHU_NOTIFY_ETF_MONITOR=0          # 关闭 ETF 模拟盘成交通知（默认有成交/止损才推）
 FEISHU_NOTIFY_ETF_TAIL_PICK=1        # 恢复 ETF 尾盘推荐推送（默认关闭，仅保留历史记录）
+FEISHU_NOTIFY_PREOPEN_SCREEN=0       # 关闭交易日 08:30 盘前智能选股通知
 STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES=15   # 股票扫描间隔（交易时段，默认 15 分钟）
 MONITOR_BACKGROUND_INTERVAL_MS=300000        # 消息雷达间隔（默认 5 分钟）
 ```
@@ -134,4 +138,5 @@ pnpm feishu:test
 
 ```bash
 pnpm --filter @investment-agent/agent-core watchlist:snapshot
+pnpm --filter @investment-agent/agent-core wiki:daily -- --dry-run --stdout
 ```

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/load-env.js';
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
