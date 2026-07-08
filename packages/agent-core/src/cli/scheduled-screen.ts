@@ -8,15 +8,24 @@ import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
 } from '../data/schedulers/task-settings.js';
+import {
+  runPreopenScreeningNotification,
+  type PreopenScreeningRunResult,
+} from '../data/screening/preopen-screening.js';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 
-type ScreenScheduleStage = 'morning' | 'midday' | 'noon' | 'afternoon';
+type ScreenScheduleStage = 'preopen' | 'morning' | 'midday' | 'noon' | 'afternoon';
 
 const STAGES: Record<
   ScreenScheduleStage,
   { taskId: ScheduledTaskId; label: string; lookbackDays: number }
 > = {
+  preopen: {
+    taskId: 'screen-preopen',
+    label: '盘前智能选股通知',
+    lookbackDays: 14,
+  },
   morning: {
     taskId: 'screen-morning',
     label: '智能选股（早盘）',
@@ -40,11 +49,31 @@ const STAGES: Record<
 };
 
 function resolveStage(raw: string | undefined): ScreenScheduleStage {
+  if (raw === 'preopen') return raw;
   if (raw === 'midday' || raw === 'noon' || raw === 'afternoon') return raw;
   return 'morning';
 }
 
+function preopenOutcome(result: PreopenScreeningRunResult) {
+  return {
+    query: result.screening?.query,
+    passed: result.screening?.passed,
+    sessionId: result.screening?.sessionId,
+    sectorCount: result.screening?.sectors.length,
+    candidateCount: result.screening?.candidates.length,
+    elapsedMs: result.screening?.elapsedMs,
+    watchlistAdded: result.screening?.watchlistSync?.added.length ?? 0,
+    dataQualityScore: result.dataQuality.score,
+    dataQualityPassed: result.dataQuality.passed,
+    dataQualityFail: result.dataQuality.summary.fail,
+    dataQualityWarn: result.dataQuality.summary.warn,
+    skipped: result.skipped,
+    reason: result.reason,
+  };
+}
+
 /** 自动选股示例：
+ * 30 8 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule preopen >> /tmp/screen-cron.log 2>&1
  * 25 9 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule morning >> /tmp/screen-cron.log 2>&1
  * 35 11 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule midday >> /tmp/screen-cron.log 2>&1
  * 50 12 * * 1-5 cd /path/to/investment-agent && pnpm screen:schedule noon >> /tmp/screen-cron.log 2>&1
@@ -76,19 +105,37 @@ async function main() {
     candidateCount?: number;
     elapsedMs?: number;
     watchlistAdded?: number;
+    dataQualityScore?: number;
+    dataQualityPassed?: boolean;
+    dataQualityFail?: number;
+    dataQualityWarn?: number;
+    skipped?: boolean;
+    reason?: string;
   } = {};
 
-  await runSectorScreenStream({ maxCandidates: 10, excludeSt: true, lookbackDays: config.lookbackDays }, (event) => {
-    if (event.type === 'done') {
-      outcome.query = event.query;
-      outcome.passed = event.passed;
-      outcome.sessionId = event.sessionId;
-      outcome.sectorCount = event.sectors.length;
-      outcome.candidateCount = event.candidates.length;
-      outcome.elapsedMs = event.elapsedMs;
-      outcome.watchlistAdded = event.watchlistSync?.added.length ?? 0;
-    }
-  });
+  if (stage === 'preopen') {
+    Object.assign(
+      outcome,
+      preopenOutcome(
+        await runPreopenScreeningNotification({
+          maxCandidates: 10,
+          lookbackDays: config.lookbackDays,
+        }),
+      ),
+    );
+  } else {
+    await runSectorScreenStream({ maxCandidates: 10, excludeSt: true, lookbackDays: config.lookbackDays }, (event) => {
+      if (event.type === 'done') {
+        outcome.query = event.query;
+        outcome.passed = event.passed;
+        outcome.sessionId = event.sessionId;
+        outcome.sectorCount = event.sectors.length;
+        outcome.candidateCount = event.candidates.length;
+        outcome.elapsedMs = event.elapsedMs;
+        outcome.watchlistAdded = event.watchlistSync?.added.length ?? 0;
+      }
+    });
+  }
 
   const line = JSON.stringify({
     ranAt: startedAt,

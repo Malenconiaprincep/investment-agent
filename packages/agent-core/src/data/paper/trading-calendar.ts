@@ -1,5 +1,80 @@
 /** A 股交易日历与时段（北京时间） */
 
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { MARKET_CSV_DIR } from '../../mastra/config/paths.js';
+
+type TradingCalendar = {
+  mtimeMs: number;
+  rows: Map<
+    string,
+    {
+      isTrading: boolean;
+      previousTradeDate: string | null;
+    }
+  >;
+  tradingDates: string[];
+};
+
+const TRADING_CALENDAR_PATH = path.join(MARKET_CSV_DIR, 'meta', 'trading-calendar.csv');
+let tradingCalendarCache: TradingCalendar | null = null;
+
+function normalizeDateLabel(value: string): string {
+  const key = value.trim().replace(/^\uFEFF/, '').replace(/-/g, '').slice(0, 8);
+  if (!/^\d{8}$/.test(key)) return value.trim();
+  return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+}
+
+function readTradingCalendar(): TradingCalendar | null {
+  if (!existsSync(TRADING_CALENDAR_PATH)) return null;
+
+  const mtimeMs = statSync(TRADING_CALENDAR_PATH).mtimeMs;
+  if (tradingCalendarCache?.mtimeMs === mtimeMs) {
+    return tradingCalendarCache;
+  }
+
+  const rows = new Map<
+    string,
+    {
+      isTrading: boolean;
+      previousTradeDate: string | null;
+    }
+  >();
+  const tradingDates: string[] = [];
+  const lines = readFileSync(TRADING_CALENDAR_PATH, 'utf-8').split(/\r?\n/);
+
+  for (const line of lines.slice(1)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const cols = trimmed.split(',');
+    const date = normalizeDateLabel(cols[1] ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const isTrading = (cols[2] ?? '').trim() === '交易';
+    const previousTradeDate = cols[3]?.trim()
+      ? normalizeDateLabel(cols[3] ?? '')
+      : null;
+    rows.set(date, { isTrading, previousTradeDate });
+    if (isTrading) tradingDates.push(date);
+  }
+
+  tradingDates.sort((a, b) => a.localeCompare(b));
+  tradingCalendarCache = { mtimeMs, rows, tradingDates };
+  return tradingCalendarCache;
+}
+
+function findTradingDateIndex(dates: string[], tradeDate: string): number {
+  let low = 0;
+  let high = dates.length - 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const value = dates[mid];
+    if (value === tradeDate) return mid;
+    if (value < tradeDate) low = mid + 1;
+    else high = mid - 1;
+  }
+  return -low - 1;
+}
+
 export function getBeijingNow(): Date {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
 }
@@ -11,13 +86,29 @@ export function formatTradeDate(date: Date = getBeijingNow()): string {
   return `${y}-${m}-${d}`;
 }
 
-/** 跳过周末，得到下一个自然工作日（不含法定节假日） */
+/** 优先按本地交易日历得到下一个 A 股交易日；无日历时退回工作日估算 */
 export function getNextTradeDateLabel(from: Date = getBeijingNow()): string {
   return shiftTradeDateLabel(formatTradeDate(from), 1);
 }
 
-/** 按 A 股工作日（不含法定节假日）偏移交易日 */
+/** 优先按本地交易日历偏移 A 股交易日；无日历时退回工作日估算 */
 export function shiftTradeDateLabel(tradeDate: string, deltaTradingDays: number): string {
+  const calendar = readTradingCalendar();
+  const normalized = normalizeDateLabel(tradeDate);
+  if (calendar && calendar.tradingDates.length > 0) {
+    const delta = Math.trunc(deltaTradingDays);
+    if (delta === 0) return normalized;
+
+    const foundIndex = findTradingDateIndex(calendar.tradingDates, normalized);
+    const insertionIndex = foundIndex >= 0 ? foundIndex : -foundIndex - 1;
+    const targetIndex =
+      delta > 0
+        ? (foundIndex >= 0 ? foundIndex + delta : insertionIndex + delta - 1)
+        : (foundIndex >= 0 ? foundIndex + delta : insertionIndex + delta);
+    const target = calendar.tradingDates[targetIndex];
+    if (target) return target;
+  }
+
   const [y, m, d] = tradeDate.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   let remaining = Math.abs(Math.trunc(deltaTradingDays));
@@ -31,20 +122,24 @@ export function shiftTradeDateLabel(tradeDate: string, deltaTradingDays: number)
 }
 
 export function getPreviousTradeDateLabel(from: Date = getBeijingNow()): string {
-  return shiftTradeDateLabel(formatTradeDate(from), -1);
+  const tradeDate = formatTradeDate(from);
+  const calendar = readTradingCalendar();
+  const previous = calendar?.rows.get(tradeDate)?.previousTradeDate;
+  if (previous) return previous;
+  return shiftTradeDateLabel(tradeDate, -1);
 }
 
 /** 收盘后（15:05+）期望本地 CSV 已包含当日；盘前则期望上一交易日 */
 export function getExpectedMarketDataDate(now: Date = getBeijingNow()): string {
   const tradeDate = formatTradeDate(now);
-  if (!isWeekday(now)) return getPreviousTradeDateLabel(now);
+  if (!isMarketTradingDay(now)) return getPreviousTradeDateLabel(now);
   const minutes = now.getHours() * 60 + now.getMinutes();
   if (minutes >= 15 * 60 + 5) return tradeDate;
   return getPreviousTradeDateLabel(now);
 }
 
 export function isPreMarketMorningWindow(date: Date = getBeijingNow()): boolean {
-  if (!isWeekday(date)) return false;
+  if (!isMarketTradingDay(date)) return false;
   const minutes = date.getHours() * 60 + date.getMinutes();
   return minutes >= 7 * 60 && minutes < 9 * 60 + 30;
 }
@@ -61,6 +156,14 @@ export const MARKET_DATA_REMINDER_SCHEDULE_LABEL =
 export function isWeekday(date: Date = getBeijingNow()): boolean {
   const day = date.getDay();
   return day >= 1 && day <= 5;
+}
+
+export function isMarketTradingDay(date: Date = getBeijingNow()): boolean {
+  const calendar = readTradingCalendar();
+  const tradeDate = formatTradeDate(date);
+  const row = calendar?.rows.get(tradeDate);
+  if (row) return row.isTrading;
+  return isWeekday(date);
 }
 
 export const STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT = 15;
@@ -80,7 +183,7 @@ export const STOCK_INTRADAY_MONITOR_SCHEDULE_LABEL =
 
 /** 9:30–11:30、13:00–15:00 */
 export function isTradingSession(date: Date = getBeijingNow()): boolean {
-  if (!isWeekday(date)) return false;
+  if (!isMarketTradingDay(date)) return false;
   const seconds = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
   const morning = seconds >= (9 * 60 + 30) * 60 && seconds <= (11 * 60 + 30) * 60;
   const afternoon = seconds >= 13 * 60 * 60 && seconds <= 15 * 60 * 60;
@@ -113,7 +216,7 @@ export function isEtfTPlusRunWindow(date: Date = getBeijingNow()): boolean {
 
 /** 股票动量窗口：15:05 起（日 K 完整后再选股） */
 export function isPostMarketWindow(date: Date = getBeijingNow()): boolean {
-  if (!isWeekday(date)) return false;
+  if (!isMarketTradingDay(date)) return false;
   const minutes = date.getHours() * 60 + date.getMinutes();
   return minutes >= 15 * 60 + 5;
 }

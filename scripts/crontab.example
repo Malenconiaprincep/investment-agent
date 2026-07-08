@@ -8,7 +8,8 @@
 # 需在 packages/agent-core/.env 设置 INVESTMENT_AGENT_MARKET_SYNC_SOURCE，或把 --source 改成你的下载目录
 0 17 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm market-data:sync >> /tmp/market-data-sync.log 2>&1
 
-# 智能选股 — 早盘 / 午间 / 午后开盘前 / 尾盘前，自动补充跟踪池
+# 智能选股 — 盘前飞书候选池 / 早盘 / 午间 / 午后开盘前 / 尾盘前
+30 8 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule preopen >> /tmp/screen-cron.log 2>&1
 25 9 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule morning >> /tmp/screen-cron.log 2>&1
 35 11 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule midday >> /tmp/screen-cron.log 2>&1
 50 12 * * 1-5 cd /Users/user/workspace/investment-agent && pnpm screen:schedule noon >> /tmp/screen-cron.log 2>&1

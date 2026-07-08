@@ -4,6 +4,7 @@ import { DATA_DIR } from '../../mastra/config/paths.js';
 
 export type ScheduledTaskId =
   | 'monitor-background'
+  | 'screen-preopen'
   | 'screen-morning'
   | 'screen-midday'
   | 'screen-noon'
@@ -43,6 +44,13 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     label: '消息雷达轮询',
     description: '后台定时扫描候选池、跟踪池和主线快讯',
     scheduleText: '交易日轮询',
+    defaultEnabled: true,
+  },
+  {
+    id: 'screen-preopen',
+    label: '盘前智能选股通知',
+    description: '开盘前先校验行情数据，再生成今日候选池并飞书推送',
+    scheduleText: '交易日 08:30',
     defaultEnabled: true,
   },
   {

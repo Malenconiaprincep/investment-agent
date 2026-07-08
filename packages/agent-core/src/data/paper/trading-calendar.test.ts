@@ -3,8 +3,11 @@ import {
   ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT,
   formatPaperTradeDisplayTime,
   getEtfPaperMonitorIntervalMs,
+  getExpectedMarketDataDate,
   isBeijingTradingSessionFromIso,
+  isMarketTradingDay,
   resolvePaperTradedAt,
+  shiftTradeDateLabel,
 } from './trading-calendar.js';
 
 describe('getEtfPaperMonitorIntervalMs', () => {
@@ -30,6 +33,19 @@ describe('resolvePaperTradedAt', () => {
       side: 'buy',
     });
     expect(Math.abs(Date.now() - new Date(iso).getTime())).toBeLessThan(5_000);
+  });
+});
+
+describe('A-share trading calendar', () => {
+  it('uses local trading calendar for exchange holidays', () => {
+    expect(isMarketTradingDay(new Date('2026-10-01T08:30:00+08:00'))).toBe(false);
+    expect(isMarketTradingDay(new Date('2026-10-08T08:30:00+08:00'))).toBe(true);
+  });
+
+  it('shifts across National Day holiday using real trading dates', () => {
+    expect(shiftTradeDateLabel('2026-09-30', 1)).toBe('2026-10-08');
+    expect(shiftTradeDateLabel('2026-10-01', -1)).toBe('2026-09-30');
+    expect(getExpectedMarketDataDate(new Date('2026-10-01T08:30:00+08:00'))).toBe('2026-09-30');
   });
 });
 

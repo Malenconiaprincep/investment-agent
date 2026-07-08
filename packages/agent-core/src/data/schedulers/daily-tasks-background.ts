@@ -28,6 +28,10 @@ import { runStockIntradayScan } from '../paper/stock-intraday-scan.js';
 import { buildEtfObservationReport } from '../paper/etf-observation.js';
 import { runDailyWatchlistSnapshot } from '../watchlist/jobs.js';
 import { runSectorScreenStream } from '../../api/run-sector-screen-stream.js';
+import {
+  runPreopenScreeningNotification,
+  type PreopenScreeningRunResult,
+} from '../screening/preopen-screening.js';
 import { DATA_DIR } from '../../mastra/config/paths.js';
 import {
   type DailyCsvUpdateResult,
@@ -59,8 +63,8 @@ import {
   getBeijingNow,
   getEtfPaperMonitorIntervalMs,
   getStockIntradayMonitorIntervalMs,
+  isMarketTradingDay,
   isTradingSession,
-  isWeekday,
   STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT,
 } from '../paper/trading-calendar.js';
 
@@ -160,7 +164,7 @@ function recordTaskLog(input: {
 }
 
 function appendScreenTaskLog(
-  stage: 'morning' | 'midday' | 'noon' | 'afternoon',
+  stage: 'preopen' | 'morning' | 'midday' | 'noon' | 'afternoon',
   startedAt: string,
   outcome: {
     query?: string;
@@ -170,6 +174,12 @@ function appendScreenTaskLog(
     candidateCount?: number;
     elapsedMs?: number;
     watchlistAdded?: number;
+    dataQualityScore?: number;
+    dataQualityPassed?: boolean;
+    dataQualityFail?: number;
+    dataQualityWarn?: number;
+    skipped?: boolean;
+    reason?: string;
   },
 ) {
   mkdirSync(DATA_DIR, { recursive: true });
@@ -185,6 +195,24 @@ function appendScreenTaskLog(
     })}\n`,
     'utf-8',
   );
+}
+
+function preopenOutcome(result: PreopenScreeningRunResult) {
+  return {
+    query: result.screening?.query,
+    passed: result.screening?.passed,
+    sessionId: result.screening?.sessionId,
+    sectorCount: result.screening?.sectors.length,
+    candidateCount: result.screening?.candidates.length,
+    elapsedMs: result.screening?.elapsedMs,
+    watchlistAdded: result.screening?.watchlistSync?.added.length ?? 0,
+    dataQualityScore: result.dataQuality.score,
+    dataQualityPassed: result.dataQuality.passed,
+    dataQualityFail: result.dataQuality.summary.fail,
+    dataQualityWarn: result.dataQuality.summary.warn,
+    skipped: result.skipped,
+    reason: result.reason,
+  };
 }
 
 function appendDailyCsvUpdateLog(input: {
@@ -484,7 +512,34 @@ function createScreenTask(input: {
   };
 }
 
+function createPreopenScreenTask(): DailyTaskDef {
+  return {
+    id: 'screen-preopen',
+    label: '盘前智能选股通知',
+    hour: 8,
+    minute: 30,
+    run: async () => {
+      const startedAt = new Date().toISOString();
+      const result = await runPreopenScreeningNotification({
+        maxCandidates: 10,
+        lookbackDays: 14,
+      });
+      const outcome = preopenOutcome(result);
+      appendScreenTaskLog('preopen', startedAt, outcome);
+
+      return {
+        skipped: result.skipped,
+        reason: result.reason,
+        summary: result.screening?.sessionId
+          ? `数据 ${result.dataQuality.score} 分 · 记录 ${result.screening.sessionId} · 候选 ${result.screening.candidates.length} 只 · 入池 ${result.screening.watchlistSync?.added.length ?? 0} 只`
+          : `数据 ${result.dataQuality.score} 分 · ${result.reason ?? '未生成候选池'}`,
+      };
+    },
+  };
+}
+
 const DAILY_TASKS: DailyTaskDef[] = [
+  createPreopenScreenTask(),
   createScreenTask({
     id: 'screen-morning',
     stage: 'morning',
@@ -939,15 +994,16 @@ async function runDueTasks(
   options?: { catchUpFixedTasks?: boolean },
 ) {
   const tradeDate = formatTradeDate(now);
+  const isTradingDay = isMarketTradingDay(now);
   const dueCheck = createDailyTaskDueCheck({
     now,
     tradeDate,
-    isTradingDay: isWeekday(now),
+    isTradingDay,
     previous: lastDailyTaskDueCursor,
   });
   lastDailyTaskDueCursor = dueCheck.cursor;
   const fixedTaskDueWindow: DailyTaskDueWindow | null =
-    options?.catchUpFixedTasks && isWeekday(now)
+    options?.catchUpFixedTasks && isTradingDay
       ? {
           tradeDate,
           afterMinuteOfDay: -1,
@@ -1041,6 +1097,7 @@ export function startDailyTasksBackgroundWorker() {
     getStockIntradayMonitorIntervalMs() / 60_000 ||
     STOCK_INTRADAY_MONITOR_INTERVAL_MINUTES_DEFAULT;
   const schedule = [
+    `08:30 盘前智能选股通知`,
     `09:25 智能选股（早盘）`,
     `11:35 智能选股（午间）`,
     `12:50 智能选股（午后开盘前）`,

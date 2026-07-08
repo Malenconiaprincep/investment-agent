@@ -8,7 +8,7 @@ import {
   formatTradeDate,
   getBeijingNow,
   getExpectedMarketDataDate,
-  isWeekday,
+  isMarketTradingDay,
 } from './trading-calendar.js';
 
 export type MarketDataFreshness = {
@@ -30,7 +30,7 @@ function maxDateKey(a: string | null, b: string | null): string | null {
 
 export function checkMarketDataFreshness(now = getBeijingNow()): MarketDataFreshness {
   const tradeDate = formatTradeDate(now);
-  const isTradingDay = isWeekday(now);
+  const isTradingDay = isMarketTradingDay(now);
   const expectedDataDate = getExpectedMarketDataDate(now);
   const expectedKey = normalizeTradeDateKey(expectedDataDate);
 
