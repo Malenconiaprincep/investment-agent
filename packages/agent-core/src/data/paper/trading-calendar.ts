@@ -81,9 +81,9 @@ export const STOCK_INTRADAY_MONITOR_SCHEDULE_LABEL =
 /** 9:30–11:30、13:00–15:00 */
 export function isTradingSession(date: Date = getBeijingNow()): boolean {
   if (!isWeekday(date)) return false;
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  const morning = minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30;
-  const afternoon = minutes >= 13 * 60 && minutes <= 15 * 60;
+  const seconds = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
+  const morning = seconds >= (9 * 60 + 30) * 60 && seconds <= (11 * 60 + 30) * 60;
+  const afternoon = seconds >= 13 * 60 * 60 && seconds <= 15 * 60 * 60;
   return morning || afternoon;
 }
 
@@ -93,6 +93,8 @@ export function isEtfAutoRunWindow(date: Date = getBeijingNow()): boolean {
 }
 
 export const ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT = 30;
+export const ETF_T_PLUS_SCHEDULE_LABEL =
+  'ETF 正T仓：初始化同步 ETF 仓底仓一次，之后交易时段每 30 分钟按自身持仓和监听盘口价做正T模拟';
 
 export function getEtfPaperMonitorIntervalMs(
   envMinutes: string | undefined = process.env.ETF_PAPER_MONITOR_INTERVAL_MINUTES,
@@ -102,6 +104,11 @@ export function getEtfPaperMonitorIntervalMs(
     return ETF_PAPER_MONITOR_INTERVAL_MINUTES_DEFAULT * 60 * 1000;
   }
   return parsed * 60 * 1000;
+}
+
+/** ETF 正T观察窗口：交易时段内按监听间隔运行。 */
+export function isEtfTPlusRunWindow(date: Date = getBeijingNow()): boolean {
+  return isTradingSession(date);
 }
 
 /** 股票动量窗口：15:05 起（日 K 完整后再选股） */
@@ -156,13 +163,15 @@ export function isBeijingTradingSessionFromIso(iso: string): boolean {
     timeZone: 'Asia/Shanghai',
     hour: 'numeric',
     minute: 'numeric',
+    second: 'numeric',
     hour12: false,
   }).formatToParts(date);
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
-  const minutes = hour * 60 + minute;
-  const morning = minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30;
-  const afternoon = minutes >= 13 * 60 && minutes <= 15 * 60;
+  const second = Number(parts.find((p) => p.type === 'second')?.value ?? 0);
+  const seconds = hour * 3600 + minute * 60 + second;
+  const morning = seconds >= (9 * 60 + 30) * 60 && seconds <= (11 * 60 + 30) * 60;
+  const afternoon = seconds >= 13 * 60 * 60 && seconds <= 15 * 60 * 60;
   return morning || afternoon;
 }
 

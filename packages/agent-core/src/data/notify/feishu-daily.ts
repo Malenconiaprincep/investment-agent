@@ -140,8 +140,10 @@ export function buildStockPaperLines(result: PaperAutoPipelineResult): string[] 
 }
 
 export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): string[] {
+  const label = result.bucket === 'etf-t-plus' ? 'ETF 正T仓' : 'ETF 仓';
   const lines = [
     `时间：${beijingTimeLabel()}`,
+    `分仓：${label}`,
     `交易日：${result.tradeDate}`,
   ];
 
@@ -160,6 +162,8 @@ export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): strin
   if (result.buys?.length) parts.push(`买入 ${result.buys.length} 笔`);
   if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
   if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
+  if (result.tPlusEntries?.length) parts.push(`正T买入待卖 ${result.tPlusEntries.length} 笔`);
+  if (result.tPlusTrades?.length) parts.push(`正T ${result.tPlusTrades.length} 笔`);
   lines.push(`状态：${parts.length > 0 ? parts.join(' · ') : '监听完成，无成交'}`);
 
   if (result.reason) lines.push(`说明：${result.reason}`);
@@ -173,6 +177,28 @@ export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): strin
     lines.push('', '成交：', ...allTrades);
   }
 
+  if (result.tPlusTrades?.length) {
+    lines.push(
+      '',
+      '正T完成：',
+      ...result.tPlusTrades.map(
+        (trade) =>
+          `${trade.name}(${trade.symbol}) ${trade.shares} 份 · ${trade.buyPrice.toFixed(3)}→${trade.sellPrice.toFixed(3)} · 利润 ${trade.profit >= 0 ? '+' : ''}${trade.profit.toFixed(2)} 元`,
+      ),
+    );
+  }
+
+  if (result.tPlusEntries?.length) {
+    lines.push(
+      '',
+      '正T待卖：',
+      ...result.tPlusEntries.map(
+        (trade) =>
+          `${trade.name}(${trade.symbol}) ${trade.shares} 份 · 买入 ${trade.buyPrice.toFixed(3)} · 当前跌幅 ${trade.dipPct.toFixed(2)}%`,
+      ),
+    );
+  }
+
   if (result.targets?.length) {
     lines.push(
       '',
@@ -183,7 +209,7 @@ export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): strin
   if (result.equity) {
     lines.push(
       '',
-      `ETF 仓市值：${result.equity.totalValue.toFixed(0)} 元 · 累计 ${result.equity.returnPct >= 0 ? '+' : ''}${result.equity.returnPct.toFixed(2)}%`,
+      `${label}市值：${result.equity.totalValue.toFixed(0)} 元 · 累计 ${result.equity.returnPct >= 0 ? '+' : ''}${result.equity.returnPct.toFixed(2)}%`,
     );
   }
 
@@ -194,7 +220,9 @@ export function hasEtfPaperTrades(result: EtfPaperPipelineResult): boolean {
   return (
     (result.buys?.length ?? 0) +
       (result.sells?.length ?? 0) +
-      (result.stopLosses?.length ?? 0) >
+      (result.stopLosses?.length ?? 0) +
+      (result.tPlusEntries?.length ?? 0) +
+      (result.tPlusTrades?.length ?? 0) >
     0
   );
 }
@@ -228,7 +256,10 @@ export async function notifyEtfPaperMonitor(result: EtfPaperPipelineResult): Pro
   if (process.env.FEISHU_NOTIFY_ETF_MONITOR === '0') return;
   if (!hasEtfPaperTrades(result)) return;
 
-  await notifyFeishuPostSafe('🤖 ETF 模拟盘', buildEtfPaperMonitorLines(result));
+  await notifyFeishuPostSafe(
+    result.bucket === 'etf-t-plus' ? '🤖 ETF 正T仓' : '🤖 ETF 模拟盘',
+    buildEtfPaperMonitorLines(result),
+  );
 }
 
 export async function notifyDailyTaskFailure(

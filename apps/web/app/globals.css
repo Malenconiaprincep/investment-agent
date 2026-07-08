@@ -3571,6 +3571,12 @@ a:hover {
   color: #9bc7e3;
 }
 
+.paper-daily-trade-bucket--etf-t-plus .paper-daily-trade-bucket-head strong {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: #e6c76f;
+}
+
 .paper-daily-trade-bucket--stock .paper-daily-trade-bucket-head strong {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, transparent);

@@ -26,6 +26,13 @@ function shouldUseLocalWatchlistExec(baseUrl: string): boolean {
   );
 }
 
+function shouldUseLocalPaperExec(baseUrl: string): boolean {
+  return (
+    process.env.AGENT_CORE_PAPER_LOCAL_EXEC !== '0' &&
+    isLocalAgentCoreUrl(baseUrl)
+  );
+}
+
 export function getAgentCoreConfig(): AgentCoreConfig {
   const baseUrl = process.env.AGENT_CORE_URL?.trim().replace(/\/$/, '');
   if (!baseUrl) {
@@ -166,6 +173,16 @@ export async function runAgentCoreMonitorJson(args: string[]): Promise<string> {
 }
 
 export async function runAgentCorePaperJson(args: string[]): Promise<string> {
+  const { baseUrl } = getAgentCoreConfig();
+  if (shouldUseLocalPaperExec(baseUrl)) {
+    try {
+      return await runAgentCoreLocalCli('paper-json.ts', args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`本地模拟盘执行失败: ${message}`);
+    }
+  }
+
   return callAgentCoreCli('paper', args);
 }
 

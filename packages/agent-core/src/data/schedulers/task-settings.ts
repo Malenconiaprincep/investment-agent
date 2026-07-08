@@ -13,6 +13,7 @@ export type ScheduledTaskId =
   | 'etf-tail-pick'
   | 'etf-daily-csv-update'
   | 'etf-observation-snapshot'
+  | 'etf-t-plus-paper'
   | 'watchlist-snapshot'
   | 'stock-daily-csv-update'
   | 'stock-paper'
@@ -90,6 +91,13 @@ const TASKS: Array<Omit<ScheduledTaskStatus, 'enabled'> & { defaultEnabled: bool
     id: 'etf-paper-monitor',
     label: 'ETF 模拟盘监听',
     description: '交易时段按配置间隔检查 ETF 模拟盘买卖信号',
+    scheduleText: '交易时段轮询',
+    defaultEnabled: true,
+  },
+  {
+    id: 'etf-t-plus-paper',
+    label: 'ETF 正T仓监听',
+    description: '交易时段按配置间隔，只检查 ETF 正T仓自身持仓的正T机会',
     scheduleText: '交易时段轮询',
     defaultEnabled: true,
   },

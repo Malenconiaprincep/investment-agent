@@ -89,8 +89,8 @@ const ETF_NEWS_PROFILES: EtfNewsProfile[] = [
   { symbol: '515980', name: '人工智能ETF', keywords: ['人工智能', 'AI', '算力', '大模型'] },
   {
     symbol: '159781',
-    name: '新能源车ETF',
-    keywords: ['新能源', '汽车', '锂电', '电动车', '特斯拉'],
+    name: '科创创业ETF易方达',
+    keywords: ['科创', '创业板', '双创', '科创创业', '成长'],
   },
   { symbol: '516160', name: '新能源ETF', keywords: ['新能源', '锂电', '储能', '光伏', '风电'] },
   {

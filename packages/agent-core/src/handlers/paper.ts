@@ -4,6 +4,7 @@ import {
   listPaperTrades,
   listEquitySnapshots,
   setPaperBucketCapital,
+  clonePaperBucket,
 } from '../data/paper/store.js';
 import type { PaperBucket } from '../data/paper/bucket.js';
 import { PAPER_BUCKETS, parsePaperBucket } from '../data/paper/bucket.js';
@@ -132,6 +133,27 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     return JSON.stringify(result);
   }
 
+  if (command === 'etf-t-plus-init') {
+    return JSON.stringify(
+      await clonePaperBucket({
+        source: 'etf',
+        target: 'etf-t-plus',
+        overwrite: args.includes('--force'),
+      }),
+    );
+  }
+
+  if (command === 'etf-t-plus-auto-run') {
+    const { runEtfTPlusPaperPipeline } = await import(
+      '../data/paper/etf-paper-pipeline.js'
+    );
+    const { notifyEtfPaperMonitor } = await import('../data/notify/feishu-daily.js');
+    const force = args.includes('--force');
+    const result = await runEtfTPlusPaperPipeline({ force });
+    await notifyEtfPaperMonitor(result);
+    return JSON.stringify(result);
+  }
+
   if (command === 'fix-etf-probe') {
     const { rebalanceEtfToProbePosition } = await import(
       '../data/paper/etf-paper-pipeline.js'
@@ -149,7 +171,7 @@ export async function dispatchPaper(args: string[]): Promise<string> {
 
     if (!side || !symbol || !name || !shares) {
       throw new Error(
-        'Usage: trade <buy|sell> <symbol> <name> <shares> [price] [--bucket etf|stock]',
+        'Usage: trade <buy|sell> <symbol> <name> <shares> [price] [--bucket etf|etf-t-plus|stock]',
       );
     }
 
@@ -171,6 +193,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-observation [--snapshot]|etf-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|etf-t-plus|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-observation [--snapshot]|etf-auto-run|etf-t-plus-init [--force]|etf-t-plus-auto-run|fix-etf-probe|trade ...',
   );
 }

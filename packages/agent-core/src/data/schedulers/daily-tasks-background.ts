@@ -13,7 +13,10 @@ import {
 } from '../notify/feishu-daily.js';
 import { notifyStockIntradayCandidates } from '../notify/feishu-realtime.js';
 import { isFeishuNotifyEnabled } from '../notify/feishu.js';
-import { runEtfPaperAutoPipeline } from '../paper/etf-paper-pipeline.js';
+import {
+  runEtfPaperAutoPipeline,
+  runEtfTPlusPaperPipeline,
+} from '../paper/etf-paper-pipeline.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import {
   runStockBacktestPaperPipeline,
@@ -91,6 +94,7 @@ export type StockDailyCsvUpdateRunResult = {
 
 const completedKeys = new Set<string>();
 let lastEtfPaperRunMs = 0;
+let lastEtfTPlusRunMs = 0;
 let lastStockIntradayRunMs = 0;
 let lastStockBacktestNewsExitRunMs = 0;
 let lastStockBacktestExitRunMs = 0;
@@ -863,6 +867,73 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
   }
 }
 
+async function runEtfTPlusPaperMonitor(now = getBeijingNow()) {
+  if (!isScheduledTaskEnabled('etf-t-plus-paper')) return;
+  if (!isTradingSession(now)) return;
+
+  const intervalMs = getEtfPaperMonitorIntervalMs();
+  const nowMs = now.getTime();
+  if (lastEtfTPlusRunMs > 0 && nowMs - lastEtfTPlusRunMs < intervalMs) return;
+
+  lastEtfTPlusRunMs = nowMs;
+  const tradeDate = formatTradeDate(now);
+  const label = 'ETF 正T仓监听';
+  const startedAt = new Date().toISOString();
+  try {
+    const result = await runEtfTPlusPaperPipeline();
+    if (result.skipped) {
+      logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+      recordTaskLog({
+        taskId: 'etf-t-plus-paper',
+        label,
+        tradeDate,
+        status: 'skipped',
+        reason: result.reason ?? '非执行窗口',
+        startedAt,
+      });
+      return;
+    }
+
+    await notifyEtfPaperMonitor(result);
+    const count = result.tPlusTrades?.length ?? 0;
+    const entryCount = result.tPlusEntries?.length ?? 0;
+    const summary =
+      count > 0
+        ? `正T ${count} 笔 · ${result.tPlusTrades
+            ?.map((trade) => `${trade.name}+${trade.profit.toFixed(2)}`)
+            .join('、')}`
+        : entryCount > 0
+          ? `正T买入待卖 ${entryCount} 笔 · ${result.tPlusEntries
+              ?.map((trade) => `${trade.name}@${trade.buyPrice.toFixed(3)}`)
+              .join('、')}`
+        : result.reason ?? '无正T机会';
+    logInfo(`${label} 完成：${summary}`);
+    recordTaskLog({
+      taskId: 'etf-t-plus-paper',
+      label,
+      tradeDate,
+      status: 'completed',
+      summary,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
+  } catch (error) {
+    lastEtfTPlusRunMs = 0;
+    const message = error instanceof Error ? error.message : String(error);
+    logError(`${label} 失败：${message}`);
+    recordTaskLog({
+      taskId: 'etf-t-plus-paper',
+      label,
+      tradeDate,
+      status: 'failed',
+      reason: message,
+      elapsedMs: Date.now() - Date.parse(startedAt),
+      startedAt,
+    });
+    await notifyDailyTaskFailure(label, message);
+  }
+}
+
 async function runDueTasks(
   now = getBeijingNow(),
   options?: { catchUpFixedTasks?: boolean },
@@ -885,6 +956,7 @@ async function runDueTasks(
       : dueCheck.window;
 
   await runEtfPaperMonitor(now);
+  await runEtfTPlusPaperMonitor(now);
   await tickStockBacktestPaperExitMonitor(now);
   await runStockIntradayMonitor(now);
 
@@ -977,6 +1049,7 @@ export function startDailyTasksBackgroundWorker() {
     `10:00 ETF 承接确认`,
     `14:45 ETF 尾盘推荐`,
     `交易时段每 ${etfIntervalMin} 分钟 ETF 模拟盘监听`,
+    `交易时段每 ${etfIntervalMin} 分钟 ETF 正T仓监听`,
     `交易时段每 ${stockIntervalMin} 分钟 股票实时信号扫描`,
     `15:05 股票模拟盘选股`,
     `08:00 行情数据提醒 / 回测策略仓买入 / 回测+新闻仓买入`,
@@ -1000,6 +1073,7 @@ export function startDailyTasksBackgroundWorker() {
 export function resetDailyTasksForTests() {
   completedKeys.clear();
   lastEtfPaperRunMs = 0;
+  lastEtfTPlusRunMs = 0;
   lastStockIntradayRunMs = 0;
   lastStockBacktestNewsExitRunMs = 0;
   lastDailyTaskDueCursor = null;
@@ -1014,6 +1088,7 @@ export function resetDailyTasksForTests() {
 export async function runDailyTasksNow() {
   completedKeys.clear();
   lastEtfPaperRunMs = 0;
+  lastEtfTPlusRunMs = 0;
   lastStockIntradayRunMs = 0;
   lastDailyTaskDueCursor = null;
   await runDueTasks(getBeijingNow(), { catchUpFixedTasks: true });

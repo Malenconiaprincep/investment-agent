@@ -60,6 +60,10 @@ describe('isBeijingTradingSessionFromIso', () => {
     expect(isBeijingTradingSessionFromIso('2026-06-24T06:22:53.702Z')).toBe(true);
   });
 
+  it('rejects seconds after close', () => {
+    expect(isBeijingTradingSessionFromIso('2026-07-08T07:00:36.824Z')).toBe(false);
+  });
+
   it('rejects midnight', () => {
     expect(isBeijingTradingSessionFromIso('2026-06-24T16:01:59.914Z')).toBe(false);
   });

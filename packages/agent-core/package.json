@@ -17,6 +17,7 @@
     "eval:all": "tsx src/eval/run-all.ts",
     "eval:workflow": "tsx src/eval/workflow-run.ts",
     "eval:screen": "tsx src/eval/screen-committee-run.ts",
+    "harness:data-quality": "tsx src/cli/data-quality-harness.ts",
     "research": "tsx src/cli/research.ts",
     "research:json": "tsx src/cli/research-json.ts",
     "research:stream": "tsx src/cli/research-stream.ts",

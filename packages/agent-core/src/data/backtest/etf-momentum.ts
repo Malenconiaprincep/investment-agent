@@ -118,7 +118,7 @@ const ETF_THEME_BY_SYMBOL: Record<string, string> = {
   '159530': 'robotics',
   '159995': 'semiconductor',
   '515980': 'ai',
-  '159781': 'new-energy-vehicle',
+  '159781': 'sci-tech-startup',
   '516160': 'new-energy',
   '159808': 'growth',
   '159920': 'dividend',

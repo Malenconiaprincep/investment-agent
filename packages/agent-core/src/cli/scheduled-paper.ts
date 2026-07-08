@@ -6,15 +6,20 @@ import {
   runPaperAutoPipeline,
   runStockPaperAutoPipeline,
 } from '../data/paper/auto-pipeline.js';
-import { runEtfPaperAutoPipeline } from '../data/paper/etf-paper-pipeline.js';
+import {
+  runEtfPaperAutoPipeline,
+  runEtfTPlusPaperPipeline,
+} from '../data/paper/etf-paper-pipeline.js';
 import { DATA_DIR } from '../mastra/config/paths.js';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-paper.log');
 
-type PaperScheduleTarget = 'etf' | 'stock' | 'all';
+type PaperScheduleTarget = 'etf' | 'etf-t-plus' | 'stock' | 'all';
 
 function resolveTarget(arg?: string): PaperScheduleTarget {
-  if (arg === 'etf' || arg === 'stock' || arg === 'all') return arg;
+  if (arg === 'etf' || arg === 'etf-t-plus' || arg === 'stock' || arg === 'all') {
+    return arg;
+  }
   return 'all';
 }
 
@@ -32,6 +37,9 @@ async function main() {
   if (target === 'etf') {
     const etf = await runEtfPaperAutoPipeline();
     result = { tradeDate: etf.tradeDate, etf };
+  } else if (target === 'etf-t-plus') {
+    const etfTPlus = await runEtfTPlusPaperPipeline();
+    result = { tradeDate: etfTPlus.tradeDate, etfTPlus };
   } else if (target === 'stock') {
     const stock = await runStockPaperAutoPipeline();
     result = { tradeDate: stock.tradeDate, stock };

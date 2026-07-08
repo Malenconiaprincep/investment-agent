@@ -14,7 +14,7 @@ export const ETF_POOL_19: EtfPoolItem[] = [
   { exchangeCode: 'sz159530', symbol: '159530', name: '机器人ETF' },
   { exchangeCode: 'sz159995', symbol: '159995', name: '芯片ETF华夏' },
   { exchangeCode: 'sh515980', symbol: '515980', name: '人工智能ETF' },
-  { exchangeCode: 'sz159781', symbol: '159781', name: '新能源车ETF' },
+  { exchangeCode: 'sz159781', symbol: '159781', name: '科创创业ETF易方达' },
   { exchangeCode: 'sh516160', symbol: '516160', name: '新能源ETF' },
   { exchangeCode: 'sz159808', symbol: '159808', name: '创业板成长ETF' },
   { exchangeCode: 'sz159920', symbol: '159920', name: '红利ETF' },

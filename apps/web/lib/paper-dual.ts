@@ -1,5 +1,6 @@
 export type PaperBucketKey =
   | 'etf'
+  | 'etf-t-plus'
   | 'stock'
   | 'stock-backtest'
   | 'stock-backtest-news';
@@ -32,6 +33,7 @@ export type BucketSummary = {
 
 export type DualPaperPayload = {
   etf: BucketSummary;
+  etfTPlus: BucketSummary;
   stock: BucketSummary;
   stockBacktest: BucketSummary;
   stockBacktestNews: BucketSummary;
@@ -58,6 +60,7 @@ const EMPTY_BUCKET = (bucket: PaperBucketKey): BucketSummary => ({
 function isPaperBucketKey(value: unknown): value is PaperBucketKey {
   return (
     value === 'etf' ||
+    value === 'etf-t-plus' ||
     value === 'stock' ||
     value === 'stock-backtest' ||
     value === 'stock-backtest-news'
@@ -68,6 +71,7 @@ function isDualPaperPayload(raw: Record<string, unknown>): raw is DualPaperPaylo
   return (
     raw.etf != null &&
     typeof raw.etf === 'object' &&
+    (raw.etfTPlus == null || typeof raw.etfTPlus === 'object') &&
     raw.stock != null &&
     typeof raw.stock === 'object' &&
     raw.combined != null &&
@@ -130,6 +134,11 @@ export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
   const data = raw as Record<string, unknown>;
   if (isDualPaperPayload(data)) {
     const etf = normalizeBucketSummary(data.etf as Record<string, unknown>, 'etf');
+    const etfTPlus = normalizeBucketSummary(
+      (data.etfTPlus as Record<string, unknown> | undefined) ??
+        EMPTY_BUCKET('etf-t-plus'),
+      'etf-t-plus',
+    );
     const stock = normalizeBucketSummary(data.stock as Record<string, unknown>, 'stock');
     const stockBacktest = normalizeBucketSummary(
       (data.stockBacktest as Record<string, unknown> | undefined) ??
@@ -142,9 +151,10 @@ export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
       'stock-backtest-news',
     );
     const combinedRaw = data.combined as Record<string, unknown>;
-    const buckets = [etf, stock, stockBacktest, stockBacktestNews];
+    const buckets = [etf, etfTPlus, stock, stockBacktest, stockBacktestNews];
     return {
       etf,
+      etfTPlus,
       stock,
       stockBacktest,
       stockBacktestNews,
@@ -166,24 +176,28 @@ export function normalizeDualPaperPayload(raw: unknown): DualPaperPayload {
 
   const stock = normalizeBucketSummary(data, 'stock');
   const etf = EMPTY_BUCKET('etf');
+  const etfTPlus = EMPTY_BUCKET('etf-t-plus');
   etf.tradeDate = stock.tradeDate;
   etf.isTradingSession = stock.isTradingSession;
+  etfTPlus.tradeDate = stock.tradeDate;
+  etfTPlus.isTradingSession = stock.isTradingSession;
 
   return {
     etf,
+    etfTPlus,
     stock,
     stockBacktest: EMPTY_BUCKET('stock-backtest'),
     stockBacktestNews: EMPTY_BUCKET('stock-backtest-news'),
-    combined: buildCombined([etf, stock]),
+    combined: buildCombined([etf, etfTPlus, stock]),
   };
 }
 
 export const PAPER_BUCKET_TABS: Array<{
-  key: 'combined' | PaperBucketKey;
+  key: PaperBucketKey;
   label: string;
 }> = [
-  { key: 'combined', label: '总览' },
   { key: 'etf', label: 'ETF 仓' },
+  { key: 'etf-t-plus', label: 'ETF 正T仓' },
   { key: 'stock', label: '股票仓' },
   { key: 'stock-backtest', label: '股票仓（回测策略）' },
   { key: 'stock-backtest-news', label: '股票仓（回测+新闻）' },
@@ -199,6 +213,7 @@ export function resolvePaperView(
       account: {
         cash:
           dual.etf.account.cash +
+          dual.etfTPlus.account.cash +
           dual.stock.account.cash +
           dual.stockBacktest.account.cash +
           dual.stockBacktestNews.account.cash,
@@ -207,6 +222,7 @@ export function resolvePaperView(
       totalValue: dual.combined.totalValue,
       marketValue:
         dual.etf.marketValue +
+        dual.etfTPlus.marketValue +
         dual.stock.marketValue +
         dual.stockBacktest.marketValue +
         dual.stockBacktestNews.marketValue,
@@ -215,6 +231,7 @@ export function resolvePaperView(
       isTradingSession: dual.combined.isTradingSession,
       positions: [
         ...dual.etf.positions,
+        ...dual.etfTPlus.positions,
         ...dual.stock.positions,
         ...dual.stockBacktest.positions,
         ...dual.stockBacktestNews.positions,
@@ -224,6 +241,7 @@ export function resolvePaperView(
 
   if (bucket === 'stock-backtest') return dual.stockBacktest;
   if (bucket === 'stock-backtest-news') return dual.stockBacktestNews;
+  if (bucket === 'etf-t-plus') return dual.etfTPlus;
   if (bucket === 'etf') return dual.etf;
   return dual.stock;
 }

@@ -13,8 +13,10 @@ import {
   BUCKET_INITIAL_CASH,
   BUCKET_LABELS,
   BUCKET_MAX_POSITIONS,
+  ETF_T_PLUS_BUCKET,
   PAPER_BUCKETS,
   STOCK_POSITION_BUDGET_PCT,
+  isEtfPaperBucket,
   type PaperBucket,
   resolvePaperBucket,
 } from './bucket.js';
@@ -678,6 +680,7 @@ export async function executePaperTrade(input: {
   source?: 'manual' | 'auto';
   note?: string;
   entryMemo?: string;
+  tradedAt?: string;
   skipSessionCheck?: boolean;
   skipT1Check?: boolean;
   useOrderBookPrice?: boolean;
@@ -713,7 +716,7 @@ export async function executePaperTrade(input: {
 
   const db = await getDb();
   const account = await getOrCreatePaperAccount(bucket);
-  const isEtfTrade = bucket === 'etf';
+  const isEtfTrade = isEtfPaperBucket(bucket);
   const paperSlippageRate = isEtfTrade && !priceIncludesSpread ? ETF_SLIPPAGE_RATE : 0;
   const etfBuyCost =
     isEtfTrade && input.side === 'buy'
@@ -839,7 +842,8 @@ export async function executePaperTrade(input: {
   }
 
   const tradeId = crypto.randomUUID();
-  const tradedAt = resolvePaperTradedAt({ tradeDate, source, side: input.side });
+  const tradedAt =
+    input.tradedAt ?? resolvePaperTradedAt({ tradeDate, source, side: input.side });
   await db.execute({
     sql: `INSERT INTO paper_trades (id, bucket, symbol, name, side, shares, price, amount, traded_at, trade_date, source, note)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -993,17 +997,19 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
 }
 
 export async function getPaperDualSummary() {
-  const [etf, stock, stockBacktest, stockBacktestNews] = await Promise.all([
+  const [etf, etfTPlus, stock, stockBacktest, stockBacktestNews] = await Promise.all([
     getPaperAccountSummary('etf'),
+    getPaperAccountSummary(ETF_T_PLUS_BUCKET),
     getPaperAccountSummary('stock'),
     getPaperAccountSummary('stock-backtest'),
     getPaperAccountSummary('stock-backtest-news'),
   ]);
-  const buckets = [etf, stock, stockBacktest, stockBacktestNews];
+  const buckets = [etf, etfTPlus, stock, stockBacktest, stockBacktestNews];
   const totalInitial = buckets.reduce((sum, item) => sum + item.account.initialCash, 0);
   const totalValue = buckets.reduce((sum, item) => sum + item.totalValue, 0);
   return {
     etf,
+    etfTPlus,
     stock,
     stockBacktest,
     stockBacktestNews,
@@ -1017,6 +1023,234 @@ export async function getPaperDualSummary() {
       tradeDate: etf.tradeDate,
       isTradingSession: etf.isTradingSession,
     },
+  };
+}
+
+export async function clonePaperBucket(input: {
+  source: PaperBucket;
+  target: PaperBucket;
+  overwrite?: boolean;
+}): Promise<{
+  source: PaperBucket;
+  target: PaperBucket;
+  overwritten: boolean;
+  counts: {
+    trades: number;
+    positions: number;
+    lots: number;
+    metas: number;
+    equitySnapshots: number;
+  };
+  sourceSummary: Awaited<ReturnType<typeof getPaperAccountSummary>>;
+  targetSummary: Awaited<ReturnType<typeof getPaperAccountSummary>>;
+}> {
+  if (input.source === input.target) {
+    throw new Error('source and target bucket must be different');
+  }
+
+  const db = await getDb();
+  await saveEquitySnapshot(formatTradeDate(), input.source);
+  const targetAccount = await getOrCreatePaperAccount(input.target);
+  const sourceAccount = await getOrCreatePaperAccount(input.source);
+
+  const existing = await Promise.all([
+    db.execute({
+      sql: `SELECT COUNT(*) AS c FROM paper_trades WHERE bucket = ?`,
+      args: [input.target],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(*) AS c FROM paper_positions WHERE bucket = ?`,
+      args: [input.target],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(*) AS c FROM paper_lots WHERE bucket = ? AND remaining_shares > 0`,
+      args: [input.target],
+    }),
+  ]);
+  const existingCount = existing.reduce(
+    (sum, result) => sum + Number((result.rows[0] as Record<string, unknown>).c ?? 0),
+    0,
+  );
+  if (existingCount > 0 && !input.overwrite) {
+    throw new Error(`${BUCKET_LABELS[input.target]}已有记录；如需重新镜像请使用 --force`);
+  }
+
+  await db.batch([
+    {
+      sql: `DELETE FROM paper_trades WHERE bucket = ?`,
+      args: [input.target],
+    },
+    {
+      sql: `DELETE FROM paper_positions WHERE bucket = ?`,
+      args: [input.target],
+    },
+    {
+      sql: `DELETE FROM paper_lots WHERE bucket = ?`,
+      args: [input.target],
+    },
+    {
+      sql: `DELETE FROM paper_position_meta WHERE bucket = ?`,
+      args: [input.target],
+    },
+    {
+      sql: `DELETE FROM paper_equity_snapshots WHERE bucket = ?`,
+      args: [input.target],
+    },
+    {
+      sql: `DELETE FROM paper_bucket_state WHERE bucket = ?`,
+      args: [input.target],
+    },
+  ]);
+
+  await db.execute({
+    sql: `UPDATE paper_accounts SET cash = ?, initial_cash = ? WHERE id = ?`,
+    args: [sourceAccount.cash, sourceAccount.initialCash, targetAccount.id],
+  });
+
+  const positions = await db.execute({
+    sql: `SELECT * FROM paper_positions WHERE bucket = ? ORDER BY symbol`,
+    args: [input.source],
+  });
+  for (const row of positions.rows) {
+    const r = row as Record<string, unknown>;
+    await db.execute({
+      sql: `INSERT INTO paper_positions (bucket, symbol, name, shares, avg_cost, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        input.target,
+        String(r.symbol),
+        String(r.name),
+        Number(r.shares),
+        Number(r.avg_cost),
+        String(r.updated_at),
+      ],
+    });
+  }
+
+  const lots = await db.execute({
+    sql: `SELECT * FROM paper_lots WHERE bucket = ? ORDER BY buy_date ASC, created_at ASC`,
+    args: [input.source],
+  });
+  for (const row of lots.rows) {
+    const r = row as Record<string, unknown>;
+    await db.execute({
+      sql: `INSERT INTO paper_lots (id, bucket, symbol, shares, remaining_shares, buy_price, buy_date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        crypto.randomUUID(),
+        input.target,
+        String(r.symbol),
+        Number(r.shares),
+        Number(r.remaining_shares),
+        Number(r.buy_price),
+        String(r.buy_date),
+        String(r.created_at),
+      ],
+    });
+  }
+
+  const metas = await db.execute({
+    sql: `SELECT * FROM paper_position_meta WHERE bucket = ? ORDER BY symbol`,
+    args: [input.source],
+  });
+  for (const row of metas.rows) {
+    const r = row as Record<string, unknown>;
+    await db.execute({
+      sql: `INSERT INTO paper_position_meta (bucket, symbol, stop_loss, high_water_mark, entry_memo, entry_date, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        input.target,
+        String(r.symbol),
+        Number(r.stop_loss),
+        Number(r.high_water_mark),
+        r.entry_memo != null ? String(r.entry_memo) : null,
+        String(r.entry_date),
+        String(r.updated_at),
+      ],
+    });
+  }
+
+  const trades = await db.execute({
+    sql: `SELECT * FROM paper_trades WHERE bucket = ? ORDER BY traded_at ASC`,
+    args: [input.source],
+  });
+  for (const row of trades.rows) {
+    const r = row as Record<string, unknown>;
+    await db.execute({
+      sql: `INSERT INTO paper_trades (id, bucket, symbol, name, side, shares, price, amount, traded_at, trade_date, source, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        crypto.randomUUID(),
+        input.target,
+        String(r.symbol),
+        String(r.name),
+        String(r.side),
+        Number(r.shares),
+        Number(r.price),
+        Number(r.amount),
+        String(r.traded_at),
+        r.trade_date != null ? String(r.trade_date) : null,
+        String(r.source ?? 'manual'),
+        r.note != null ? String(r.note) : null,
+      ],
+    });
+  }
+
+  const snapshots = await db.execute({
+    sql: `SELECT * FROM paper_equity_snapshots WHERE bucket = ? ORDER BY trade_date ASC`,
+    args: [input.source],
+  });
+  for (const row of snapshots.rows) {
+    const r = row as Record<string, unknown>;
+    await db.execute({
+      sql: `INSERT INTO paper_equity_snapshots (id, bucket, trade_date, total_value, cash, market_value, return_pct, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        crypto.randomUUID(),
+        input.target,
+        String(r.trade_date),
+        Number(r.total_value),
+        Number(r.cash),
+        Number(r.market_value),
+        Number(r.return_pct),
+        String(r.created_at),
+      ],
+    });
+  }
+
+  const state = await db.execute({
+    sql: `SELECT * FROM paper_bucket_state WHERE bucket = ? LIMIT 1`,
+    args: [input.source],
+  });
+  const stateRow = state.rows[0] as Record<string, unknown> | undefined;
+  if (stateRow) {
+    await db.execute({
+      sql: `INSERT INTO paper_bucket_state (bucket, last_rebalance_date, cooldown_json, updated_at)
+            VALUES (?, ?, ?, ?)`,
+      args: [
+        input.target,
+        stateRow.last_rebalance_date != null
+          ? String(stateRow.last_rebalance_date)
+          : null,
+        stateRow.cooldown_json != null ? String(stateRow.cooldown_json) : null,
+        String(stateRow.updated_at),
+      ],
+    });
+  }
+
+  return {
+    source: input.source,
+    target: input.target,
+    overwritten: existingCount > 0,
+    counts: {
+      trades: trades.rows.length,
+      positions: positions.rows.length,
+      lots: lots.rows.length,
+      metas: metas.rows.length,
+      equitySnapshots: snapshots.rows.length,
+    },
+    sourceSummary: await getPaperAccountSummary(input.source),
+    targetSummary: await getPaperAccountSummary(input.target),
   };
 }
 
