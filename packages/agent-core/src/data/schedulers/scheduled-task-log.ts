@@ -10,10 +10,16 @@ import { DATA_DIR } from '../../mastra/config/paths.js';
 import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
 import type { ScheduledTaskId } from './task-settings.js';
 
-export type ScheduledTaskLogStatus = 'completed' | 'skipped' | 'failed' | 'disabled';
+export type ScheduledTaskLogStatus =
+  | 'running'
+  | 'completed'
+  | 'skipped'
+  | 'failed'
+  | 'disabled';
 export type ScheduledTaskLogSource = 'background-worker' | 'manual';
 
 export type ScheduledTaskLogEntry = {
+  runId?: string;
   taskId: ScheduledTaskId;
   label: string;
   tradeDate: string;
@@ -68,13 +74,19 @@ function readAllScheduledTaskLogEntries(): ScheduledTaskLogEntry[] {
   const cutoff = getScheduledTaskLogRetentionCutoffTradeDate();
   const lines = readFileSync(LOG_PATH, 'utf-8').split('\n').filter(Boolean);
   const entries: ScheduledTaskLogEntry[] = [];
+  const entriesByRunId = new Map<string, ScheduledTaskLogEntry>();
 
   for (const line of lines) {
     const parsed = parseLogLine(line);
     if (!parsed || parsed.tradeDate < cutoff) continue;
-    entries.push(parsed);
+    if (parsed.runId) {
+      entriesByRunId.set(parsed.runId, parsed);
+    } else {
+      entries.push(parsed);
+    }
   }
 
+  entries.push(...entriesByRunId.values());
   entries.sort((a, b) => b.ranAt.localeCompare(a.ranAt));
   return entries;
 }

@@ -50,7 +50,8 @@ export function isStockBacktestPaperBucket(
 export const STOCK_POSITION_BUDGET_PCT = 0.15;
 
 export const ETF_MOMENTUM_TOP_N = 4;
-export const ETF_MOMENTUM_REBALANCE_DAYS = 10;
+/** Stable V2 uses a monthly-like cadence to reduce turnover and execution drag. */
+export const ETF_MOMENTUM_REBALANCE_DAYS = 20;
 export const ETF_MOMENTUM_STOP_LOSS_PCT = -12;
 export const ETF_MOMENTUM_STOP_COOLDOWN_DAYS = 10;
 export const ETF_T_PLUS_BUCKET = 'etf-t-plus' as const;

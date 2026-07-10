@@ -116,6 +116,31 @@ function fmtSignedPct(v: number) {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
+function calcReturnPct(totalValue: number, initialCash: number): number {
+  if (!Number.isFinite(totalValue) || !Number.isFinite(initialCash) || initialCash <= 0) {
+    return 0;
+  }
+  return ((totalValue - initialCash) / initialCash) * 100;
+}
+
+function fmtHeroReturnPct(v: number) {
+  if (!Number.isFinite(v)) return '—';
+  const rounded = Math.abs(v) < 0.01 ? Number(v.toFixed(4)) : Number(v.toFixed(2));
+  if (rounded === 0) return '0.00%';
+  return `${v > 0 ? '+' : ''}${Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(2)}%`;
+}
+
+function fmtHeroSignedMoney(v: number) {
+  if (!Number.isFinite(v)) return '—';
+  const digits = Math.abs(v) > 0 && Math.abs(v) < 100 ? 2 : 0;
+  const rounded = Number(v.toFixed(digits));
+  if (rounded === 0) return '0';
+  return `${rounded > 0 ? '+' : ''}${rounded.toLocaleString('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+}
+
 function returnClass(value: number) {
   if (value > 0) return 'return-up';
   if (value < 0) return 'return-down';
@@ -493,7 +518,49 @@ export default function PaperTradingPage() {
 
   const returnAmount =
     view != null ? view.totalValue - view.account.initialCash : 0;
+  const heroReturnPct =
+    view != null ? calcReturnPct(view.totalValue, view.account.initialCash) : 0;
   const positionCount = view?.positions?.length ?? 0;
+  const strategyStatusItems = useMemo(() => {
+    if (!view) return [];
+    if (activeBucket === 'etf') {
+      return [
+        {
+          label: '下次调仓日',
+          value: view.nextRebalanceDate ?? view.tradeDate,
+        },
+        {
+          label: '上次调仓',
+          value: view.lastRebalanceDate ?? '未记录',
+        },
+        {
+          label: '调仓周期',
+          value: `${view.rebalanceDays ?? 10} 个交易日`,
+        },
+        {
+          label: '监听',
+          value: '交易时段每 30 分钟',
+        },
+      ];
+    }
+    if (activeBucket === 'etf-t-plus') {
+      return [
+        {
+          label: '下次观察交易日',
+          value: view.nextTradeDate ?? view.tradeDate,
+        },
+        {
+          label: '监听',
+          value: '交易时段每 30 分钟',
+        },
+        {
+          label: '仓位来源',
+          value: 'ETF 仓底仓',
+        },
+      ];
+    }
+    return [];
+  }, [activeBucket, view]);
   const dailyEquityRows = useMemo(
     () => buildDailyEquityRows(equity ?? []),
     [equity],
@@ -540,16 +607,14 @@ export default function PaperTradingPage() {
                 {`${bucketLabel(activeBucket)}收益率`}
               </span>
               <strong
-                className={`paper-hero-return ${view.returnPct >= 0 ? 'return-up' : 'return-down'}`}
+                className={`paper-hero-return ${returnClass(heroReturnPct)}`}
               >
-                {view.returnPct > 0 ? '+' : ''}
-                {view.returnPct}%
+                {fmtHeroReturnPct(heroReturnPct)}
               </strong>
               <span
-                className={`paper-hero-return-amt ${returnAmount >= 0 ? 'return-up' : 'return-down'}`}
+                className={`paper-hero-return-amt ${returnClass(returnAmount)}`}
               >
-                {returnAmount >= 0 ? '+' : ''}
-                {fmtMoney(returnAmount)} 元
+                {fmtHeroSignedMoney(returnAmount)} 元
               </span>
             </div>
             <div className="paper-hero-stats">
@@ -571,6 +636,20 @@ export default function PaperTradingPage() {
               </div>
             </div>
           </div>
+
+          {strategyStatusItems.length > 0 && (
+            <section
+              className="paper-strategy-status"
+              aria-label={`${bucketLabel(activeBucket)}策略状态`}
+            >
+              {strategyStatusItems.map((item) => (
+                <div key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </section>
+          )}
 
           {activeBucket === 'stock-backtest' && (
             <section className="pane-card paper-manual-check">

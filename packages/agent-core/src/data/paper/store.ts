@@ -13,6 +13,7 @@ import {
   BUCKET_INITIAL_CASH,
   BUCKET_LABELS,
   BUCKET_MAX_POSITIONS,
+  ETF_MOMENTUM_REBALANCE_DAYS,
   ETF_T_PLUS_BUCKET,
   PAPER_BUCKETS,
   STOCK_POSITION_BUDGET_PCT,
@@ -22,11 +23,13 @@ import {
 } from './bucket.js';
 import {
   formatTradeDate,
+  getNextTradeDateLabel,
   resolvePaperTradedAt,
   roundToLot,
 } from './trading-calendar.js';
 import { resolvePaperMarkPrices } from './mark-price.js';
 import { calcStopLoss } from './momentum.js';
+import { resolveNextEtfRebalanceDate } from './etf-paper-schedule.js';
 import {
   getSellableCutoffTradeDate,
   bucketSettlementRuleLabel,
@@ -982,7 +985,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
     });
   }
 
-  return {
+  const summary = {
     bucket,
     account,
     totalValue: Number(totalValue.toFixed(2)),
@@ -994,6 +997,29 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
     tradeDate,
     isTradingSession: (await import('./trading-calendar.js')).isTradingSession(),
   };
+
+  if (bucket === 'etf') {
+    const state = await getPaperBucketState(bucket);
+    return {
+      ...summary,
+      lastRebalanceDate: state.lastRebalanceDate,
+      nextRebalanceDate: resolveNextEtfRebalanceDate({
+        lastRebalanceDate: state.lastRebalanceDate,
+        tradeDate,
+      }),
+      nextTradeDate: getNextTradeDateLabel(),
+      rebalanceDays: ETF_MOMENTUM_REBALANCE_DAYS,
+    };
+  }
+
+  if (bucket === ETF_T_PLUS_BUCKET) {
+    return {
+      ...summary,
+      nextTradeDate: getNextTradeDateLabel(),
+    };
+  }
+
+  return summary;
 }
 
 export async function getPaperDualSummary() {

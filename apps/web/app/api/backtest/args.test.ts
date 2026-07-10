@@ -67,4 +67,24 @@ describe('backtest args', () => {
       '--t-plus-max-trades=2',
     ]);
   });
+
+  it('passes ETF Stable V2 options to the agent-core CLI', () => {
+    const params = new URLSearchParams({
+      strategy: 'etf-stable',
+      startDate: '2018-01-01',
+      endDate: '2026-07-09',
+      initialCapital: '100000',
+      rebalance: '20',
+      volTarget: '12',
+    });
+    expect(getBacktestArgsFromSearchParams(params)).toEqual([
+      'etf-stable',
+      String(365 * 5),
+      '--from=2018-01-01',
+      '--to=2026-07-09',
+      '--capital=100000',
+      '--rebalance=20',
+      '--vol-target=12',
+    ]);
+  });
 });

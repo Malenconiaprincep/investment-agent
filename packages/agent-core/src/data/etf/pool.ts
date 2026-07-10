@@ -4,7 +4,7 @@ export type EtfPoolItem = {
   name: string;
 };
 
-export const ETF_POOL_19: EtfPoolItem[] = [
+export const ETF_POOL: EtfPoolItem[] = [
   { exchangeCode: 'sh512880', symbol: '512880', name: '证券ETF' },
   { exchangeCode: 'sh512760', symbol: '512760', name: '芯片ETF国泰' },
   { exchangeCode: 'sh512010', symbol: '512010', name: '医药ETF' },
@@ -17,7 +17,7 @@ export const ETF_POOL_19: EtfPoolItem[] = [
   { exchangeCode: 'sz159781', symbol: '159781', name: '科创创业ETF易方达' },
   { exchangeCode: 'sh516160', symbol: '516160', name: '新能源ETF' },
   { exchangeCode: 'sz159808', symbol: '159808', name: '创业板成长ETF' },
-  { exchangeCode: 'sz159920', symbol: '159920', name: '红利ETF' },
+  { exchangeCode: 'sz159920', symbol: '159920', name: '恒生ETF' },
   { exchangeCode: 'sz159941', symbol: '159941', name: '纳指ETF' },
   { exchangeCode: 'sh513100', symbol: '513100', name: '纳指科技ETF' },
   { exchangeCode: 'sh513050', symbol: '513050', name: '中概互联ETF' },
@@ -26,3 +26,6 @@ export const ETF_POOL_19: EtfPoolItem[] = [
   { exchangeCode: 'sh510300', symbol: '510300', name: '沪深300ETF' },
   { exchangeCode: 'sh512480', symbol: '512480', name: '半导体ETF国联安' },
 ];
+
+/** @deprecated 名称保留用于兼容旧策略；当前列表已经不是 19 只。 */
+export const ETF_POOL_19 = ETF_POOL;

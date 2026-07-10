@@ -91,6 +91,20 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     return args;
   }
 
+  if (strategy === 'etf-stable' || strategy === 'etf-stable-v2') {
+    const args = ['etf-stable', searchParams.get('days') ?? String(365 * 5)];
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    if (startDate) args.push(`--from=${startDate}`);
+    if (endDate) args.push(`--to=${endDate}`);
+    if (initialCapital) args.push(`--capital=${initialCapital}`);
+    const rebalance = searchParams.get('rebalance');
+    const volTarget = searchParams.get('volTarget');
+    if (rebalance) args.push(`--rebalance=${rebalance}`);
+    if (volTarget) args.push(`--vol-target=${volTarget}`);
+    return args;
+  }
+
   const args = [
     'etf',
     searchParams.get('days') ?? '250',

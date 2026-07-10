@@ -68,7 +68,11 @@ export function buildEtfMorningRadarLines(result: EtfMorningRadarResult): string
   ];
 
   if (result.candidates.length === 0) {
-    lines.push('当前没有达到异动阈值的 ETF。');
+    if (result.errors.some((error) => error.startsWith('实时行情：'))) {
+      lines.push('状态：行情源暂不可用，为避免使用昨收数据造成误判，本次不输出承接结论。');
+    } else {
+      lines.push('当前没有达到异动阈值的 ETF。');
+    }
     return lines;
   }
 
@@ -146,6 +150,11 @@ export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): strin
     `分仓：${label}`,
     `交易日：${result.tradeDate}`,
   ];
+  if (result.nextRebalanceDate && result.bucket !== 'etf-t-plus') {
+    lines.push(`下次调仓日：${result.nextRebalanceDate}`);
+  } else if (result.nextTradeDate) {
+    lines.push(`下次观察交易日：${result.nextTradeDate}`);
+  }
 
   if (result.skipped) {
     lines.push(`状态：跳过 — ${result.reason ?? '非执行窗口'}`);
@@ -239,7 +248,10 @@ export async function notifyEtfTailPick(result: EtfTailPickResult): Promise<void
 export async function notifyEtfMorningRadar(
   result: EtfMorningRadarResult,
 ): Promise<void> {
-  if (result.candidates.length === 0) return;
+  const liveQuoteUnavailable = result.errors.some((error) =>
+    error.startsWith('实时行情：'),
+  );
+  if (result.candidates.length === 0 && !liveQuoteUnavailable) return;
   await notifyFeishuPostSafe(
     result.stage === 'open' ? '👀 ETF 早盘异动' : '🧭 ETF 承接确认',
     buildEtfMorningRadarLines(result),
@@ -341,5 +353,20 @@ export async function notifyMarketDataReminder(
     '',
     '更新完成后，系统会在交易日前 08:00 运行「股票仓（回测策略）」买入扫描；如需临时强制执行，可运行：',
     'pnpm --filter @investment-agent/agent-core exec tsx src/cli/paper-json.ts stock-backtest-auto-run --force',
+  ]);
+}
+
+export async function notifyStockDailyCsvManualReminder(
+  tradeDate = formatTradeDate(getBeijingNow()),
+): Promise<void> {
+  await notifyFeishuPostSafe('⏰ 请手动更新股票日线', [
+    `时间：${beijingTimeLabel()}`,
+    `交易日：${tradeDate}`,
+    '全市场股票日线已改为手动更新，系统不会在后台自动拉取。',
+    '',
+    '请在项目根目录运行：',
+    'pnpm stock:update-daily',
+    '',
+    '最近全市场更新约需 45–50 分钟；任务结束后请确认失败数量。次日 08:00 系统会再次检查数据是否就绪，过期数据不会进入钻石 V2 买入扫描。',
   ]);
 }

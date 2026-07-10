@@ -8,10 +8,12 @@ import {
   isScheduledTaskEnabled,
   type ScheduledTaskId,
 } from '../data/schedulers/task-settings.js';
+import { appendScheduledTaskLog } from '../data/schedulers/scheduled-task-log.js';
 import {
   runPreopenScreeningNotification,
   type PreopenScreeningRunResult,
 } from '../data/screening/preopen-screening.js';
+import { formatTradeDate, getBeijingNow } from '../data/paper/trading-calendar.js';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-screen.log');
 
@@ -67,9 +69,39 @@ function preopenOutcome(result: PreopenScreeningRunResult) {
     dataQualityPassed: result.dataQuality.passed,
     dataQualityFail: result.dataQuality.summary.fail,
     dataQualityWarn: result.dataQuality.summary.warn,
+    morningStance: result.morningBriefing?.stance.label,
+    morningScore: result.morningBriefing?.stance.score,
+    morningQualityScore: result.morningBriefingQuality?.score,
+    globalMarketCount: result.morningBriefing?.markets.length,
+    internationalNewsCount: result.morningBriefing?.internationalNews.length,
     skipped: result.skipped,
     reason: result.reason,
   };
+}
+
+function taskSummary(outcome: {
+  sessionId?: string;
+  candidateCount?: number;
+  watchlistAdded?: number;
+  dataQualityScore?: number;
+  morningStance?: string;
+  morningScore?: number;
+  morningQualityScore?: number;
+}): string | undefined {
+  if (!outcome.sessionId) return undefined;
+  const parts = [`记录 ${outcome.sessionId}`];
+  if (outcome.morningStance) {
+    parts.unshift(
+      `早报 ${outcome.morningStance}${outcome.morningScore != null ? `(${outcome.morningScore})` : ''}`,
+    );
+  }
+  if (outcome.morningQualityScore != null) {
+    parts.unshift(`早报质量 ${outcome.morningQualityScore} 分`);
+  }
+  if (outcome.dataQualityScore != null) parts.unshift(`数据 ${outcome.dataQualityScore} 分`);
+  parts.push(`候选 ${outcome.candidateCount ?? 0} 只`);
+  parts.push(`入池 ${outcome.watchlistAdded ?? 0} 只`);
+  return parts.join(' · ');
 }
 
 /** 自动选股示例：
@@ -93,6 +125,15 @@ async function main() {
       reason: `${config.label}定时任务已关闭`,
     });
     appendFileSync(LOG_PATH, `${line}\n`, 'utf-8');
+    appendScheduledTaskLog({
+      taskId: config.taskId,
+      label: config.label,
+      tradeDate: formatTradeDate(getBeijingNow()),
+      status: 'disabled',
+      reason: '任务已在设置中关闭',
+      source: 'manual',
+      ranAt: startedAt,
+    });
     process.stdout.write(line);
     return;
   }
@@ -109,6 +150,11 @@ async function main() {
     dataQualityPassed?: boolean;
     dataQualityFail?: number;
     dataQualityWarn?: number;
+    morningStance?: string;
+    morningScore?: number;
+    morningQualityScore?: number;
+    globalMarketCount?: number;
+    internationalNewsCount?: number;
     skipped?: boolean;
     reason?: string;
   } = {};
@@ -145,16 +191,39 @@ async function main() {
   });
 
   appendFileSync(LOG_PATH, `${line}\n`, 'utf-8');
+  appendScheduledTaskLog({
+    taskId: config.taskId,
+    label: config.label,
+    tradeDate: formatTradeDate(getBeijingNow()),
+    status: outcome.skipped ? 'skipped' : 'completed',
+    reason: outcome.reason,
+    summary: taskSummary(outcome),
+    elapsedMs: Date.now() - Date.parse(startedAt),
+    source: 'manual',
+    ranAt: startedAt,
+  });
   process.stdout.write(line);
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
+  const stage = resolveStage(process.argv[2]);
+  const config = STAGES[stage];
+  const startedAt = new Date().toISOString();
   appendFileSync(
     LOG_PATH,
-    `${JSON.stringify({ ranAt: new Date().toISOString(), error: message })}\n`,
+    `${JSON.stringify({ ranAt: startedAt, stage, error: message })}\n`,
     'utf-8',
   );
+  appendScheduledTaskLog({
+    taskId: config.taskId,
+    label: config.label,
+    tradeDate: formatTradeDate(getBeijingNow()),
+    status: 'failed',
+    reason: message,
+    source: 'manual',
+    ranAt: startedAt,
+  });
   process.stderr.write(message);
   process.exit(1);
 });

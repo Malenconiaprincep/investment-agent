@@ -97,3 +97,19 @@ export function computeKlineDaysForRange(
   const tradingEstimate = Math.ceil(Math.max(calendarDays, rangeDays) * (5 / 7));
   return Math.min(Math.max(tradingEstimate + extraBars, 60), 800);
 }
+
+/**
+ * 远期结束、但起点很早的长区间同样需要加载完整本地历史。
+ * 只检查 endDate 会让“2018 至今”这类回测静默退化成最近 800 根 K 线。
+ */
+export function needsFullLocalHistoryForRange(
+  range: BacktestDateRange,
+  options: { today?: string; maxCalendarDays?: number } = {},
+): boolean {
+  const today = normalizeTradeDateKey(options.today ?? todayDateKey());
+  const maxCalendarDays = Math.max(
+    1,
+    Math.floor(options.maxCalendarDays ?? 900),
+  );
+  return range.startDate < addCalendarDays(today, -maxCalendarDays);
+}

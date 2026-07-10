@@ -1,13 +1,20 @@
 import { NextResponse } from 'next/server';
 import { runAgentCorePaperJson } from '@/lib/agent-core';
 import { normalizeDualPaperPayload } from '@/lib/paper-dual';
+import { enrichPaperScheduleFields } from '@/lib/paper-schedule';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
     const stdout = await runAgentCorePaperJson(['account']);
-    return NextResponse.json(normalizeDualPaperPayload(JSON.parse(stdout)));
+    const payload = normalizeDualPaperPayload(JSON.parse(stdout));
+    const enriched = await enrichPaperScheduleFields(payload, async () => {
+      const tradesStdout = await runAgentCorePaperJson(['trades', '200', '--bucket', 'etf']);
+      const parsed = JSON.parse(tradesStdout) as { trades?: unknown };
+      return Array.isArray(parsed.trades) ? parsed.trades : [];
+    });
+    return NextResponse.json(enriched);
   } catch (error) {
     const message = error instanceof Error ? error.message : '读取模拟账户失败';
     return NextResponse.json({ error: message }, { status: 500 });

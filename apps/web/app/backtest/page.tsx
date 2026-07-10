@@ -7,7 +7,13 @@ import { StockKlineChart } from '@/components/charts/StockKlineChart';
 import type { TradeMarker } from '@/components/charts/KlineChart';
 import { PageHeader } from '@/components/ui/PageHeader';
 
-type Strategy = 'stock' | 'diamond' | 'diamond-momentum' | 'etf' | 'etf-momentum';
+type Strategy =
+  | 'stock'
+  | 'diamond'
+  | 'diamond-momentum'
+  | 'etf'
+  | 'etf-momentum'
+  | 'etf-stable';
 type StockUniverseMode = 'retail-stock' | 'manual';
 type StockMarketFilter = 'require_bullish' | 'avoid_bearish' | 'off';
 type EtfMomentumVariant = 'baseline' | 'weak-cash' | 'active-risk' | 't-plus';
@@ -188,6 +194,28 @@ type BacktestRunConfig = {
   longestStockIdleDays?: number;
   longestStockIdleStartDate?: string;
   longestStockIdleEndDate?: string;
+  strategyVersion?: string;
+  signalExecution?: 'same_close' | 'next_open';
+  momentumWindows?: number[];
+  targetPortfolioVolPct?: number;
+  maxTacticalWeightPct?: number;
+  drawdownGuardPct?: number[];
+  minimumCommission?: number;
+  rebalanceDriftPct?: number;
+};
+
+type StableV2Metrics = {
+  totalReturnPct: number;
+  annualizedReturnPct: number | null;
+  annualizedVolPct: number | null;
+  sharpeRatio: number | null;
+  sortinoRatio: number | null;
+  maxDrawdownPct: number | null;
+  calmarRatio: number | null;
+  rolling12mPositivePct: number | null;
+  positiveYearPct: number | null;
+  tradingCostPct: number;
+  averageRiskAssetPct: number;
 };
 
 type BacktestTrade = {
@@ -233,6 +261,13 @@ type BacktestResult = {
   currentDecisions?: BacktestCurrentDecision[];
   config?: BacktestRunConfig;
   notes: string[];
+  stableMetrics?: StableV2Metrics;
+  review?: {
+    status: string;
+    summary: string;
+    passedChecks: string[];
+    failedChecks: string[];
+  };
 };
 
 type EtfBacktestComparison = {
@@ -265,8 +300,13 @@ const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
     help: '全市场 A 股前复权日线选动量启动信号；默认过滤 ST/8 元以下/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。',
   },
   {
+    value: 'etf-stable',
+    label: 'ETF Stable V2',
+    help: '20/60/120 日多周期动量，核心权益、黄金、国债和现金动态配置；T+1 开盘执行并叠加波动率及回撤分级。',
+  },
+  {
     value: 'etf-momentum',
-    label: 'ETF 动量轮动',
+    label: 'ETF 动量轮动（旧版）',
     help: '每 10 个交易日选 20 日动量最强且站上 MA20 的前 4 只 ETF，并按市场状态调节宽基和熊市仓位。',
   },
 ];
@@ -419,7 +459,7 @@ function returnClass(value: number | null) {
 }
 
 function isEtfStrategy(value: Strategy): boolean {
-  return value === 'etf' || value === 'etf-momentum';
+  return value === 'etf' || value === 'etf-momentum' || value === 'etf-stable';
 }
 
 function displayStrategyName(value: string) {
@@ -433,6 +473,8 @@ function displayStrategyName(value: string) {
     'etf-tail-rules': 'ETF 尾盘规则',
     'etf-momentum': 'ETF 动量轮动',
     'etf-momentum-rotation': 'ETF 动量轮动',
+    'etf-stable': 'ETF Stable V2',
+    'etf-stable-v2': 'ETF Stable V2',
   };
   return labels[value] ?? value;
 }
@@ -1479,7 +1521,8 @@ export default function BacktestPage() {
           </section>
 
           {displayedResult.strategy === 'etf-tail-rules' ||
-          displayedResult.strategy === 'etf-momentum-rotation' ? (
+          displayedResult.strategy === 'etf-momentum-rotation' ||
+          displayedResult.strategy === 'etf-stable-v2' ? (
             <EtfStrategyReport
               result={displayedResult}
               comparisonResults={comparisonResults ?? undefined}
@@ -1962,7 +2005,8 @@ function EtfStrategyReport({
   const sharpe = calcSharpe(result.equityCurve);
   const startDate = result.equityCurve?.[0]?.tradeDate ?? null;
   const endDate = result.equityCurve?.at(-1)?.tradeDate ?? null;
-  const isMomentum = result.strategy === 'etf-momentum-rotation';
+  const isStable = result.strategy === 'etf-stable-v2';
+  const isMomentum = result.strategy === 'etf-momentum-rotation' || isStable;
   const comparisonSeries =
     isMomentum && comparisonResults && comparisonResults.length > 1
       ? comparisonResults.map((item) => ({
@@ -2017,7 +2061,9 @@ function EtfStrategyReport({
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 4} 只 ETF 等权持有；不足时${result.config?.cashFallbackInWeakRegime ? '弱市留现金' : '用沪深300兜底'}，大盘站上 MA20 时放宽至 MA10，若沪深300 ${result.config?.momentumDays ?? 20} 日动量不低于 ${result.config?.bullBenchmarkSlotMomentumPct ?? 8}% 则保留 ${result.config?.bullBenchmarkSlotCount ?? 1} 个宽基槽位；跌破 MA20 或 ${result.config?.momentumDays ?? 20} 日动量为负时预防性仓位上限 ${Math.round((result.config?.weakRegimeMaxExposure ?? 0.7) * 100)}%，跌破 MA20 且动量为负时仓位上限 ${Math.round((result.config?.bearRegimeMaxExposure ?? 0.25) * 100)}%，单笔 -12% 止损后 ${result.config?.stopCooldownDays ?? 10} 日冷却${result.config?.exitOnTrendBreak ? '，弱市破趋势提前退出' : ''}${result.config?.tPlusEnabled ? '，并启用正T日线代理' : ''}，含交易成本与波动率目标仓位，权益按日线滚动。`
+                    ? isStable
+                      ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。Stable V2 使用 20/60/120 日波动率调整动量、风险集群去重和逆波动率权重；权益、黄金、国债与货币 ETF 合计配置，每 ${result.config?.rebalanceDays ?? 20} 个交易日检查一次，目标权重漂移不足 ${Math.round((result.config?.rebalanceDriftPct ?? 0.03) * 100)}% 不交易；T 日收盘生成信号，T+1 开盘执行，并按 ${result.config?.drawdownGuardPct?.join('/') ?? '-6/-9/-12'}% 分级降风险。`
+                      : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 4} 只 ETF 等权持有；不足时${result.config?.cashFallbackInWeakRegime ? '弱市留现金' : '用沪深300兜底'}，大盘站上 MA20 时放宽至 MA10，若沪深300 ${result.config?.momentumDays ?? 20} 日动量不低于 ${result.config?.bullBenchmarkSlotMomentumPct ?? 8}% 则保留 ${result.config?.bullBenchmarkSlotCount ?? 1} 个宽基槽位；跌破 MA20 或 ${result.config?.momentumDays ?? 20} 日动量为负时预防性仓位上限 ${Math.round((result.config?.weakRegimeMaxExposure ?? 0.7) * 100)}%，跌破 MA20 且动量为负时仓位上限 ${Math.round((result.config?.bearRegimeMaxExposure ?? 0.25) * 100)}%，单笔 -12% 止损后 ${result.config?.stopCooldownDays ?? 10} 日冷却${result.config?.exitOnTrendBreak ? '，弱市破趋势提前退出' : ''}${result.config?.tPlusEnabled ? '，并启用正T日线代理' : ''}，含交易成本与波动率目标仓位，权益按日线滚动。`
                     : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：8 条 ETF 尾盘规则 + 买入前 ${result.config?.newsLookbackDays ?? 3} 日新闻过滤；最多同时持有 ${result.config?.maxConcurrentPositions ?? 5} 只；失效出场允许 ${result.config?.exitMaxFailCount ?? 2} 条规则失败；收益曲线按组合槽位复利。`}
                 </p>
               </div>
@@ -2045,25 +2091,37 @@ function EtfStrategyReport({
               <SummaryMetric label="单笔最高收益" value={fmtPct(result.metrics.bestReturnPct)} tone={result.metrics.bestReturnPct} />
               {isMomentum ? (
                 <>
-                  <SummaryMetric label="方案" value={momentumModeLabel ?? '基准轮动'} />
+                  <SummaryMetric label="方案" value={isStable ? 'Stable V2' : momentumModeLabel ?? '基准轮动'} />
                   <SummaryMetric label="调仓周期" value={`${result.config?.rebalanceDays ?? 10} 日`} />
-                  <SummaryMetric label="持仓数量" value={`Top ${result.config?.topN ?? 4}`} />
-                  <SummaryMetric
-                    label="弱市空槽"
-                    value={result.config?.cashFallbackInWeakRegime ? '留现金' : '沪深300兜底'}
-                  />
-                  <SummaryMetric
-                    label="趋势破位"
-                    value={result.config?.exitOnTrendBreak ? '提前退出' : '不提前退出'}
-                  />
-                  {result.config?.tPlusEnabled ? (
+                  <SummaryMetric label="持仓数量" value={isStable ? `最多 ${result.config?.maxConcurrentPositions ?? 4}` : `Top ${result.config?.topN ?? 4}`} />
+                  {isStable && result.stableMetrics ? (
                     <>
-                      <SummaryMetric label="正T次数" value={`${result.config.tPlusTradeCount ?? 0} 次`} />
+                      <SummaryMetric label="滚动12月为正" value={fmtPct(result.stableMetrics.rolling12mPositivePct)} />
+                      <SummaryMetric label="Calmar" value={fmtNumber(result.stableMetrics.calmarRatio, 3)} />
+                      <SummaryMetric label="平均风险仓位" value={fmtPct(result.stableMetrics.averageRiskAssetPct)} />
+                      <SummaryMetric label="交易成本占比" value={fmtPct(result.stableMetrics.tradingCostPct)} />
+                    </>
+                  ) : null}
+                  {!isStable ? (
+                    <>
                       <SummaryMetric
-                        label="正T贡献"
-                        value={fmtPct(result.config.tPlusTotalProfitPct ?? null)}
-                        tone={result.config.tPlusTotalProfitPct ?? null}
+                        label="弱市空槽"
+                        value={result.config?.cashFallbackInWeakRegime ? '留现金' : '沪深300兜底'}
                       />
+                      <SummaryMetric
+                        label="趋势破位"
+                        value={result.config?.exitOnTrendBreak ? '提前退出' : '不提前退出'}
+                      />
+                      {result.config?.tPlusEnabled ? (
+                        <>
+                          <SummaryMetric label="正T次数" value={`${result.config.tPlusTradeCount ?? 0} 次`} />
+                          <SummaryMetric
+                            label="正T贡献"
+                            value={fmtPct(result.config.tPlusTotalProfitPct ?? null)}
+                            tone={result.config.tPlusTotalProfitPct ?? null}
+                          />
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </>
@@ -2080,7 +2138,7 @@ function EtfStrategyReport({
                 tradeDate: point.tradeDate,
                 returnPct: point.returnPct,
               }))}
-              strategyName={momentumModeLabel ?? '策略'}
+              strategyName={isStable ? 'Stable V2' : momentumModeLabel ?? '策略'}
               strategySeries={comparisonSeries}
               benchmark={
                 result.benchmark

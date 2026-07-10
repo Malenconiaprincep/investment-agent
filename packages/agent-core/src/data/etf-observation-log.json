@@ -746,5 +746,427 @@
       "downDays": 5,
       "observationDays": 10
     }
+  },
+  {
+    "id": "2026-07-09-1783583158147",
+    "tradeDate": "2026-07-09",
+    "generatedAt": "2026-07-09T07:45:58.147Z",
+    "score": 100,
+    "overallStatus": "pass",
+    "checks": [
+      {
+        "id": "data",
+        "label": "数据稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 前复权日线未发现明显断点，最新日期满足预期。",
+        "details": [
+          "检查 20/20 个 ETF 前复权日线文件，期望最新交易日 2026-07-08。",
+          "本地最新日期 2026-07-09。"
+        ],
+        "metrics": {
+          "checked": 20,
+          "missing": 0,
+          "stale": 0,
+          "jumps": 0,
+          "latestDate": "2026-07-09",
+          "expectedDate": "2026-07-08"
+        }
+      },
+      {
+        "id": "autoTrade",
+        "label": "自动交易稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "自动交易链路未发现重复成交、资金异常或任务失败。",
+        "details": [
+          "ETF 仓现金 15414.40，持仓市值 34585.70，总资产 50000.10。",
+          "最近自动成交 4 笔，执行保护备注 0 笔。",
+          "今日任务日志：ETF 日线更新完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成。"
+        ],
+        "metrics": {
+          "recentTrades": 4,
+          "duplicateCount": 0,
+          "missingNotes": 0,
+          "buyProtectionNotes": 0,
+          "failedTaskLogs": 0,
+          "cash": 15414.4,
+          "totalValue": 50000.1
+        }
+      },
+      {
+        "id": "drawdown",
+        "label": "回撤可接受",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 仓最大回撤仍在 -8% 以内。",
+        "details": [
+          "已记录 9 个 ETF 净值点，区间 2026-06-29 至 2026-07-09。",
+          "当前观察期最大回撤 -7.75%。"
+        ],
+        "metrics": {
+          "maxDrawdownPct": -7.75,
+          "points": 9
+        }
+      },
+      {
+        "id": "behavior",
+        "label": "策略行为符合预期",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 买卖理由可追溯，行为与动量轮动规则一致。",
+        "details": [
+          "最近 ETF 自动买入 4 笔，自动卖出 0 笔。",
+          "最近买入理由：ETF 动量补账：按 2026-06-29 策略目标建仓，5万本金/70%仓位"
+        ],
+        "metrics": {
+          "autoTrades": 4,
+          "buyTrades": 4,
+          "sellTrades": 0,
+          "missingReason": 0
+        }
+      },
+      {
+        "id": "roughMarket",
+        "label": "至少经历一次不顺行情",
+        "status": "pass",
+        "score": 100,
+        "message": "已经经历过一定回撤或多个下跌日，可观察系统是否按规则处理。",
+        "details": [
+          "观察期下跌净值日 5 天。",
+          "观察期最大回撤 -7.75%。"
+        ],
+        "metrics": {
+          "downDays": 5,
+          "maxDrawdownPct": -7.75
+        }
+      }
+    ],
+    "newRuleExecution": {
+      "tradeDate": "2026-07-09",
+      "effectiveDate": "2026-07-06",
+      "status": "pass",
+      "message": "尾盘信号/成交与收盘价偏离暂时可接受。",
+      "details": [
+        "记录 14:45 ETF 尾盘推荐价、当天收盘价、模拟盘成交价之间的偏离，用来判断是否需要改成 15:05-15:30 盘后固定价格执行。",
+        "已读取 2026-07-09 尾盘推荐：通过 1 个，接近通过 8 个。",
+        "当天暂无 ETF 模拟盘成交。"
+      ],
+      "recommendations": [
+        {
+          "symbol": "513050",
+          "name": "中概互联网ETF易方达",
+          "status": "passed",
+          "signalPrice": 1.088,
+          "buyZoneLow": 1.0826,
+          "buyZoneHigh": 1.0934,
+          "closePrice": 1.088,
+          "signalToClosePct": 0,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512480",
+          "name": "半导体ETF国联安",
+          "status": "near_pass",
+          "signalPrice": 1.468,
+          "buyZoneLow": 1.3315,
+          "buyZoneHigh": 1.3449,
+          "closePrice": 1.47,
+          "signalToClosePct": 0.14,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "159995",
+          "name": "芯片ETF华夏",
+          "status": "near_pass",
+          "signalPrice": 1.642,
+          "buyZoneLow": 1.4937,
+          "buyZoneHigh": 1.5087,
+          "closePrice": 1.64,
+          "signalToClosePct": -0.12,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "159530",
+          "name": "机器人ETF易方达",
+          "status": "near_pass",
+          "signalPrice": 1.547,
+          "buyZoneLow": 1.5393,
+          "buyZoneHigh": 1.5547,
+          "closePrice": 1.55,
+          "signalToClosePct": 0.19,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512760",
+          "name": "芯片ETF国泰",
+          "status": "near_pass",
+          "signalPrice": 1.544,
+          "buyZoneLow": 1.402,
+          "buyZoneHigh": 1.416,
+          "closePrice": 1.55,
+          "signalToClosePct": 0.39,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512880",
+          "name": "证券ETF国泰",
+          "status": "near_pass",
+          "signalPrice": 1.134,
+          "buyZoneLow": 1.1283,
+          "buyZoneHigh": 1.1397,
+          "closePrice": 1.132,
+          "signalToClosePct": -0.18,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "513520",
+          "name": "日经ETF华夏",
+          "status": "near_pass",
+          "signalPrice": 2.346,
+          "buyZoneLow": 2.3343,
+          "buyZoneHigh": 2.3577,
+          "closePrice": 2.345,
+          "signalToClosePct": -0.04,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "159781",
+          "name": "科创创业ETF易方达",
+          "status": "near_pass",
+          "signalPrice": 1.388,
+          "buyZoneLow": 1.3365,
+          "buyZoneHigh": 1.3499,
+          "closePrice": 1.383,
+          "signalToClosePct": -0.36,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        }
+      ],
+      "trades": [],
+      "metrics": {
+        "recommendationCount": 8,
+        "tradeCount": 0,
+        "maxSignalToCloseAbsPct": 0.39,
+        "maxTradeToCloseAbsPct": null
+      }
+    },
+    "metrics": {
+      "returnPct": 0,
+      "totalValue": 50000.1,
+      "maxDrawdownPct": -7.75,
+      "downDays": 5,
+      "observationDays": 11
+    }
+  },
+  {
+    "id": "2026-07-10-1783669515147",
+    "tradeDate": "2026-07-10",
+    "generatedAt": "2026-07-10T07:45:15.147Z",
+    "score": 100,
+    "overallStatus": "pass",
+    "checks": [
+      {
+        "id": "data",
+        "label": "数据稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 前复权日线未发现明显断点，最新日期满足预期。",
+        "details": [
+          "检查 20/20 个 ETF 前复权日线文件，期望最新交易日 2026-07-09。",
+          "本地最新日期 2026-07-10。"
+        ],
+        "metrics": {
+          "checked": 20,
+          "missing": 0,
+          "stale": 0,
+          "jumps": 0,
+          "latestDate": "2026-07-10",
+          "expectedDate": "2026-07-09"
+        }
+      },
+      {
+        "id": "autoTrade",
+        "label": "自动交易稳定",
+        "status": "pass",
+        "score": 100,
+        "message": "自动交易链路未发现重复成交、资金异常或任务失败。",
+        "details": [
+          "ETF 仓现金 15414.40，持仓市值 32777.60，总资产 48192.00。",
+          "最近自动成交 4 笔，执行保护备注 0 笔。",
+          "今日任务日志：ETF 日线更新完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成、ETF 模拟盘监听完成。"
+        ],
+        "metrics": {
+          "recentTrades": 4,
+          "duplicateCount": 0,
+          "missingNotes": 0,
+          "buyProtectionNotes": 0,
+          "failedTaskLogs": 0,
+          "cash": 15414.4,
+          "totalValue": 48192
+        }
+      },
+      {
+        "id": "drawdown",
+        "label": "回撤可接受",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 仓最大回撤仍在 -8% 以内。",
+        "details": [
+          "已记录 10 个 ETF 净值点，区间 2026-06-29 至 2026-07-10。",
+          "当前观察期最大回撤 -7.75%。"
+        ],
+        "metrics": {
+          "maxDrawdownPct": -7.75,
+          "points": 10
+        }
+      },
+      {
+        "id": "behavior",
+        "label": "策略行为符合预期",
+        "status": "pass",
+        "score": 100,
+        "message": "ETF 买卖理由可追溯，行为与动量轮动规则一致。",
+        "details": [
+          "最近 ETF 自动买入 4 笔，自动卖出 0 笔。",
+          "最近买入理由：ETF 动量补账：按 2026-06-29 策略目标建仓，5万本金/70%仓位"
+        ],
+        "metrics": {
+          "autoTrades": 4,
+          "buyTrades": 4,
+          "sellTrades": 0,
+          "missingReason": 0
+        }
+      },
+      {
+        "id": "roughMarket",
+        "label": "至少经历一次不顺行情",
+        "status": "pass",
+        "score": 100,
+        "message": "已经经历过一定回撤或多个下跌日，可观察系统是否按规则处理。",
+        "details": [
+          "观察期下跌净值日 6 天。",
+          "观察期最大回撤 -7.75%。"
+        ],
+        "metrics": {
+          "downDays": 6,
+          "maxDrawdownPct": -7.75
+        }
+      }
+    ],
+    "newRuleExecution": {
+      "tradeDate": "2026-07-10",
+      "effectiveDate": "2026-07-06",
+      "status": "warn",
+      "message": "尾盘信号/成交与收盘价偏离超过 1%，继续观察是否需要改用盘后固定价。",
+      "details": [
+        "记录 14:45 ETF 尾盘推荐价、当天收盘价、模拟盘成交价之间的偏离，用来判断是否需要改成 15:05-15:30 盘后固定价格执行。",
+        "已读取 2026-07-10 尾盘推荐：通过 3 个，接近通过 7 个。",
+        "当天暂无 ETF 模拟盘成交。"
+      ],
+      "recommendations": [
+        {
+          "symbol": "513050",
+          "name": "中概互联网ETF易方达",
+          "status": "passed",
+          "signalPrice": 1.092,
+          "buyZoneLow": 1.0865,
+          "buyZoneHigh": 1.0975,
+          "closePrice": 1.092,
+          "signalToClosePct": 0,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512880",
+          "name": "证券ETF国泰",
+          "status": "passed",
+          "signalPrice": 1.111,
+          "buyZoneLow": 1.1054,
+          "buyZoneHigh": 1.1166,
+          "closePrice": 1.11,
+          "signalToClosePct": -0.09,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512010",
+          "name": "医药ETF易方达",
+          "status": "passed",
+          "signalPrice": 0.363,
+          "buyZoneLow": 0.3612,
+          "buyZoneHigh": 0.3648,
+          "closePrice": 0.36,
+          "signalToClosePct": -0.83,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512480",
+          "name": "半导体ETF国联安",
+          "status": "near_pass",
+          "signalPrice": 1.386,
+          "buyZoneLow": 1.3552,
+          "buyZoneHigh": 1.3688,
+          "closePrice": 1.37,
+          "signalToClosePct": -1.15,
+          "note": "尾盘信号价与收盘价偏离超过 1%，需要观察集合竞价滑点。"
+        },
+        {
+          "symbol": "159995",
+          "name": "芯片ETF华夏",
+          "status": "near_pass",
+          "signalPrice": 1.547,
+          "buyZoneLow": 1.5202,
+          "buyZoneHigh": 1.5354,
+          "closePrice": 1.54,
+          "signalToClosePct": -0.45,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "159530",
+          "name": "机器人ETF易方达",
+          "status": "near_pass",
+          "signalPrice": 1.559,
+          "buyZoneLow": 1.5512,
+          "buyZoneHigh": 1.5668,
+          "closePrice": 1.559,
+          "signalToClosePct": 0,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "512760",
+          "name": "芯片ETF国泰",
+          "status": "near_pass",
+          "signalPrice": 1.463,
+          "buyZoneLow": 1.4294,
+          "buyZoneHigh": 1.4438,
+          "closePrice": 1.45,
+          "signalToClosePct": -0.89,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        },
+        {
+          "symbol": "159920",
+          "name": "恒生ETF华夏",
+          "status": "near_pass",
+          "signalPrice": 1.435,
+          "buyZoneLow": 1.3982,
+          "buyZoneHigh": 1.4122,
+          "closePrice": 1.44,
+          "signalToClosePct": 0.35,
+          "note": "尾盘信号价与收盘价偏离可接受。"
+        }
+      ],
+      "trades": [],
+      "metrics": {
+        "recommendationCount": 8,
+        "tradeCount": 0,
+        "maxSignalToCloseAbsPct": 1.15,
+        "maxTradeToCloseAbsPct": null
+      }
+    },
+    "metrics": {
+      "returnPct": -3.62,
+      "totalValue": 48192,
+      "maxDrawdownPct": -7.75,
+      "downDays": 6,
+      "observationDays": 12
+    }
   }
 ]

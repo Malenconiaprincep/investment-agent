@@ -16,7 +16,11 @@ export function calcEtfTargetBudget(input: {
   deployableScale: number;
   slotCount: number;
   isProbeEntry: boolean;
+  targetWeightPct?: number;
 }): number {
+  if (input.targetWeightPct != null && Number.isFinite(input.targetWeightPct)) {
+    return input.totalEquity * Math.max(0, Math.min(100, input.targetWeightPct)) / 100;
+  }
   const deployable = input.totalEquity * input.deployableScale;
   return (deployable / ETF_MOMENTUM_TOP_N) * input.slotCount;
 }
@@ -49,6 +53,7 @@ export function calcEtfPaperBuyShares(input: {
   slotCount: number;
   isProbeEntry: boolean;
   currentMarketValue?: number;
+  targetWeightPct?: number;
 }): number {
   const targetBudget = calcEtfTargetBudget(input);
   const currentMv = input.currentMarketValue ?? 0;

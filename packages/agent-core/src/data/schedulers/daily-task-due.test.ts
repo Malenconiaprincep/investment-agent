@@ -38,6 +38,22 @@ describe('daily task due window', () => {
     expect(isDailyTaskDueInWindow(task, check.window)).toBe(true);
   });
 
+  it('tolerates a short delayed tick around the scheduled minute', () => {
+    const preopenTask = { hour: 8, minute: 30 };
+    const previous: DailyTaskDueCursor = {
+      tradeDate: '2026-07-02',
+      minuteOfDay: 8 * 60 + 27,
+    };
+    const check = createDailyTaskDueCheck({
+      now: at(8, 32),
+      tradeDate: '2026-07-02',
+      isTradingDay: true,
+      previous,
+    });
+
+    expect(isDailyTaskDueInWindow(preopenTask, check.window)).toBe(true);
+  });
+
   it('does not backfill tasks after a long pause', () => {
     const previous: DailyTaskDueCursor = {
       tradeDate: '2026-07-02',

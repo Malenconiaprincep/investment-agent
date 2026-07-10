@@ -40,10 +40,10 @@ import {
   computeKlineDaysForRange,
   formatTradeDateKey,
   isTradeDateInRange,
+  needsFullLocalHistoryForRange,
   normalizeTradeDateKey,
   resolveBacktestDateRange,
   addCalendarDays,
-  todayDateKey,
 } from './date-range.js';
 import { shiftTradeDateLabel } from '../paper/trading-calendar.js';
 import {
@@ -75,6 +75,8 @@ export type BacktestSymbolInput = {
   assetType?: BacktestAssetType;
 };
 
+export type StockBacktestEntryExecution = 'confirmation_close' | 'next_open';
+
 export type RunDiamondBacktestInput = {
   symbols: BacktestSymbolInput[];
   universe?: 'manual' | 'retail-stock';
@@ -95,6 +97,9 @@ export type RunDiamondBacktestInput = {
   excludeRiskyStockNames?: boolean;
   minEntryPrice?: number;
   minAvgTurnoverAmount?: number;
+  minSignalVolumeRatio?: number;
+  maxNextOpenGapPct?: number | null;
+  rankEntryCandidates?: boolean;
   minDelayedEntryDriftPct?: number;
   maxDelayedEntryDriftPct?: number;
   delayedEntryDriftFilterMaxBenchmarkMomentum20Pct?: number;
@@ -107,6 +112,7 @@ export type RunDiamondBacktestInput = {
   weakMomentumNoEntryMaxBenchmarkMomentum20Pct?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
+  entryExecution?: StockBacktestEntryExecution;
 };
 
 const DEFAULT_DAYS = 250;
@@ -135,6 +141,9 @@ const DEFAULT_MAX_CONCURRENT = 5;
 const MAX_ENTRY_MA20_EXTENSION_PCT = 0.12;
 const DEFAULT_MIN_ENTRY_PRICE = 8;
 const DEFAULT_MIN_AVG_TURNOVER_AMOUNT = 0;
+const DEFAULT_MIN_SIGNAL_VOLUME_RATIO = 0;
+const DEFAULT_MAX_NEXT_OPEN_GAP_PCT = 3;
+const DEFAULT_MIN_BENCHMARK_MOMENTUM20_PCT = 5;
 const DEFAULT_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT = 3;
 const STOCK_ENTRY_DELAY_TRADING_DAYS = 2;
 const DEFAULT_MIN_DELAYED_ENTRY_DRIFT_PCT = -5;
@@ -719,12 +728,88 @@ function resolveDelayedEntrySignal(input: {
   };
 }
 
+export function resolveStockBacktestEntryExecution(input: {
+  bars: OhlcvBar[];
+  confirmationTradeDate: string;
+  mode: StockBacktestEntryExecution;
+}): { tradeDate: string; price: number } | null {
+  const confirmationIndex = findBarIndex(
+    input.bars,
+    input.confirmationTradeDate,
+  );
+  if (confirmationIndex < 0) return null;
+
+  if (input.mode === 'confirmation_close') {
+    const confirmation = input.bars[confirmationIndex];
+    return confirmation?.close != null && confirmation.close > 0
+      ? { tradeDate: confirmation.tradeDate, price: confirmation.close }
+      : null;
+  }
+
+  const nextBar = input.bars[confirmationIndex - 1];
+  return nextBar?.open != null && nextBar.open > 0
+    ? { tradeDate: nextBar.tradeDate, price: nextBar.open }
+    : null;
+}
+
 function calcDelayedEntryDriftPct(input: {
   sourceClose: number;
   entryClose: number;
 }): number | null {
   if (input.sourceClose <= 0 || input.entryClose <= 0) return null;
   return round(((input.entryClose - input.sourceClose) / input.sourceClose) * 100);
+}
+
+export function computeDiamondV2SelectionScore(input: {
+  signalScore: number;
+  signalVolumeRatio: number | null;
+  entryVolumeRatio: number | null;
+  entryMa20ExtensionPct: number | null;
+  benchmarkMomentum20Pct: number | null;
+  delayedEntryDriftPct: number | null;
+  avgTurnoverAmount5d: number | null;
+}): number {
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+  const signalVolumeBonus =
+    input.signalVolumeRatio == null
+      ? 0
+      : clamp((input.signalVolumeRatio - 1.2) * 12, 0, 18);
+  const entryVolumeBonus =
+    input.entryVolumeRatio == null
+      ? 0
+      : clamp((input.entryVolumeRatio - 1.2) * 8, 0, 12);
+  const extensionBonus =
+    input.entryMa20ExtensionPct == null
+      ? 0
+      : clamp(10 - input.entryMa20ExtensionPct, 0, 10);
+  const marketBonus =
+    input.benchmarkMomentum20Pct == null
+      ? 0
+      : clamp(input.benchmarkMomentum20Pct, -5, 10);
+  const driftPenalty =
+    input.delayedEntryDriftPct == null
+      ? 0
+      : clamp(Math.abs(input.delayedEntryDriftPct) * 1.5, 0, 10);
+  const liquidityBonus =
+    input.avgTurnoverAmount5d == null
+      ? 0
+      : input.avgTurnoverAmount5d >= 100_000_000
+        ? 8
+        : input.avgTurnoverAmount5d >= 50_000_000
+          ? 5
+          : input.avgTurnoverAmount5d >= 30_000_000
+            ? 3
+            : 0;
+  return round(
+    input.signalScore +
+      signalVolumeBonus +
+      entryVolumeBonus +
+      extensionBonus +
+      marketBonus +
+      liquidityBonus -
+      driftPenalty,
+  );
 }
 
 function mapMomentumExitReason(reason: string): BacktestExitReason {
@@ -1009,8 +1094,7 @@ export async function runDiamondBacktest(
           .map((symbol) => ({ symbol, name: getLocalStockName(symbol) ?? symbol }))
       : input.symbols;
   const benchmark = await buildStockBenchmark(dateRange, days).catch(() => undefined);
-  const fullHistoryThreshold = addCalendarDays(todayDateKey(), -900);
-  const needsFullLocalHistory = dateRange.endDate < fullHistoryThreshold;
+  const needsFullLocalHistory = needsFullLocalHistoryForRange(dateRange);
   const initialCapital =
     input.initialCapital != null && Number.isFinite(input.initialCapital)
       ? Math.max(1, input.initialCapital)
@@ -1032,7 +1116,9 @@ export async function runDiamondBacktest(
     input.minBenchmarkMomentum20Pct != null &&
     Number.isFinite(input.minBenchmarkMomentum20Pct)
       ? Math.max(0, input.minBenchmarkMomentum20Pct)
-      : 0;
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_MIN_BENCHMARK_MOMENTUM20_PCT
+        : 0;
   const defensiveBenchmarkMomentum20Pct =
     input.defensiveBenchmarkMomentum20Pct != null &&
     Number.isFinite(input.defensiveBenchmarkMomentum20Pct)
@@ -1049,6 +1135,8 @@ export async function runDiamondBacktest(
     input.takeProfitPct != null && Number.isFinite(input.takeProfitPct)
       ? Math.min(1, Math.max(0.01, input.takeProfitPct))
       : MOMENTUM_TAKE_PROFIT_PCT;
+  const entryExecution: StockBacktestEntryExecution =
+    input.entryExecution ?? 'next_open';
   const excludeRiskyStockNames =
     input.excludeRiskyStockNames ?? strategy === 'red-diamond-momentum';
   const minEntryPrice =
@@ -1063,6 +1151,22 @@ export async function runDiamondBacktest(
       : strategy === 'red-diamond-momentum'
         ? DEFAULT_MIN_AVG_TURNOVER_AMOUNT
         : 0;
+  const minSignalVolumeRatio =
+    input.minSignalVolumeRatio != null && Number.isFinite(input.minSignalVolumeRatio)
+      ? Math.max(0, input.minSignalVolumeRatio)
+      : strategy === 'red-diamond-momentum'
+        ? DEFAULT_MIN_SIGNAL_VOLUME_RATIO
+        : 0;
+  const maxNextOpenGapPct =
+    input.maxNextOpenGapPct === null
+      ? null
+      : input.maxNextOpenGapPct != null && Number.isFinite(input.maxNextOpenGapPct)
+        ? Math.max(0, input.maxNextOpenGapPct)
+        : strategy === 'red-diamond-momentum'
+          ? DEFAULT_MAX_NEXT_OPEN_GAP_PCT
+          : null;
+  const rankEntryCandidates =
+    input.rankEntryCandidates ?? strategy === 'red-diamond-momentum';
   const minDelayedEntryDriftPct =
     input.minDelayedEntryDriftPct != null && Number.isFinite(input.minDelayedEntryDriftPct)
       ? input.minDelayedEntryDriftPct
@@ -1140,7 +1244,10 @@ export async function runDiamondBacktest(
   let newsBlockedCount = 0;
   let marketBlockedCount = 0;
   let qualityBlockedCount = 0;
+  let signalQualityBlockedCount = 0;
+  let nextOpenGapBlockedCount = 0;
   let delayedEntrySkippedCount = 0;
+  let entryExecutionSkippedCount = 0;
   let delayedEntryDriftBlockedCount = 0;
   let entryMa20ExtensionBlockedCount = 0;
   let entryChecklistBlockedCount = 0;
@@ -1208,6 +1315,13 @@ export async function runDiamondBacktest(
         rawSignalCount += 1;
 
         if (strategy === 'red-diamond-momentum') {
+          if (
+            diamond.volumeRatio == null ||
+            diamond.volumeRatio < minSignalVolumeRatio
+          ) {
+            signalQualityBlockedCount += 1;
+            continue;
+          }
           const delayedEntry = resolveDelayedEntrySignal({
             sourceDiamond: diamond,
             bars,
@@ -1218,7 +1332,7 @@ export async function runDiamondBacktest(
             continue;
           }
 
-          const entryDiamond = {
+          const confirmationDiamond = {
             ...diamond,
             tradeDate: delayedEntry.entryTradeDate,
             close: delayedEntry.entryClose,
@@ -1251,9 +1365,35 @@ export async function runDiamondBacktest(
             continue;
           }
 
+          const execution = resolveStockBacktestEntryExecution({
+            bars,
+            confirmationTradeDate: confirmationDiamond.tradeDate,
+            mode: entryExecution,
+          });
+          if (!execution) {
+            entryExecutionSkippedCount += 1;
+            continue;
+          }
+          const nextOpenGapPct = calcDelayedEntryDriftPct({
+            sourceClose: confirmationDiamond.close,
+            entryClose: execution.price,
+          });
+          if (
+            entryExecution === 'next_open' &&
+            maxNextOpenGapPct != null &&
+            nextOpenGapPct != null &&
+            nextOpenGapPct > maxNextOpenGapPct
+          ) {
+            nextOpenGapBlockedCount += 1;
+            continue;
+          }
+
           const qualityGate = evaluateStockQualityGate({
             name,
-            diamond: entryDiamond,
+            diamond: {
+              ...confirmationDiamond,
+              close: execution.price,
+            },
             bars,
             excludeRiskyStockNames,
             minEntryPrice,
@@ -1265,7 +1405,7 @@ export async function runDiamondBacktest(
           }
 
           const marketGate = evaluateStockMarketGate({
-            tradeDate: entryDiamond.tradeDate,
+            tradeDate: confirmationDiamond.tradeDate,
             mode: stockMarketFilter,
             minBenchmarkMomentum20Pct,
             defensiveBenchmarkMomentum20Pct,
@@ -1312,7 +1452,7 @@ export async function runDiamondBacktest(
           const newsProfile = getStockNewsProfile(code, name);
           const entryNews = filterNewsForTradeDate({
             news: newsTimeline.news,
-            tradeDate: entryDiamond.tradeDate,
+            tradeDate: confirmationDiamond.tradeDate,
             lookbackDays: newsLookbackDays,
           });
           const newsSentiment = evaluateEtfNewsSentiment({
@@ -1325,14 +1465,38 @@ export async function runDiamondBacktest(
             continue;
           }
 
+          const selectionScore = computeDiamondV2SelectionScore({
+            signalScore: diamond.score,
+            signalVolumeRatio: diamond.volumeRatio,
+            entryVolumeRatio: momentumBuy.analysis?.volumeRatio ?? null,
+            entryMa20ExtensionPct:
+              momentumBuy.ma20ExtensionPct == null
+                ? null
+                : momentumBuy.ma20ExtensionPct * 100,
+            benchmarkMomentum20Pct:
+              marketGate.regime?.momentum20Pct ?? null,
+            delayedEntryDriftPct,
+            avgTurnoverAmount5d: qualityGate.avgTurnoverAmount ?? null,
+          });
+
           const signal = toSignal(
-            entryDiamond,
+            {
+              ...confirmationDiamond,
+              tradeDate: execution.tradeDate,
+              close: execution.price,
+            },
             { ...symbol, symbol: code, name },
             strategy,
             {
               sourceSignalDate: delayedEntry.sourceTradeDate,
               sourceSignalPrice: delayedEntry.sourceClose,
+              confirmationTradeDate: confirmationDiamond.tradeDate,
+              confirmationClose: confirmationDiamond.close,
               entryDelayTradingDays: delayedEntry.delayTradingDays,
+              entryExecution,
+              entryExecutionPrice: execution.price,
+              nextOpenGapPct,
+              selectionScore,
               delayedEntryDriftPct,
               entryChecklistScore: momentumBuy.analysis?.checklistScore,
               entryVolumeRatio: momentumBuy.analysis?.volumeRatio,
@@ -1404,6 +1568,12 @@ export async function runDiamondBacktest(
           maxConcurrent: maxConcurrentPositions,
           noSymbolOverlap,
           reserveRejectedSlots: true,
+          priority: rankEntryCandidates
+            ? (trade) =>
+                typeof trade.signal.metadata?.selectionScore === 'number'
+                  ? trade.signal.metadata.selectionScore
+                  : 0
+            : undefined,
           rejectTrade: (trade) => {
             if (excludeRiskyStockNames && tradeHasRiskyStockName(trade)) {
               enrichedRiskNameBlockedCount += 1;
@@ -1479,6 +1649,8 @@ export async function runDiamondBacktest(
         : []),
     ]),
     config: {
+      stockSignalVersion:
+        strategy === 'red-diamond-momentum' ? 'diamond-v2' : undefined,
       maxConcurrentPositions,
       noSymbolOverlap,
       stockUniverse: universe,
@@ -1496,12 +1668,29 @@ export async function runDiamondBacktest(
       excludeRiskyStockNames,
       minEntryPrice,
       minAvgTurnoverAmount,
+      minSignalVolumeRatio,
+      maxNextOpenGapPct,
+      rankEntryCandidates,
+      signalQualityBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? signalQualityBlockedCount
+          : undefined,
+      nextOpenGapBlockedCount:
+        strategy === 'red-diamond-momentum'
+          ? nextOpenGapBlockedCount
+          : undefined,
       portfolioSkippedCount,
       stopLossPct,
       takeProfitPct,
       stockEntryDelayTradingDays:
         strategy === 'red-diamond-momentum'
           ? STOCK_ENTRY_DELAY_TRADING_DAYS
+          : undefined,
+      stockEntryExecution:
+        strategy === 'red-diamond-momentum' ? entryExecution : undefined,
+      entryExecutionSkippedCount:
+        strategy === 'red-diamond-momentum'
+          ? entryExecutionSkippedCount
           : undefined,
       delayedEntrySkippedCount:
         strategy === 'red-diamond-momentum'
@@ -1557,7 +1746,8 @@ export async function runDiamondBacktest(
               ? '股票池为本地全市场 A 股 CSV，已排除 688/689 科创板代码。'
               : '股票池为手动输入代码列表，688/689 科创板会被排除。',
             `回测区间 ${formatTradeDateKey(dateRange.startDate)} 至 ${formatTradeDateKey(dateRange.endDate)}；仅统计区间内触发的动量启动信号。`,
-            `股票策略：动量启动信号先进入候选池，至少延迟 ${STOCK_ENTRY_DELAY_TRADING_DAYS} 个交易日后才允许入场；入场日按真实收盘价重新跑动量 checklist，并过滤距离 MA20 超过 ${Math.round(maxEntryMa20ExtensionPct * 100)}% 的追高信号。`,
+            `股票策略：动量启动信号先进入候选池，延迟 ${STOCK_ENTRY_DELAY_TRADING_DAYS} 个交易日后按收盘数据完成确认与 checklist；${entryExecution === 'next_open' ? '下一交易日开盘成交' : '按确认日收盘价成交（仅用于兼容旧回测）'}，并过滤距离 MA20 超过 ${Math.round(maxEntryMa20ExtensionPct * 100)}% 的追高信号。`,
+            `钻石 V2 质量门槛：${minSignalVolumeRatio > 0 ? `源信号量比不低于 ${minSignalVolumeRatio}` : '沿用基础红钻量能条件'}；${maxNextOpenGapPct == null ? '不限制次日开盘跳空' : `确认后次日开盘高开不超过 ${maxNextOpenGapPct}%`}；${rankEntryCandidates ? '同日候选按质量分从高到低占用组合仓位' : '同日候选不启用质量排序'}。`,
             minDelayedEntryDriftPct != null || maxDelayedEntryDriftPct != null
               ? `延迟确认涨跌幅过滤：信号日至入场确认日涨跌幅需满足 ${minDelayedEntryDriftPct ?? '-∞'}% 至 ${maxDelayedEntryDriftPct ?? '+∞'}%。`
               : undefined,
@@ -1587,7 +1777,7 @@ export async function runDiamondBacktest(
             defensiveBenchmarkMomentum20Pct > 0
               ? `自适应防守阈值：沪深300未满足 MA60 中期强势时，20 日动量需不低于 ${defensiveBenchmarkMomentum20Pct}%。`
               : undefined,
-            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始动量启动信号 ${rawSignalCount} 个，延迟确认后未形成可交易入场 ${delayedEntrySkippedCount} 个，延迟确认涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，延迟确认过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，弱动量暂停新仓 ${weakMomentumNoEntryBlockedCount} 个，补全名称后风险过滤 ${enrichedRiskNameBlockedCount} 笔，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
+            `组合约束：最多同时持有 ${maxConcurrentPositions} 只${noSymbolOverlap ? '，同一股票不重复开仓' : ''}；原始动量启动信号 ${rawSignalCount} 个，源信号量比过滤 ${signalQualityBlockedCount} 个，延迟确认后未形成候选 ${delayedEntrySkippedCount} 个，确认后缺少可执行价格 ${entryExecutionSkippedCount} 个，次日高开过滤 ${nextOpenGapBlockedCount} 个，延迟确认涨跌幅过滤 ${delayedEntryDriftBlockedCount} 个，延迟确认过热过滤 ${entryChecklistBlockedCount} 个，MA20 乖离过滤 ${entryMa20ExtensionBlockedCount} 个，质量过滤 ${qualityBlockedCount} 个，弱动量暂停新仓 ${weakMomentumNoEntryBlockedCount} 个，补全名称后风险过滤 ${enrichedRiskNameBlockedCount} 笔，大盘过滤 ${marketBlockedCount} 个，新闻拦截 ${newsBlockedCount} 个，组合过滤 ${portfolioSkippedCount} 笔，最终交易 ${namedTrades.length} 笔。`,
             idleExposureStats && idleExposureStats.benchmarkTradeDays > 0
               ? `空仓暴露：按大盘基准交易日统计，${idleExposureStats.stockIdleDays}/${idleExposureStats.benchmarkTradeDays} 日无股票持仓（${idleExposureStats.stockIdleDayPct}%）；最长连续空仓 ${idleExposureStats.longestStockIdleDays} 个交易日${idleExposureStats.longestStockIdleStartDate && idleExposureStats.longestStockIdleEndDate ? `，${idleExposureStats.longestStockIdleStartDate} 至 ${idleExposureStats.longestStockIdleEndDate}` : ''}。`
               : undefined,
@@ -1606,6 +1796,10 @@ export async function runDiamondBacktest(
             benchmark
               ? `大盘基准使用 ${benchmark.name}（${benchmark.symbol}）同期买入持有收益。`
               : '大盘基准暂未生成，已尝试读取沪深300ETF日线。',
+            '股票组合收益尚未扣除佣金、印花税与滑点，也未模拟涨停开盘无法成交，结果应视为毛收益上限。',
+            excludeRiskyStockNames
+              ? '风险名称过滤使用当前股票名称而非历史点时名称，长区间结果存在一定前视偏差。'
+              : undefined,
             'A 股本地前复权历史早期可能出现负价格，回测已剔除非正收盘价 K 线。',
           ].filter((note): note is string => Boolean(note))
         : [
@@ -1620,12 +1814,15 @@ export async function runDiamondBacktest(
 }
 
 export const STOCK_STRATEGY_PAPER_CONFIG = {
+  stockSignalVersion: 'diamond-v2' as const,
   stockMarketFilter: 'require_bullish' as const,
-  minBenchmarkMomentum20Pct: 0,
+  minBenchmarkMomentum20Pct: DEFAULT_MIN_BENCHMARK_MOMENTUM20_PCT,
   defensiveBenchmarkMomentum20Pct: DEFAULT_DEFENSIVE_BENCHMARK_MOMENTUM20_PCT,
   excludeRiskyStockNames: true,
   minEntryPrice: DEFAULT_MIN_ENTRY_PRICE,
   minAvgTurnoverAmount: 30_000_000,
+  minSignalVolumeRatio: DEFAULT_MIN_SIGNAL_VOLUME_RATIO,
+  maxNextOpenGapPct: DEFAULT_MAX_NEXT_OPEN_GAP_PCT,
   minDelayedEntryDriftPct: DEFAULT_MIN_DELAYED_ENTRY_DRIFT_PCT,
   maxDelayedEntryDriftPct: DEFAULT_MAX_DELAYED_ENTRY_DRIFT_PCT,
   delayedEntryDriftFilterMaxBenchmarkMomentum20Pct:
@@ -1647,6 +1844,9 @@ export type StockStrategyEntryCandidate = {
   entryPrice: number;
   entryTradeDate: string;
   sourceSignalDate: string;
+  confirmationPrice: number;
+  maxEntryGapPct: number;
+  selectionScore: number;
   memo: string;
 };
 
@@ -1667,7 +1867,25 @@ function evaluateStockStrategyEntryGates(input: {
   newsLookbackDays: number;
   newsTradeDate?: string;
   config: typeof STOCK_STRATEGY_PAPER_CONFIG;
-}): { passed: boolean; reason: string; entryPrice: number; memo: string } {
+}): {
+  passed: boolean;
+  reason: string;
+  entryPrice: number;
+  selectionScore: number;
+  memo: string;
+} {
+  if (
+    input.diamond.volumeRatio == null ||
+    input.diamond.volumeRatio < input.config.minSignalVolumeRatio
+  ) {
+    return {
+      passed: false,
+      reason: `信号量比 ${input.diamond.volumeRatio ?? '—'} 低于 ${input.config.minSignalVolumeRatio}`,
+      entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
+      memo: '',
+    };
+  }
   const momentumBuy = evaluateMomentumBuy(
     { symbol: input.code, name: input.name },
     input.diamond,
@@ -1680,6 +1898,7 @@ function evaluateStockStrategyEntryGates(input: {
       passed: false,
       reason: momentumBuy.ma20ExtensionPct != null ? 'MA20 乖离或动量未达标' : '动量 checklist 未达标',
       entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
       memo: '',
     };
   }
@@ -1698,7 +1917,7 @@ function evaluateStockStrategyEntryGates(input: {
     minAvgTurnoverAmount: input.config.minAvgTurnoverAmount,
   });
   if (qualityGate.blocked) {
-    return { passed: false, reason: qualityGate.reason, entryPrice: input.delayedEntry.entryClose, memo: '' };
+    return { passed: false, reason: qualityGate.reason, entryPrice: input.delayedEntry.entryClose, selectionScore: 0, memo: '' };
   }
 
   const marketGate = evaluateStockMarketGate({
@@ -1709,7 +1928,7 @@ function evaluateStockStrategyEntryGates(input: {
     regimes: input.marketRegimes,
   });
   if (marketGate.blocked) {
-    return { passed: false, reason: marketGate.reason, entryPrice: input.delayedEntry.entryClose, memo: '' };
+    return { passed: false, reason: marketGate.reason, entryPrice: input.delayedEntry.entryClose, selectionScore: 0, memo: '' };
   }
 
   const applyDelayedEntryDriftFilter =
@@ -1729,6 +1948,7 @@ function evaluateStockStrategyEntryGates(input: {
       passed: false,
       reason: `延迟确认涨跌幅 ${delayedEntryDriftPct}% 低于 ${input.config.minDelayedEntryDriftPct}%`,
       entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
       memo: '',
     };
   }
@@ -1742,6 +1962,7 @@ function evaluateStockStrategyEntryGates(input: {
       passed: false,
       reason: `延迟确认涨跌幅 ${delayedEntryDriftPct}% 高于 ${input.config.maxDelayedEntryDriftPct}%`,
       entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
       memo: '',
     };
   }
@@ -1757,6 +1978,7 @@ function evaluateStockStrategyEntryGates(input: {
       passed: false,
       reason: '弱动量区间暂停新开仓',
       entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
       memo: '',
     };
   }
@@ -1777,13 +1999,27 @@ function evaluateStockStrategyEntryGates(input: {
       passed: false,
       reason: newsGate.reason,
       entryPrice: input.delayedEntry.entryClose,
+      selectionScore: 0,
       memo: '',
     };
   }
 
   const checklist = momentumBuy.analysis?.checklistScore ?? 0;
+  const selectionScore = computeDiamondV2SelectionScore({
+    signalScore: input.diamond.score,
+    signalVolumeRatio: input.diamond.volumeRatio,
+    entryVolumeRatio: momentumBuy.analysis?.volumeRatio ?? null,
+    entryMa20ExtensionPct:
+      momentumBuy.ma20ExtensionPct == null
+        ? null
+        : momentumBuy.ma20ExtensionPct * 100,
+    benchmarkMomentum20Pct: marketGate.regime?.momentum20Pct ?? null,
+    delayedEntryDriftPct,
+    avgTurnoverAmount5d: qualityGate.avgTurnoverAmount ?? null,
+  });
   const memo = [
     `动量启动 ${input.delayedEntry.sourceTradeDate} → 延迟确认 ${input.entryDiamond.tradeDate}`,
+    `钻石 V2 质量分 ${selectionScore}`,
     `checklist ${checklist}`,
     momentumBuy.analysis?.entryMemo ?? '',
     qualityGate.reason,
@@ -1798,6 +2034,7 @@ function evaluateStockStrategyEntryGates(input: {
     passed: true,
     reason: '回测策略入场通过',
     entryPrice: input.delayedEntry.entryClose,
+    selectionScore,
     memo,
   };
 }
@@ -1904,6 +2141,9 @@ export async function scanStockStrategyEntriesForDate(input: {
             entryPrice: preopenEntry.entryClose,
             entryTradeDate: input.entryTradeDate,
             sourceSignalDate: diamond.tradeDate,
+            confirmationPrice: preopenEntry.entryClose,
+            maxEntryGapPct: config.maxNextOpenGapPct,
+            selectionScore: gate.selectionScore,
             memo: `${gate.memo} · 盘前确认`,
           });
           break;
@@ -1942,6 +2182,9 @@ export async function scanStockStrategyEntriesForDate(input: {
           entryPrice: gate.entryPrice,
           entryTradeDate: delayedEntry.entryTradeDate,
           sourceSignalDate: delayedEntry.sourceTradeDate,
+          confirmationPrice: delayedEntry.entryClose,
+          maxEntryGapPct: config.maxNextOpenGapPct,
+          selectionScore: gate.selectionScore,
           memo: gate.memo,
         });
         break;
@@ -1951,6 +2194,11 @@ export async function scanStockStrategyEntriesForDate(input: {
     }
   }
 
-  candidates.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  candidates.sort((a, b) => {
+    if (b.selectionScore !== a.selectionScore) {
+      return b.selectionScore - a.selectionScore;
+    }
+    return a.symbol.localeCompare(b.symbol);
+  });
   return { candidates, scanned: universeSymbols.length, rawSignals };
 }

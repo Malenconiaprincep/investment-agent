@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const stateDir = path.join(rootDir, '.daemon');
+const webDataDir = path.join(rootDir, 'apps/web/.data');
 
 const services = {
   agent: {
@@ -18,9 +19,18 @@ const services = {
   },
   web: {
     label: 'web',
-    command: 'pnpm',
-    args: ['web:dev'],
-    url: 'http://127.0.0.1:3000',
+    command: 'node',
+    args: ['apps/web/.next/standalone/apps/web/server.js'],
+    env: {
+      HOSTNAME: '127.0.0.1',
+      PORT: '3000',
+      AGENT_CORE_URL: 'http://127.0.0.1:4000',
+      AGENT_CORE_PAPER_LOCAL_EXEC: '0',
+      AGENT_CORE_WATCHLIST_LOCAL_EXEC: '0',
+      INVESTMENT_AGENT_DESKTOP: '1',
+      INVESTMENT_AGENT_WEB_DATA_DIR: webDataDir,
+    },
+    url: 'http://127.0.0.1:3000/login',
     displayUrl: 'http://localhost:3000',
   },
 };
@@ -58,13 +68,74 @@ function removePid(name) {
   fs.rmSync(pidFile(name), { force: true });
 }
 
+function servicePort(service) {
+  try {
+    return new URL(service.url).port;
+  } catch {
+    return '';
+  }
+}
+
+function findListeningPid(service) {
+  if (process.platform === 'win32') return null;
+
+  const port = servicePort(service);
+  if (!port) return null;
+
+  try {
+    const output = execFileSync(
+      'lsof',
+      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim();
+    const pid = Number(output.split(/\s+/)[0]);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function attachRunningService(name, service) {
+  const pid = findListeningPid(service);
+  if (!pid) return null;
+
+  writePid(name, {
+    pid,
+    service: name,
+    label: service.label,
+    command: [service.command, ...service.args].join(' '),
+    attachedAt: new Date().toISOString(),
+    log: logFile(name),
+  });
+
+  return pid;
+}
+
 function isAlive(pid) {
   if (!pid) return false;
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function signalTargets(pid) {
+  if (process.platform === 'win32') return [pid];
+  return [-pid, pid];
+}
+
+function signalServicePid(pid, signal) {
+  for (const target of signalTargets(pid)) {
+    try {
+      process.kill(target, signal);
+    } catch (error) {
+      if (error.code !== 'ESRCH') throw error;
+    }
   }
 }
 
@@ -93,8 +164,9 @@ async function startService(name) {
 
   const currentHealth = await health(service);
   if (currentHealth.startsWith('healthy')) {
-    removePid(name);
-    console.log(`${service.label} already running (${currentHealth}, pid not tracked) -> ${service.displayUrl}`);
+    const pid = attachRunningService(name, service);
+    const pidLabel = pid ? `pid ${pid}` : 'pid not tracked';
+    console.log(`${service.label} already running (${currentHealth}, ${pidLabel}) -> ${service.displayUrl}`);
     return;
   }
 
@@ -107,7 +179,7 @@ async function startService(name) {
   const child = spawn(service.command, service.args, {
     cwd: rootDir,
     detached: true,
-    env: process.env,
+    env: { ...process.env, ...(service.env ?? {}) },
     stdio: ['ignore', logFd, logFd],
     windowsHide: true,
   });
@@ -137,12 +209,7 @@ async function stopService(name) {
     return;
   }
 
-  const signalPid = process.platform === 'win32' ? info.pid : -info.pid;
-  try {
-    process.kill(signalPid, 'SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  signalServicePid(info.pid, 'SIGTERM');
 
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (!isAlive(info.pid)) {
@@ -153,11 +220,7 @@ async function stopService(name) {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
-  try {
-    process.kill(signalPid, 'SIGKILL');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  signalServicePid(info.pid, 'SIGKILL');
   removePid(name);
   console.log(`${service.label} killed after timeout`);
 }
@@ -178,7 +241,9 @@ async function statusService(name) {
     removePid(name);
     const currentHealth = await health(service);
     if (currentHealth.startsWith('healthy')) {
-      console.log(`${service.label}: running (${currentHealth}, pid not tracked) -> ${service.displayUrl}`);
+      const pid = attachRunningService(name, service);
+      const pidLabel = pid ? `pid ${pid}` : 'pid not tracked';
+      console.log(`${service.label}: running (${currentHealth}, ${pidLabel}) -> ${service.displayUrl}`);
       return;
     }
     console.log(`${service.label}: stopped`);

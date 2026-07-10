@@ -106,6 +106,16 @@ async function autoBuyCandidates(input: {
         ? await resolvePaperExecutionPrice(candidate.symbol, 'buy')
         : { price: candidate.entryPrice, priceSource: 'csv-close' as const };
       const price = execution.price;
+      const entryGapPct =
+        candidate.confirmationPrice > 0
+          ? ((price - candidate.confirmationPrice) / candidate.confirmationPrice) * 100
+          : null;
+      if (
+        entryGapPct != null &&
+        entryGapPct > candidate.maxEntryGapPct
+      ) {
+        continue;
+      }
       const shares = calcAutoBuyShares(summary.account.cash, price);
       if (shares < 100) continue;
 

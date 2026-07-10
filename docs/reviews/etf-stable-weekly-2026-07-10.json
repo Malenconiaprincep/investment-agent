@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-07-10T07:49:31.913Z",
+  "weekStart": "2026-07-04",
+  "weekEnd": "2026-07-10",
+  "paper": {
+    "currentValue": 48192,
+    "stableStartedAt": "2026-07-10",
+    "stableBaselineValue": 48192,
+    "stableCumulativeReturnPct": 0,
+    "accountCumulativeReturnPct": -3.62,
+    "weekReturnPct": 0,
+    "weekMaxDrawdownPct": null,
+    "currentDrawdownPct": 0,
+    "accountCurrentDrawdownPct": -6.23,
+    "tradeCount": 0,
+    "missingReasonCount": 0
+  },
+  "backtest": {
+    "runId": "7da61346-ecdb-4a82-a52d-ab0c9f8e62df",
+    "generatedAt": "2026-07-10T07:45:41.202Z",
+    "metrics": {
+      "totalReturnPct": 210.17,
+      "annualizedReturnPct": 9.47,
+      "annualizedVolPct": 9.29,
+      "sharpeRatio": 1.056,
+      "sortinoRatio": 1.322,
+      "maxDrawdownPct": -11.83,
+      "calmarRatio": 0.8,
+      "positiveYearPct": 92.31,
+      "rolling12mPositivePct": 84.21,
+      "turnoverPct": 27257.59,
+      "totalTradingCost": 22180.59,
+      "tradingCostPct": 22.18,
+      "averageInvestedPct": 96.19,
+      "averageRiskAssetPct": 43.59
+    },
+    "status": "paper_observe"
+  },
+  "comparison": {
+    "previousWeekReturnPct": null,
+    "returnTrend": "no_history"
+  },
+  "observations": [
+    "Stable V2 今日刚建立独立基线，尚未形成首个切换后收盘快照；本期只记录起点，不评价收益。",
+    "组合已触发至少一级回撤保护，应核对下一次计划是否降低风险资产权重。",
+    "Stable V2 复盘从切换日单独建立资产基线，旧策略损益只作为账户背景，不计入 V2 收益。",
+    "历史累计交易成本较高，本周应重点核对是否发生无必要的小额再平衡。"
+  ],
+  "lessons": [
+    "切换日没有足够路径样本，收益和策略有效性均不作判断。",
+    "周度表现未显著恶化，保持参数冻结以积累可比较样本。",
+    "只有重复出现且能在历史固定场景中复现的问题，才进入参数候选清单。"
+  ],
+  "nextActions": [
+    "下次运行前核对回撤档位、现金/国债目标权重与实际持仓是否一致。",
+    "保持成交理由字段完整，累积可用于归因的样本。",
+    "月底比较过去 4 份周复盘，提炼重复问题并建立一次带 changeset 的验证实验。"
+  ],
+  "immutableRules": [
+    "不承诺固定收益，不因短期目标压力增加杠杆。",
+    "日线信号只能在下一交易日执行，禁止使用同日收盘价回填成交。",
+    "策略参数不能根据一周或单一年份结果自动修改。",
+    "任何参数、ETF 池或风控变化都要先写 changeset，再跑全区间、固定场景、双倍成本和样本外验证。"
+  ],
+  "markdownPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-stable-weekly-2026-07-10.md",
+  "jsonPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-stable-weekly-2026-07-10.json"
+}

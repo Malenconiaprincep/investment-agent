@@ -73,10 +73,17 @@ pnpm daemon:start
 
 ```bash
 pnpm daemon:status       # 查看 agent-core / web 是否在跑
-pnpm daemon:restart      # 修改代码后重启两个服务
+pnpm daemon:restart      # 手动重启两个服务
 pnpm daemon:logs         # 查看最近日志
 pnpm daemon:logs -- -f   # 持续跟随日志
 pnpm daemon:stop         # 停止后台服务
+```
+
+daemon 的 Web 侧使用 Next standalone 生产 server 运行已构建产物，代码改动不会热更新到后台服务。更新 Web 后需要手动构建并重启：
+
+```bash
+pnpm web:build
+pnpm daemon:restart web
 ```
 
 也可以只操作单个服务：
@@ -146,6 +153,9 @@ pnpm web:dev
 ```bash
 pnpm test
 pnpm eval
+pnpm harness:scheduler        # 定时任务调度 / 日志折叠 harness
+pnpm harness:morning-briefing # 盘前早报结构 / 攻防判断 harness
+pnpm harness:data-quality     # 行情数据质量 harness
 pnpm eval market-research-report   # Phase 2 验收
 ```
 

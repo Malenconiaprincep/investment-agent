@@ -19,7 +19,7 @@ type ScheduledTaskLogEntry = {
   tradeDate: string;
   ranAt: string;
   ranAtBeijing: string;
-  status: 'completed' | 'skipped' | 'failed' | 'disabled';
+  status: 'running' | 'completed' | 'skipped' | 'failed' | 'disabled';
   reason?: string;
   summary?: string;
   elapsedMs?: number;
@@ -76,6 +76,7 @@ type StockUpdateStreamEvent = {
 };
 
 const STATUS_LABEL: Record<ScheduledTaskLogEntry['status'], string> = {
+  running: '运行中',
   completed: '已完成',
   skipped: '已跳过',
   failed: '失败',
@@ -395,8 +396,9 @@ export default function ScheduledTasksPage() {
 
   const stats = useMemo(() => {
     const completed = logs.filter((entry) => entry.status === 'completed').length;
+    const running = logs.filter((entry) => entry.status === 'running').length;
     const failed = logs.filter((entry) => entry.status === 'failed').length;
-    return { total: logs.length, completed, failed };
+    return { total: logs.length, completed, running, failed };
   }, [logs]);
 
   const stockUpdatePercent =
@@ -542,7 +544,7 @@ export default function ScheduledTasksPage() {
         </div>
 
         <div className={`${styles.stats} muted`}>
-          共 {stats.total} 条 · 完成 {stats.completed} · 失败 {stats.failed}
+          共 {stats.total} 条 · 完成 {stats.completed} · 运行中 {stats.running} · 失败 {stats.failed}
         </div>
       </section>
 
@@ -570,7 +572,7 @@ export default function ScheduledTasksPage() {
           <div className={styles.logList}>
             {entries.map((entry) => (
               <article
-                key={`${entry.taskId}-${entry.ranAt}`}
+                key={`${entry.taskId}-${entry.ranAt}-${entry.status}`}
                 className={`${styles.logRow}${entry.status === 'failed' ? ` ${styles.logRowFailed}` : ''}`}
               >
                 <div className={styles.logMain}>
@@ -581,9 +583,11 @@ export default function ScheduledTasksPage() {
                         ? styles.statusCompleted
                         : entry.status === 'failed'
                           ? styles.statusFailed
-                          : entry.status === 'disabled'
-                            ? styles.statusDisabled
-                            : styles.statusSkipped
+                          : entry.status === 'running'
+                            ? styles.statusRunning
+                            : entry.status === 'disabled'
+                              ? styles.statusDisabled
+                              : styles.statusSkipped
                     }`}
                   >
                     {STATUS_LABEL[entry.status]}

@@ -67,6 +67,29 @@ describe('portfolio filter', () => {
     );
     expect(filtered.map((item) => item.symbol)).toEqual(['512880']);
   });
+
+  it('uses explicit quality priority for same-day candidates', () => {
+    const low = trade({
+      symbol: '000001',
+      entryDate: '20260101',
+      exitDate: '20260105',
+    });
+    low.signal.metadata = { selectionScore: 70 };
+    const high = trade({
+      symbol: '600519',
+      entryDate: '20260101',
+      exitDate: '20260105',
+    });
+    high.signal.metadata = { selectionScore: 95 };
+
+    const filtered = filterTradesByPortfolioRules([low, high], {
+      maxConcurrent: 1,
+      noSymbolOverlap: true,
+      priority: (item) => Number(item.signal.metadata?.selectionScore ?? 0),
+    });
+
+    expect(filtered.map((item) => item.symbol)).toEqual(['600519']);
+  });
 });
 
 describe('portfolio ledger', () => {

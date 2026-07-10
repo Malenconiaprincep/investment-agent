@@ -8,6 +8,7 @@ import {
   notifyEtfPaperMonitor,
   notifyEtfTailPick,
   notifyMarketDataReminder,
+  notifyStockDailyCsvManualReminder,
   notifyStockBacktestPaper,
   notifyStockPaper,
 } from '../notify/feishu-daily.js';
@@ -50,7 +51,10 @@ import {
   type ScheduledTaskId,
 } from './task-settings.js';
 import { appendScheduledTaskLog } from './scheduled-task-log.js';
-import type { ScheduledTaskLogSource } from './scheduled-task-log.js';
+import type {
+  ScheduledTaskLogSource,
+  ScheduledTaskLogStatus,
+} from './scheduled-task-log.js';
 import {
   createDailyTaskDueCheck,
   getMinuteOfDay,
@@ -63,6 +67,7 @@ import {
   formatTradeDate,
   getBeijingNow,
   getEtfPaperMonitorIntervalMs,
+  getNextTradeDateLabel,
   getStockIntradayMonitorIntervalMs,
   isMarketTradingDay,
   isTradingSession,
@@ -74,6 +79,7 @@ type DailyTaskDef = {
   label: string;
   hour: number;
   minute: number;
+  timeoutMs?: number;
   run: () => Promise<{ skipped?: boolean; reason?: string; summary?: string }>;
 };
 
@@ -98,6 +104,8 @@ export type StockDailyCsvUpdateRunResult = {
 };
 
 const completedKeys = new Set<string>();
+let dueTasksRunning = false;
+let dueTasksRerunRequested = false;
 let lastEtfPaperRunMs = 0;
 let lastEtfTPlusRunMs = 0;
 let lastStockIntradayRunMs = 0;
@@ -111,6 +119,7 @@ const STOCK_DAILY_SYNC_TASK_ID: Extract<
   'stock-daily-csv-update'
 > = 'stock-daily-csv-update';
 const STOCK_DAILY_SYNC_LABEL = '股票日线更新';
+const SCREEN_TASK_TIMEOUT_MS = 15 * 60 * 1000;
 
 function isEnabled(): boolean {
   return process.env.DAILY_TASKS_BACKGROUND_ENABLED !== '0';
@@ -142,16 +151,18 @@ function logError(message: string) {
 }
 
 function recordTaskLog(input: {
+  runId?: string;
   taskId: ScheduledTaskId;
   label: string;
   tradeDate: string;
-  status: 'completed' | 'skipped' | 'failed' | 'disabled';
+  status: ScheduledTaskLogStatus;
   reason?: string;
   summary?: string;
   elapsedMs?: number;
   startedAt?: string;
 }) {
   appendScheduledTaskLog({
+    runId: input.runId,
     taskId: input.taskId,
     label: input.label,
     tradeDate: input.tradeDate,
@@ -162,6 +173,47 @@ function recordTaskLog(input: {
     source: 'background-worker',
     ranAt: input.startedAt,
   });
+}
+
+function timeoutErrorMessage(label: string, timeoutMs: number): string {
+  return `${label} 执行超过 ${Math.round(timeoutMs / 60_000)} 分钟，已标记失败；后台调用可能仍会自行结束`;
+}
+
+async function runTaskWithTimeout<T>(
+  task: Pick<DailyTaskDef, 'label' | 'timeoutMs'>,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!task.timeoutMs || task.timeoutMs <= 0) return run();
+
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(timeoutErrorMessage(task.label, task.timeoutMs ?? 0))),
+          task.timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('执行超过');
+}
+
+function appendNextTradeDateSummary(summary: string, nextTradeDate?: string): string {
+  return nextTradeDate ? `${summary} · 下次观察 ${nextTradeDate}` : summary;
+}
+
+function appendNextRebalanceDateSummary(
+  summary: string,
+  nextRebalanceDate?: string,
+): string {
+  return nextRebalanceDate ? `${summary} · 下次调仓 ${nextRebalanceDate}` : summary;
 }
 
 function appendScreenTaskLog(
@@ -179,6 +231,11 @@ function appendScreenTaskLog(
     dataQualityPassed?: boolean;
     dataQualityFail?: number;
     dataQualityWarn?: number;
+    morningStance?: string;
+    morningScore?: number;
+    morningQualityScore?: number;
+    globalMarketCount?: number;
+    internationalNewsCount?: number;
     skipped?: boolean;
     reason?: string;
   },
@@ -211,6 +268,11 @@ function preopenOutcome(result: PreopenScreeningRunResult) {
     dataQualityPassed: result.dataQuality.passed,
     dataQualityFail: result.dataQuality.summary.fail,
     dataQualityWarn: result.dataQuality.summary.warn,
+    morningStance: result.morningBriefing?.stance.label,
+    morningScore: result.morningBriefing?.stance.score,
+    morningQualityScore: result.morningBriefingQuality?.score,
+    globalMarketCount: result.morningBriefing?.markets.length,
+    internationalNewsCount: result.morningBriefing?.internationalNews.length,
     skipped: result.skipped,
     reason: result.reason,
   };
@@ -475,6 +537,7 @@ function createScreenTask(input: {
     label: input.label,
     hour: input.hour,
     minute: input.minute,
+    timeoutMs: SCREEN_TASK_TIMEOUT_MS,
     run: async () => {
       const startedAt = new Date().toISOString();
       const outcome: {
@@ -519,6 +582,7 @@ function createPreopenScreenTask(): DailyTaskDef {
     label: '盘前智能选股通知',
     hour: 8,
     minute: 30,
+    timeoutMs: SCREEN_TASK_TIMEOUT_MS,
     run: async () => {
       const startedAt = new Date().toISOString();
       const result = await runPreopenScreeningNotification({
@@ -532,8 +596,8 @@ function createPreopenScreenTask(): DailyTaskDef {
         skipped: result.skipped,
         reason: result.reason,
         summary: result.screening?.sessionId
-          ? `数据 ${result.dataQuality.score} 分 · 记录 ${result.screening.sessionId} · 候选 ${result.screening.candidates.length} 只 · 入池 ${result.screening.watchlistSync?.added.length ?? 0} 只`
-          : `数据 ${result.dataQuality.score} 分 · ${result.reason ?? '未生成候选池'}`,
+          ? `早报 ${result.morningBriefing?.stance.label ?? '-'}${result.morningBriefing?.stance.score != null ? `(${result.morningBriefing.stance.score})` : ''} · 早报质量 ${result.morningBriefingQuality?.score ?? '-'} 分 · 数据 ${result.dataQuality.score} 分 · 记录 ${result.screening.sessionId} · 候选 ${result.screening.candidates.length} 只 · 入池 ${result.screening.watchlistSync?.added.length ?? 0} 只`
+          : `早报 ${result.morningBriefing?.stance.label ?? '-'} · 数据 ${result.dataQuality.score} 分 · ${result.reason ?? '未生成候选池'}`,
       };
     },
   };
@@ -718,15 +782,22 @@ const DAILY_TASKS: DailyTaskDef[] = [
   },
   {
     id: STOCK_DAILY_SYNC_TASK_ID,
-    label: STOCK_DAILY_SYNC_LABEL,
+    label: '股票日线手动更新提醒',
     hour: 17,
     minute: 0,
     run: async () => {
-      const outcome = await runStockDailyCsvUpdate();
+      if (!isFeishuNotifyEnabled()) {
+        return {
+          skipped: true,
+          reason: '飞书通知未配置',
+          summary: '未发送手动更新提醒',
+        };
+      }
+      const tradeDate = formatTradeDate(getBeijingNow());
+      await notifyStockDailyCsvManualReminder(tradeDate);
       return {
-        skipped: outcome.skipped,
-        reason: outcome.reason,
-        summary: outcome.summary,
+        skipped: false,
+        summary: `已发送 ${tradeDate} 股票日线手动更新提醒`,
       };
     },
   },
@@ -908,7 +979,10 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
     if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
     if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
     if (result.reason) parts.push(result.reason);
-    const summary = parts.length > 0 ? parts.join(' · ') : '无信号';
+    const summary = appendNextRebalanceDateSummary(
+      parts.length > 0 ? parts.join(' · ') : '无信号',
+      result.nextRebalanceDate,
+    );
     logInfo(`${label} 完成${parts.length > 0 ? `：${summary}` : ''}`);
     recordTaskLog({
       taskId: 'etf-paper-monitor',
@@ -966,7 +1040,7 @@ async function runEtfTPlusPaperMonitor(now = getBeijingNow()) {
     await notifyEtfPaperMonitor(result);
     const count = result.tPlusTrades?.length ?? 0;
     const entryCount = result.tPlusEntries?.length ?? 0;
-    const summary =
+    const summary = appendNextTradeDateSummary(
       count > 0
         ? `正T ${count} 笔 · ${result.tPlusTrades
             ?.map((trade) => `${trade.name}+${trade.profit.toFixed(2)}`)
@@ -975,7 +1049,9 @@ async function runEtfTPlusPaperMonitor(now = getBeijingNow()) {
           ? `正T买入待卖 ${entryCount} 笔 · ${result.tPlusEntries
               ?.map((trade) => `${trade.name}@${trade.buyPrice.toFixed(3)}`)
               .join('、')}`
-        : result.reason ?? '无正T机会';
+          : result.reason ?? '无正T机会',
+      result.nextTradeDate ?? getNextTradeDateLabel(now),
+    );
     logInfo(`${label} 完成：${summary}`);
     recordTaskLog({
       taskId: 'etf-t-plus-paper',
@@ -1054,11 +1130,22 @@ async function runDueTasks(
 
     completedKeys.add(key);
     const startedAt = new Date().toISOString();
+    const runId = `${task.id}:${tradeDate}:${startedAt}`;
+    recordTaskLog({
+      runId,
+      taskId: task.id,
+      label: task.label,
+      tradeDate,
+      status: 'running',
+      summary: '任务已开始',
+      startedAt,
+    });
     try {
-      const result = await task.run();
+      const result = await runTaskWithTimeout(task, task.run);
       if (result.skipped) {
         logInfo(`${task.label} 跳过：${result.reason ?? '非执行窗口'}`);
         recordTaskLog({
+          runId,
           taskId: task.id,
           label: task.label,
           tradeDate,
@@ -1071,6 +1158,7 @@ async function runDueTasks(
       } else {
         logInfo(`${task.label} 完成${result.summary ? `：${result.summary}` : ''}`);
         recordTaskLog({
+          runId,
           taskId: task.id,
           label: task.label,
           tradeDate,
@@ -1081,10 +1169,11 @@ async function runDueTasks(
         });
       }
     } catch (error) {
-      completedKeys.delete(key);
+      if (!isTimeoutError(error)) completedKeys.delete(key);
       const message = error instanceof Error ? error.message : String(error);
       logError(`${task.label} 失败：${message}`);
       recordTaskLog({
+        runId,
         taskId: task.id,
         label: task.label,
         tradeDate,
@@ -1094,6 +1183,27 @@ async function runDueTasks(
         startedAt,
       });
       await notifyDailyTaskFailure(task.label, message);
+    }
+  }
+}
+
+async function runDueTasksTick(
+  now = getBeijingNow(),
+  options?: { catchUpFixedTasks?: boolean },
+) {
+  if (dueTasksRunning) {
+    dueTasksRerunRequested = true;
+    return;
+  }
+
+  dueTasksRunning = true;
+  try {
+    await runDueTasks(now, options);
+  } finally {
+    dueTasksRunning = false;
+    if (dueTasksRerunRequested) {
+      dueTasksRerunRequested = false;
+      void runDueTasksTick();
     }
   }
 }
@@ -1128,7 +1238,7 @@ export function startDailyTasksBackgroundWorker() {
     `15:30 ETF 日线更新`,
     `15:35 跟踪池快照`,
     `15:45 ETF 观察快照`,
-    `17:00 股票日线更新`,
+    `17:00 股票日线手动更新提醒`,
     `17:20 工作总结与 Wiki 日报`,
   ].join(' · ');
 
@@ -1137,13 +1247,15 @@ export function startDailyTasksBackgroundWorker() {
     logInfo('飞书推送已启用');
   }
 
-  void runDueTasks();
-  timer = setInterval(() => void runDueTasks(), 60_000);
+  void runDueTasksTick();
+  timer = setInterval(() => void runDueTasksTick(), 60_000);
   timer.unref?.();
 }
 
 export function resetDailyTasksForTests() {
   completedKeys.clear();
+  dueTasksRunning = false;
+  dueTasksRerunRequested = false;
   lastEtfPaperRunMs = 0;
   lastEtfTPlusRunMs = 0;
   lastStockIntradayRunMs = 0;
@@ -1159,9 +1271,11 @@ export function resetDailyTasksForTests() {
 /** 供 CLI / 测试直接触发 */
 export async function runDailyTasksNow() {
   completedKeys.clear();
+  dueTasksRunning = false;
+  dueTasksRerunRequested = false;
   lastEtfPaperRunMs = 0;
   lastEtfTPlusRunMs = 0;
   lastStockIntradayRunMs = 0;
   lastDailyTaskDueCursor = null;
-  await runDueTasks(getBeijingNow(), { catchUpFixedTasks: true });
+  await runDueTasksTick(getBeijingNow(), { catchUpFixedTasks: true });
 }

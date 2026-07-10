@@ -14,7 +14,7 @@ export type DailyTaskDueWindow = {
   throughMinuteOfDay: number;
 };
 
-export const DAILY_TASK_MAX_CHECK_GAP_MINUTES = 2;
+export const DAILY_TASK_MAX_CHECK_GAP_MINUTES = 10;
 
 export function getMinuteOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();

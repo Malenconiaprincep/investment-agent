@@ -123,26 +123,35 @@ async function buildCandidate(
   poolItem: (typeof ETF_POOL_19)[number],
   quotes: Awaited<ReturnType<typeof fetchIntradayQuotes>>,
 ): Promise<EtfTailPickCandidate> {
-  const daily = await getDailyQuote(poolItem.symbol, 90);
   const quote = quotes.get(poolItem.symbol);
-  const latestClose = daily.latestClose ?? 0;
-  const price = quote?.price ?? latestClose;
-  const changePct = quote?.pctChg ?? daily.latestPctChg ?? 0;
-
-  if (!price || price <= 0) {
-    throw new Error('缺少有效价格');
-  }
+  if (!quote) throw new Error('缺少实时行情');
+  const daily = await getDailyQuote(poolItem.symbol, 90);
 
   return buildEtfTailPickCandidate({
     symbol: poolItem.symbol,
     exchangeCode: poolItem.exchangeCode,
-    name: quote?.name || poolItem.name,
-    price,
-    changePct,
-    dailyTurnover: quote?.amount ?? 0,
-    intradayVolume: quote?.volume ?? null,
+    name: quote.name || poolItem.name,
+    price: quote.price,
+    changePct: quote.pctChg,
+    dailyTurnover: quote.amount,
+    intradayVolume: quote.volume,
     bars: daily.quotes,
   });
+}
+
+function formatErrorWithCause(error: unknown): string {
+  const messages: string[] = [];
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 3 && current; depth += 1) {
+    if (current instanceof Error && current.message) messages.push(current.message);
+    if (typeof current !== 'object') break;
+    const value = current as { cause?: unknown; code?: unknown };
+    if (value.code != null) messages.push(String(value.code));
+    current = value.cause;
+  }
+
+  return [...new Set(messages)].join(' / ') || String(error);
 }
 
 export async function runEtfMorningRadar(options: {
@@ -152,9 +161,41 @@ export async function runEtfMorningRadar(options: {
   const stage = options.stage ?? 'open';
   const generatedAt = new Date().toISOString();
   const tradeDate = formatTradeDate(getBeijingNow());
-  const quotes = await fetchIntradayQuotes(ETF_POOL_19.map((item) => item.symbol));
   const errors: string[] = [];
   const candidates: EtfMorningRadarCandidate[] = [];
+  let quotes: Awaited<ReturnType<typeof fetchIntradayQuotes>>;
+
+  try {
+    quotes = await fetchIntradayQuotes(ETF_POOL_19.map((item) => item.symbol));
+  } catch (error) {
+    errors.push(`实时行情：${formatErrorWithCause(error)}`);
+    return {
+      tradeDate,
+      stage,
+      stageLabel: stageLabel(stage),
+      summary: `${stageLabel(stage)}：实时行情暂不可用，本次未作承接判断`,
+      candidates,
+      errors,
+      poolSize: ETF_POOL_19.length,
+      generatedAt,
+      elapsedMs: Date.now() - started,
+    };
+  }
+
+  if (quotes.size === 0) {
+    errors.push('实时行情：上游接口未返回任何有效报价');
+    return {
+      tradeDate,
+      stage,
+      stageLabel: stageLabel(stage),
+      summary: `${stageLabel(stage)}：实时行情暂不可用，本次未作承接判断`,
+      candidates,
+      errors,
+      poolSize: ETF_POOL_19.length,
+      generatedAt,
+      elapsedMs: Date.now() - started,
+    };
+  }
 
   for (const item of ETF_POOL_19) {
     try {

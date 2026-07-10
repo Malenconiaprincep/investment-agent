@@ -23,6 +23,32 @@ type UlistResponse = {
   };
 };
 
+const PRIMARY_QUOTE_HOST = 'push2.eastmoney.com';
+const FALLBACK_QUOTE_HOST = 'push2delay.eastmoney.com';
+
+function quoteUrl(host: string, secids: string): string {
+  return `https://${host}/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f4,f5,f6,f12,f14,f15,f16,f17,f18&secids=${secids}`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function fetchQuoteBatch(secids: string): Promise<UlistResponse> {
+  try {
+    return await freeFetchJson<UlistResponse>(quoteUrl(PRIMARY_QUOTE_HOST, secids));
+  } catch (primaryError) {
+    try {
+      return await freeFetchJson<UlistResponse>(quoteUrl(FALLBACK_QUOTE_HOST, secids));
+    } catch (fallbackError) {
+      throw new Error(
+        `东财实时行情主备接口均失败：主接口 ${errorMessage(primaryError)}；备用接口 ${errorMessage(fallbackError)}`,
+        { cause: fallbackError },
+      );
+    }
+  }
+}
+
 function mapRow(raw: Record<string, number | string>): IntradayQuote | null {
   const symbol = String(raw.f12 ?? '').trim();
   if (!/^\d{6}$/.test(symbol)) return null;
@@ -64,9 +90,7 @@ export async function fetchIntradayQuotes(
     }
 
     const secids = batch.map((symbol) => toSecId(symbol)).join(',');
-    const json = await freeFetchJson<UlistResponse>(
-      `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f4,f5,f6,f12,f14,f15,f16,f17,f18&secids=${secids}`,
-    );
+    const json = await fetchQuoteBatch(secids);
 
     const batchMap = new Map<string, IntradayQuote>();
     for (const row of json.data?.diff ?? []) {

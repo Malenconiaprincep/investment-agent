@@ -5,12 +5,30 @@ export type RetryOptions = {
   shouldRetry?: (error: unknown, attempt: number) => boolean;
 };
 
-const DEFAULT_SHOULD_RETRY = (error: unknown) => {
-  if (error instanceof Error) {
-    return /timeout|ECONNRESET|ENOTFOUND|429|503/i.test(error.message);
+function retryableErrorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 4 && current; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.name, current.message);
+    }
+    if (typeof current === 'object') {
+      const value = current as { cause?: unknown; code?: unknown };
+      if (value.code != null) parts.push(String(value.code));
+      current = value.cause;
+    } else {
+      break;
+    }
   }
-  return false;
-};
+
+  return parts.join(' ');
+}
+
+const DEFAULT_SHOULD_RETRY = (error: unknown) =>
+  /abort|timeout|timed out|fetch failed|network|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ENOTFOUND|UND_ERR|HTTP 408|HTTP 429|HTTP 502|HTTP 503|HTTP 504/i.test(
+    retryableErrorText(error),
+  );
 
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,

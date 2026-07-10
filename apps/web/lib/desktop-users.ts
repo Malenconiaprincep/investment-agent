@@ -85,6 +85,7 @@ const DEFAULT_USERS: Omit<DesktopUserRow, 'id' | 'created_at' | 'last_login_at'>
 
 function resolveStorePath(): string {
   const dataDir =
+    process.env.INVESTMENT_AGENT_WEB_DATA_DIR?.trim() ||
     process.env.INVESTMENT_AGENT_DATA_DIR?.trim() ||
     path.join(process.cwd(), '.data');
   return path.join(dataDir, 'users.json');

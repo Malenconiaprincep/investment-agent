@@ -3,6 +3,7 @@ import {
   type BacktestSymbolInput,
 } from '../data/backtest/diamond.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
+import { runEtfStableV2Backtest } from '../data/backtest/etf-stable-v2.js';
 import { runEtfTailRulesBacktest } from '../data/backtest/etf.js';
 import {
   getBacktestRun,
@@ -134,6 +135,16 @@ function parseStockUniverse(args: string[]): 'retail-stock' | undefined {
   return value === 'retail-stock' ? value : undefined;
 }
 
+function parseStockEntryExecution(
+  args: string[],
+): 'confirmation_close' | 'next_open' | undefined {
+  const arg = args.find((item) => item.startsWith('--entry-execution='));
+  const value = arg?.split('=').slice(1).join('=').trim();
+  return value === 'confirmation_close' || value === 'next_open'
+    ? value
+    : undefined;
+}
+
 export async function dispatchBacktest(args: string[]): Promise<string> {
   const command = args[0];
 
@@ -181,8 +192,12 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
       excludeRiskyStockNames: parseBooleanFlag(args, '--exclude-risky-names'),
       minEntryPrice: parseFlagNumber(args, '--min-price'),
       minAvgTurnoverAmount: parseFlagNumber(args, '--min-amount'),
+      minSignalVolumeRatio: parseFlagNumber(args, '--min-signal-volume'),
+      maxNextOpenGapPct: parseFlagNonNegativeNumber(args, '--max-entry-gap'),
+      rankEntryCandidates: parseBooleanFlag(args, '--rank-entry-candidates'),
       stopLossPct: parsePercentFlag(args, '--stop-loss'),
       takeProfitPct: parsePercentFlag(args, '--take-profit'),
+      entryExecution: parseStockEntryExecution(args),
     });
     const saved = await saveBacktestRun(result, {
       source: 'backtest-cli',
@@ -240,6 +255,29 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
     );
   }
 
+  if (command === 'etf-stable' || command === 'etf-stable-v2') {
+    const result = await runEtfStableV2Backtest({
+      days: parsePositiveInt(args[1], 365 * 5),
+      startDate: parseDateArg(args, '--from'),
+      endDate: parseDateArg(args, '--to'),
+      rebalanceDays: parseFlagInt(args, '--rebalance'),
+      targetPortfolioVolPct: parseFlagNumber(args, '--vol-target'),
+      initialCapital: parseFlagNumber(args, '--capital'),
+      commissionRate: parseFlagNonNegativeNumber(args, '--commission'),
+      slippageRate: parseFlagNonNegativeNumber(args, '--slippage'),
+      minimumCommission: parseFlagNonNegativeNumber(args, '--min-commission'),
+    });
+    const saved = await saveBacktestRun(result, {
+      source: 'backtest-cli',
+      args,
+    });
+    return JSON.stringify({
+      ...result,
+      runId: saved.id,
+      persistedAt: saved.createdAt,
+    });
+  }
+
   if (command === 'screening') {
     const id = args[1];
     if (!id) throw new Error('请提供 screening id');
@@ -260,6 +298,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | diamond <symbols|all> [days] [holdDaysCsv] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] | diamond-momentum <symbols|all> [days] [--universe=retail-stock] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--max-concurrent=N] [--stop-loss=8] [--take-profit=20] [--market-filter=avoid_bearish|require_bullish|off] [--min-benchmark-momentum=N] [--defensive-benchmark-momentum=N] [--min-price=N] [--min-amount=N] [--exclude-risky-names|--no-exclude-risky-names] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf [days] [holdDaysCsv] [--include-wait-pullback] [--max-fail=N] [--exit-max-fail=N] [--max-concurrent=N] [--news-filter=avoid_bearish|require_bullish|off] [--news-lookback=N] | etf-momentum [days] [--top=N] [--momentum=N] [--rebalance=N] [--trend-ma=N] [--cash-fallback-weak] [--exit-on-trend-break] [--t-plus] [--t-plus-buy-dip=N] [--t-plus-min-profit=N] [--t-plus-budget=N] [--t-plus-max-trades=N] | screening <id> [days]',
+    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [...] | diamond <symbols|all> [days] [...] | diamond-momentum <symbols|all> [days] [...] | etf [days] [...] | etf-momentum [days] [...] | etf-stable [days] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--rebalance=N] [--vol-target=N] [--capital=N] [--commission=N] [--slippage=N] [--min-commission=N] | screening <id> [days]',
   );
 }

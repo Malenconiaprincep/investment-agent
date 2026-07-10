@@ -1,6 +1,6 @@
 import '../../config/load-env.js';
 
-import { buildEtfMomentumLivePlan } from '../backtest/etf-momentum.js';
+import { buildEtfStableV2LivePlan } from '../backtest/etf-stable-v2.js';
 import {
   calcEtfBuyCost,
   calcEtfBuyLotsByBudget,
@@ -30,11 +30,13 @@ import {
   calcEtfProbeTargetShares,
   countEtfTargetSlots,
 } from './etf-paper-sizing.js';
+import { resolveNextEtfRebalanceDate } from './etf-paper-schedule.js';
 import {
   executePaperTrade,
   getAvailableShares,
   getPaperAccountSummary,
   getPaperBucketState,
+  listEquitySnapshots,
   listPaperPositions,
   listPaperTrades,
   saveEquitySnapshot,
@@ -43,10 +45,12 @@ import {
 import {
   formatTradeDate,
   getBeijingNow,
+  getNextTradeDateLabel,
   isEtfAutoRunWindow,
   isEtfTPlusRunWindow,
   isWeekday,
   roundToLot,
+  shiftTradeDateLabel,
 } from './trading-calendar.js';
 
 const ETF_BUY_MAX_SPREAD_PCT = 0.5;
@@ -59,6 +63,9 @@ type EtfPaperBucket = 'etf' | typeof ETF_T_PLUS_BUCKET;
 export type EtfPaperPipelineResult = {
   bucket?: EtfPaperBucket;
   tradeDate: string;
+  nextTradeDate?: string;
+  nextRebalanceDate?: string;
+  lastRebalanceDate?: string | null;
   skipped?: boolean;
   reason?: string;
   isRebalanceDay?: boolean;
@@ -81,6 +88,9 @@ export type EtfPaperPipelineResult = {
     matchedThemes?: string[];
     themeBoost?: number;
     newsLabel?: string;
+    targetWeightPct?: number;
+    assetClass?: string;
+    reason?: string;
   }>;
   hotThemes?: string[];
   rotationSummary?: string;
@@ -137,6 +147,7 @@ function calcEtfSlotShares(input: {
   slotCount: number;
   isProbeEntry: boolean;
   currentMarketValue?: number;
+  targetWeightPct?: number;
 }): number {
   return calcEtfPaperBuyShares(input);
 }
@@ -320,20 +331,22 @@ export async function runEtfPaperAutoPipeline(options?: {
   const bucket = options?.bucket ?? 'etf';
   const tradeDate = formatTradeDate();
   const now = getBeijingNow();
+  const nextTradeDate = getNextTradeDateLabel(now);
 
   if (!options?.force && !isWeekday(now)) {
-    return { bucket, tradeDate, skipped: true, reason: '周末非交易日' };
+    return { bucket, tradeDate, nextTradeDate, skipped: true, reason: '周末非交易日' };
   }
   if (!options?.force && !isEtfAutoRunWindow(now)) {
     return {
       bucket,
       tradeDate,
+      nextTradeDate,
       skipped: true,
       reason: '非 A 股交易时段（9:30–11:30、13:00–15:00 北京时间）',
     };
   }
 
-  const result: EtfPaperPipelineResult = { bucket, tradeDate };
+  const result: EtfPaperPipelineResult = { bucket, tradeDate, nextTradeDate };
 
   try {
     const benchmark = await getDailyQuote('510300', 120);
@@ -341,6 +354,11 @@ export async function runEtfPaperAutoPipeline(options?: {
     result.stopLosses = await autoStopLossEtfPositions(tradeDate, bucket);
 
     const bucketState = await getPaperBucketState(bucket);
+    result.lastRebalanceDate = bucketState.lastRebalanceDate;
+    result.nextRebalanceDate = resolveNextEtfRebalanceDate({
+      lastRebalanceDate: bucketState.lastRebalanceDate,
+      tradeDate,
+    });
     const daysSinceRebalance = countTradingDaysSince(
       bucketState.lastRebalanceDate,
       tradeDate,
@@ -378,8 +396,19 @@ export async function runEtfPaperAutoPipeline(options?: {
       benchmarkDates,
     );
     const rotationContext = await loadEtfRotationContext(tradeDate).catch(() => null);
-    const plan = await buildEtfMomentumLivePlan({
-      tradeDate,
+    const summary = await getPaperAccountSummary(bucket);
+    const equityHistory = await listEquitySnapshots(5_000, bucket);
+    const equityPeak = Math.max(
+      summary.account.initialCash,
+      summary.totalValue,
+      ...equityHistory.map((snapshot) => snapshot.totalValue),
+    );
+    const portfolioDrawdownPct = equityPeak > 0
+      ? ((summary.totalValue - equityPeak) / equityPeak) * 100
+      : 0;
+    const plan = await buildEtfStableV2LivePlan({
+      executionDate: tradeDate,
+      portfolioDrawdownPct,
       excludedSymbols,
       rotationContext,
     });
@@ -387,16 +416,24 @@ export async function runEtfPaperAutoPipeline(options?: {
     result.rotationSummary = plan.rotationSummary;
     result.targets = plan.targets;
 
-    const summary = await getPaperAccountSummary(bucket);
-    const targetSymbols = new Set(plan.targets.map((item) => item.symbol));
     const sells: NonNullable<EtfPaperPipelineResult['sells']> = [];
     const buys: NonNullable<EtfPaperPipelineResult['buys']> = [];
     const buySkips: NonNullable<EtfPaperPipelineResult['buySkips']> = [];
 
     for (const pos of summary.positions) {
-      if (targetSymbols.has(pos.symbol)) continue;
+      const target = plan.targets.find((item) => item.symbol === pos.symbol);
       const available = await getAvailableShares(pos.symbol, tradeDate, bucket);
-      const shares = roundToLot(available);
+      let shares = roundToLot(available);
+      if (target) {
+        const referencePrice = pos.latestPrice ?? pos.avgCost;
+        const targetValue = summary.totalValue * target.targetWeightPct / 100;
+        const currentValue = pos.marketValue ?? pos.shares * referencePrice;
+        const excessValue = Math.max(0, currentValue - targetValue);
+        shares = Math.min(
+          shares,
+          roundToLot(Math.floor(excessValue / Math.max(referencePrice, 0.0001))),
+        );
+      }
       if (shares < 100) continue;
       const execution = await resolvePaperExecutionPrice(pos.symbol, 'sell');
       await executePaperTrade({
@@ -408,7 +445,9 @@ export async function runEtfPaperAutoPipeline(options?: {
         price: execution.price,
         tradeDate,
         source: 'auto',
-        note: etfStrategyNote(bucket, '调仓卖出'),
+        note: target
+          ? etfStrategyNote(bucket, `目标权重再平衡至 ${target.targetWeightPct.toFixed(2)}%`)
+          : etfStrategyNote(bucket, '调仓卖出'),
         skipSessionCheck: true,
         useOrderBookPrice: false,
         priceIncludesSpread: true,
@@ -422,6 +461,7 @@ export async function runEtfPaperAutoPipeline(options?: {
     }
 
     const refreshed = await getPaperAccountSummary(bucket);
+    let remainingCash = refreshed.account.cash;
     const slotCounts = countEtfTargetSlots(plan.targets);
 
     for (const [symbol, slotCount] of slotCounts) {
@@ -441,6 +481,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         slotCount,
         isProbeEntry,
         currentMarketValue: currentMv,
+        targetWeightPct: target.targetWeightPct,
       });
       if (plannedShares < 100) continue;
 
@@ -465,9 +506,21 @@ export async function runEtfPaperAutoPipeline(options?: {
         continue;
       }
 
-      const shares = guard.shares;
+      const affordable = calcEtfBuyLotsByBudget({
+        budget: remainingCash,
+        price: execution.price,
+        commissionRate: ETF_COMMISSION_RATE,
+        slippageRate: 0,
+      });
+      const shares = Math.min(guard.shares, affordable?.shares ?? 0);
       if (shares < 100) continue;
-      if (execution.price * shares > refreshed.account.cash) continue;
+      const estimatedCost = calcEtfBuyCost({
+        price: execution.price,
+        shares,
+        commissionRate: ETF_COMMISSION_RATE,
+        slippageRate: 0,
+      }).totalCost;
+      if (estimatedCost > remainingCash) continue;
 
       const rotationNote = formatEtfTargetRotationNote({
         matchedThemes: target.matchedThemes,
@@ -508,6 +561,7 @@ export async function runEtfPaperAutoPipeline(options?: {
         shares,
         price: execution.price,
       });
+      remainingCash -= estimatedCost;
     }
 
     result.sells = sells;
@@ -527,11 +581,18 @@ export async function runEtfPaperAutoPipeline(options?: {
         bucket,
         lastRebalanceDate: tradeDate,
       });
+      result.lastRebalanceDate = tradeDate;
+      result.nextRebalanceDate = shiftTradeDateLabel(
+        tradeDate,
+        ETF_MOMENTUM_REBALANCE_DAYS,
+      );
     } else if (hasPendingProtectedBuys) {
       result.reason = '部分目标因买入执行保护暂缓，下一轮盘中监听继续尝试';
+      result.nextRebalanceDate = nextTradeDate;
     } else {
       result.reason =
         '调仓日但未成交（盘口价异常、预算不足或无法凑足 100 股整手）';
+      result.nextRebalanceDate = nextTradeDate;
     }
     const equity = await saveEquitySnapshot(tradeDate, bucket);
     result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
@@ -551,11 +612,13 @@ export async function runEtfTPlusPaperPipeline(options?: {
 }): Promise<EtfPaperPipelineResult> {
   const tradeDate = formatTradeDate();
   const now = getBeijingNow();
+  const nextTradeDate = getNextTradeDateLabel(now);
 
   if (!options?.force && !isWeekday(now)) {
     return {
       bucket: ETF_T_PLUS_BUCKET,
       tradeDate,
+      nextTradeDate,
       skipped: true,
       reason: '周末非交易日',
     };
@@ -564,6 +627,7 @@ export async function runEtfTPlusPaperPipeline(options?: {
     return {
       bucket: ETF_T_PLUS_BUCKET,
       tradeDate,
+      nextTradeDate,
       skipped: true,
       reason: '非 ETF 正T监听窗口（A 股交易时段）',
     };
@@ -572,6 +636,7 @@ export async function runEtfTPlusPaperPipeline(options?: {
   const result: EtfPaperPipelineResult = {
     bucket: ETF_T_PLUS_BUCKET,
     tradeDate,
+    nextTradeDate,
     tPlusTrades: [],
     tPlusEntries: [],
     tPlusSkips: [],
@@ -884,11 +949,17 @@ export async function getEtfPaperAutoStatus() {
   const summary = await getPaperAccountSummary('etf');
   const state = await getPaperBucketState('etf');
   const recentTrades = await listPaperTrades(20, 'etf');
+  const tradeDate = formatTradeDate();
   return {
     summary,
     bucketState: state,
     recentTrades,
-    strategy: 'etf-momentum-rotation',
+    nextTradeDate: getNextTradeDateLabel(),
+    nextRebalanceDate: resolveNextEtfRebalanceDate({
+      lastRebalanceDate: state.lastRebalanceDate,
+      tradeDate,
+    }),
+    strategy: 'etf-stable-v2',
     topN: ETF_MOMENTUM_TOP_N,
     rebalanceDays: ETF_MOMENTUM_REBALANCE_DAYS,
   };

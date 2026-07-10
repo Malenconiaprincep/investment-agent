@@ -78,6 +78,7 @@ export type PortfolioFilterOptions = {
   noSymbolOverlap: boolean;
   rejectTrade?: (trade: BacktestTrade) => boolean;
   reserveRejectedSlots?: boolean;
+  priority?: (trade: BacktestTrade) => number | null | undefined;
 };
 
 export type PortfolioLedger = {
@@ -96,6 +97,9 @@ export function filterTradesByPortfolioRules(
         normalizeTradeDateKey(b.entryDate),
       );
     }
+    const priorityDiff =
+      (options.priority?.(b) ?? 0) - (options.priority?.(a) ?? 0);
+    if (priorityDiff !== 0) return priorityDiff;
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return a.holdDays - b.holdDays;
   });

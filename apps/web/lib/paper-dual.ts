@@ -13,6 +13,10 @@ export type BucketSummary = {
   returnPct: number;
   tradeDate: string;
   isTradingSession: boolean;
+  lastRebalanceDate?: string | null;
+  nextRebalanceDate?: string;
+  nextTradeDate?: string;
+  rebalanceDays?: number;
   positions: Array<{
     symbol: string;
     name: string;
@@ -84,6 +88,15 @@ function normalizePositions(raw: unknown): BucketSummary['positions'] {
   return raw as BucketSummary['positions'];
 }
 
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function normalizeBucketSummary(
   raw: Record<string, unknown>,
   fallbackBucket: PaperBucketKey,
@@ -104,6 +117,11 @@ function normalizeBucketSummary(
     returnPct: Number(raw.returnPct ?? 0),
     tradeDate: String(raw.tradeDate ?? ''),
     isTradingSession: Boolean(raw.isTradingSession),
+    lastRebalanceDate:
+      raw.lastRebalanceDate == null ? null : optionalString(raw.lastRebalanceDate),
+    nextRebalanceDate: optionalString(raw.nextRebalanceDate),
+    nextTradeDate: optionalString(raw.nextTradeDate),
+    rebalanceDays: optionalNumber(raw.rebalanceDays),
     positions: normalizePositions(raw.positions),
   };
 }

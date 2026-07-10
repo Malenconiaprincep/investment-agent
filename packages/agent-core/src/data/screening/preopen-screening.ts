@@ -5,6 +5,14 @@ import {
 } from '../../eval/data-quality-harness.js';
 import { notifyFeishuPostSafe } from '../notify/feishu.js';
 import { formatTradeDate, getBeijingNow } from '../paper/trading-calendar.js';
+import {
+  buildMorningBriefingContext,
+  buildMorningBriefingLines,
+  buildMorningBriefingScreeningQuery,
+  evaluateMorningBriefingQuality,
+  type MorningBriefingContext,
+  type MorningBriefingQualityReport,
+} from './morning-briefing.js';
 
 export type PreopenScreeningDoneEvent = Extract<
   ScreenStreamEvent,
@@ -17,6 +25,8 @@ export type PreopenScreeningRunResult = {
   skipped?: boolean;
   reason?: string;
   dataQuality: DataQualityHarnessReport;
+  morningBriefing?: MorningBriefingContext;
+  morningBriefingQuality?: MorningBriefingQualityReport;
   screening?: PreopenScreeningDoneEvent;
 };
 
@@ -62,9 +72,18 @@ function qualityLine(report: DataQualityHarnessReport): string {
 export function buildPreopenScreeningLines(input: {
   dataQuality: DataQualityHarnessReport;
   screening: PreopenScreeningDoneEvent;
+  morningBriefing?: MorningBriefingContext;
   now?: Date;
 }): string[] {
   const { dataQuality, screening } = input;
+  if (input.morningBriefing) {
+    return buildMorningBriefingLines({
+      context: input.morningBriefing,
+      screening,
+      now: input.now,
+    });
+  }
+
   const lines = [
     `时间：${beijingTimeLabel(input.now)}`,
     `交易日：${dataQuality.freshness.tradeDate}`,
@@ -122,16 +141,26 @@ export function buildPreopenScreeningLines(input: {
 
 export function buildPreopenDataQualityFailureLines(input: {
   dataQuality: DataQualityHarnessReport;
+  morningBriefing?: MorningBriefingContext;
   now?: Date;
 }): string[] {
   const failed = input.dataQuality.checks.filter((check) => check.status === 'fail');
   const warned = input.dataQuality.checks.filter((check) => check.status === 'warn');
-  const lines = [
-    `时间：${beijingTimeLabel(input.now)}`,
-    `交易日：${input.dataQuality.freshness.tradeDate}`,
-    qualityLine(input.dataQuality),
-    '状态：数据质量未通过，已停止盘前选股，避免用脏数据生成候选池。',
-  ];
+  const lines = input.morningBriefing
+    ? [
+        ...buildMorningBriefingLines({
+          context: input.morningBriefing,
+          now: input.now,
+        }),
+        '',
+        '状态：数据质量未通过，已停止盘前选股，避免用脏数据生成候选池。',
+      ]
+    : [
+        `时间：${beijingTimeLabel(input.now)}`,
+        `交易日：${input.dataQuality.freshness.tradeDate}`,
+        qualityLine(input.dataQuality),
+        '状态：数据质量未通过，已停止盘前选股，避免用脏数据生成候选池。',
+      ];
 
   if (failed.length > 0) {
     lines.push('', '失败项：');
@@ -150,22 +179,24 @@ export function buildPreopenDataQualityFailureLines(input: {
 
 export async function notifyPreopenScreening(input: {
   dataQuality: DataQualityHarnessReport;
+  morningBriefing?: MorningBriefingContext;
   screening: PreopenScreeningDoneEvent;
 }): Promise<void> {
   if (process.env.FEISHU_NOTIFY_PREOPEN_SCREEN === '0') return;
   await notifyFeishuPostSafe(
-    '🌅 盘前智能选股',
+    '盘前投研早报',
     buildPreopenScreeningLines(input),
   );
 }
 
 export async function notifyPreopenDataQualityFailure(
   dataQuality: DataQualityHarnessReport,
+  morningBriefing?: MorningBriefingContext,
 ): Promise<void> {
   if (process.env.FEISHU_NOTIFY_PREOPEN_SCREEN === '0') return;
   await notifyFeishuPostSafe(
-    '⚠️ 盘前选股数据未就绪',
-    buildPreopenDataQualityFailureLines({ dataQuality }),
+    '盘前投研早报数据未就绪',
+    buildPreopenDataQualityFailureLines({ dataQuality, morningBriefing }),
   );
 }
 
@@ -191,9 +222,15 @@ export async function runPreopenScreeningNotification(input?: {
     };
   }
 
+  const morningBriefing = await buildMorningBriefingContext({
+    dataQuality,
+    lookbackDays: Math.min(input?.lookbackDays ?? 14, 5),
+    now,
+  });
+
   if (!dataQuality.passed && !input?.force) {
     if (input?.notify !== false) {
-      await notifyPreopenDataQualityFailure(dataQuality);
+      await notifyPreopenDataQualityFailure(dataQuality, morningBriefing);
     }
     return {
       tradeDate,
@@ -201,6 +238,10 @@ export async function runPreopenScreeningNotification(input?: {
       skipped: true,
       reason: 'data-quality-failed',
       dataQuality,
+      morningBriefing,
+      morningBriefingQuality: evaluateMorningBriefingQuality({
+        context: morningBriefing,
+      }),
     };
   }
 
@@ -210,6 +251,7 @@ export async function runPreopenScreeningNotification(input?: {
   );
   await runSectorScreenStream(
     {
+      query: buildMorningBriefingScreeningQuery(morningBriefing),
       maxCandidates: input?.maxCandidates ?? 10,
       excludeSt: true,
       includeEtf: true,
@@ -227,13 +269,24 @@ export async function runPreopenScreeningNotification(input?: {
   }
 
   if (input?.notify !== false) {
-    await notifyPreopenScreening({ dataQuality, screening: done });
+    await notifyPreopenScreening({
+      dataQuality,
+      morningBriefing,
+      screening: done,
+    });
   }
+
+  const morningBriefingQuality = evaluateMorningBriefingQuality({
+    context: morningBriefing,
+    screening: done,
+  });
 
   return {
     tradeDate,
     startedAt,
     dataQuality,
+    morningBriefing,
+    morningBriefingQuality,
     screening: done,
   };
 }

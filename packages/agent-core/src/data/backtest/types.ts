@@ -4,7 +4,8 @@ export type BacktestStrategy =
   | 'red-diamond'
   | 'red-diamond-momentum'
   | 'etf-tail-rules'
-  | 'etf-momentum-rotation';
+  | 'etf-momentum-rotation'
+  | 'etf-stable-v2';
 
 export type BacktestSignal = {
   symbol: string;
@@ -136,6 +137,7 @@ export type BacktestCurrentDecision = {
 };
 
 export type BacktestRunConfig = {
+  stockSignalVersion?: 'diamond-v1' | 'diamond-v2';
   entryMaxFailCount?: number;
   exitMaxFailCount?: number;
   maxConcurrentPositions?: number;
@@ -152,6 +154,11 @@ export type BacktestRunConfig = {
   excludeRiskyStockNames?: boolean;
   minEntryPrice?: number;
   minAvgTurnoverAmount?: number;
+  minSignalVolumeRatio?: number;
+  maxNextOpenGapPct?: number | null;
+  rankEntryCandidates?: boolean;
+  signalQualityBlockedCount?: number;
+  nextOpenGapBlockedCount?: number;
   portfolioSkippedCount?: number;
   momentumDays?: number;
   rebalanceDays?: number;
@@ -179,11 +186,21 @@ export type BacktestRunConfig = {
   stopLossPct?: number;
   stopCooldownDays?: number;
   maxPerTheme?: number | null;
+  strategyVersion?: string;
+  signalExecution?: 'same_close' | 'next_open';
+  momentumWindows?: number[];
+  targetPortfolioVolPct?: number;
+  maxTacticalWeightPct?: number;
+  drawdownGuardPct?: number[];
+  minimumCommission?: number;
+  rebalanceDriftPct?: number;
   stockUniverse?: 'manual' | 'retail-stock';
   stockUniverseCount?: number;
   initialCapital?: number;
   takeProfitPct?: number;
   stockEntryDelayTradingDays?: number;
+  stockEntryExecution?: 'confirmation_close' | 'next_open';
+  entryExecutionSkippedCount?: number;
   delayedEntrySkippedCount?: number;
   minDelayedEntryDriftPct?: number;
   maxDelayedEntryDriftPct?: number;

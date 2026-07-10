@@ -55,4 +55,17 @@ describe('etf paper sizing', () => {
     });
     expect(shares).toBe(7600);
   });
+
+  it('supports Stable V2 explicit target weights', () => {
+    const shares = calcEtfPaperBuyShares({
+      totalEquity: 100_000,
+      deployableScale: 1,
+      price: 5,
+      slotCount: 1,
+      targetWeightPct: 30,
+      isProbeEntry: true,
+      currentMarketValue: 5_000,
+    });
+    expect(shares).toBe(5000);
+  });
 });
