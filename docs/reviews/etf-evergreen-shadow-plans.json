@@ -1,0 +1,132 @@
+[
+  {
+    "strategy": "etf-evergreen-v3",
+    "signalDate": "20260710",
+    "executionDate": "20260713",
+    "generatedAt": "2026-07-11T05:14:38.076Z",
+    "cashReservePct": 17.9488,
+    "sleeves": {
+      "growth": {
+        "rebalanceDays": 10,
+        "stopLossPct": -6,
+        "stopCooldownDays": 20,
+        "targets": [
+          {
+            "symbol": "512010",
+            "name": "医药ETF",
+            "targetWeightPct": 17.5,
+            "assetClass": "growth"
+          },
+          {
+            "symbol": "512660",
+            "name": "军工ETF",
+            "targetWeightPct": 17.5,
+            "assetClass": "growth"
+          },
+          {
+            "symbol": "513500",
+            "name": "标普500ETF",
+            "targetWeightPct": 17.5,
+            "assetClass": "growth"
+          },
+          {
+            "symbol": "159920",
+            "name": "恒生ETF",
+            "targetWeightPct": 17.5,
+            "assetClass": "growth"
+          },
+          {
+            "symbol": "511880",
+            "name": "银华日利ETF",
+            "targetWeightPct": 30,
+            "assetClass": "cash"
+          }
+        ]
+      },
+      "defensive": {
+        "rebalanceDays": 20,
+        "stopLossPct": -12,
+        "stopCooldownDays": 10,
+        "targets": [
+          {
+            "symbol": "510300",
+            "name": "沪深300ETF",
+            "targetWeightPct": 50,
+            "assetClass": "equity_core"
+          },
+          {
+            "symbol": "513100",
+            "name": "纳指ETF",
+            "targetWeightPct": 3.7409,
+            "assetClass": "equity_core"
+          },
+          {
+            "symbol": "512480",
+            "name": "半导体ETF国联安",
+            "targetWeightPct": 1.3871,
+            "assetClass": "equity_tactical"
+          }
+        ]
+      }
+    },
+    "targets": [
+      {
+        "symbol": "510300",
+        "name": "沪深300ETF",
+        "targetWeightPct": 20,
+        "assetClass": "防守:equity_core",
+        "reason": "防守袖套：风险资产；多周期动量 2.51%；波动率 26.69%"
+      },
+      {
+        "symbol": "511880",
+        "name": "银华日利ETF",
+        "targetWeightPct": 18,
+        "assetClass": "增长:cash",
+        "reason": "增长袖套：增长袖套未分配风险预算或弱市缺位进入货币 ETF。"
+      },
+      {
+        "symbol": "512010",
+        "name": "医药ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth",
+        "reason": "增长袖套：20日风险调整动量评分 0.3111，单ETF年化波动率不高于40%。"
+      },
+      {
+        "symbol": "512660",
+        "name": "军工ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth",
+        "reason": "增长袖套：20日风险调整动量评分 0.1483，单ETF年化波动率不高于40%。"
+      },
+      {
+        "symbol": "513500",
+        "name": "标普500ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth",
+        "reason": "增长袖套：20日风险调整动量评分 0.0838，单ETF年化波动率不高于40%。"
+      },
+      {
+        "symbol": "159920",
+        "name": "恒生ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth",
+        "reason": "增长袖套：20日风险调整动量评分 0.0488，单ETF年化波动率不高于40%。"
+      },
+      {
+        "symbol": "513100",
+        "name": "纳指ETF",
+        "targetWeightPct": 1.4964,
+        "assetClass": "防守:equity_core",
+        "reason": "防守袖套：风险资产；多周期动量 13.42%；波动率 26.33%"
+      },
+      {
+        "symbol": "512480",
+        "name": "半导体ETF国联安",
+        "targetWeightPct": 0.5548,
+        "assetClass": "防守:equity_tactical",
+        "reason": "防守袖套：风险资产；多周期动量 61.56%；波动率 71.02%"
+      }
+    ],
+    "recordedAt": "2026-07-11T05:14:38.077Z"
+  }
+]

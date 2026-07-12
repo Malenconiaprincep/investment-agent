@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       name?: string;
       shares?: number;
       price?: number;
-      bucket?: 'etf' | 'etf-t-plus' | 'stock';
+      bucket?: 'etf' | 'etf-evergreen' | 'etf-t-plus' | 'stock';
     };
 
     if (!body.side || !body.symbol || !body.name || !body.shares) {
@@ -45,7 +45,12 @@ export async function POST(request: Request) {
       String(body.shares),
       body.price != null ? String(body.price) : '',
     ];
-    if (body.bucket === 'etf' || body.bucket === 'etf-t-plus' || body.bucket === 'stock') {
+    if (
+      body.bucket === 'etf' ||
+      body.bucket === 'etf-evergreen' ||
+      body.bucket === 'etf-t-plus' ||
+      body.bucket === 'stock'
+    ) {
       args.push('--bucket', body.bucket);
     }
     const stdout = await runAgentCorePaperJson(args);

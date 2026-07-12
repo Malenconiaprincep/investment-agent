@@ -1,0 +1,149 @@
+{
+  "generatedAt": "2026-07-11T05:15:50.101Z",
+  "weekStart": "2026-07-05",
+  "weekEnd": "2026-07-11",
+  "paper": {
+    "currentValue": 100000,
+    "stableStartedAt": "2026-07-10",
+    "stableBaselineValue": 100000,
+    "stableCumulativeReturnPct": 0,
+    "accountCumulativeReturnPct": 0,
+    "weekReturnPct": 0,
+    "weekMaxDrawdownPct": 0,
+    "currentDrawdownPct": 0,
+    "accountCurrentDrawdownPct": 0,
+    "tradeCount": 0,
+    "missingReasonCount": 0
+  },
+  "backtest": {
+    "runId": "0cc02155-7652-4359-9d16-6097f36d03a1",
+    "generatedAt": "2026-07-11T02:08:09.541Z",
+    "metrics": {
+      "totalReturnPct": 9.72,
+      "annualizedReturnPct": 9.75,
+      "annualizedVolPct": 11.61,
+      "sharpeRatio": 0.893,
+      "sortinoRatio": 1.239,
+      "maxDrawdownPct": -6.7,
+      "calmarRatio": 1.455,
+      "positiveYearPct": 100,
+      "rolling12mPositivePct": null,
+      "turnoverPct": 1259.61,
+      "totalTradingCost": 1077.18,
+      "tradingCostPct": 1.08,
+      "averageInvestedPct": 92.92,
+      "averageRiskAssetPct": 54.44
+    },
+    "status": "paper_candidate",
+    "validation": {
+      "status": "paper_candidate",
+      "generatedAt": "2026-07-11T04:57:14.843Z",
+      "reportPath": "/Users/wangbo/workspace/study/investment-agent/docs/backtests/etf-evergreen-compare-20260710.json",
+      "candidate": "长青 V3（增长60%/防守40%）",
+      "annualizedReturnPct": 9.87,
+      "maxDrawdownPct": -18.47,
+      "beatCount": 21,
+      "positiveCount": 24,
+      "evaluationCount": 32
+    }
+  },
+  "comparison": {
+    "previousWeekReturnPct": 0,
+    "returnTrend": "stable"
+  },
+  "shadowPlan": {
+    "strategy": "etf-evergreen-v3",
+    "signalDate": "20260710",
+    "executionDate": "20260713",
+    "generatedAt": "2026-07-11T05:14:38.076Z",
+    "cashReservePct": 17.9488,
+    "targetTotalPct": 82.0512,
+    "targets": [
+      {
+        "symbol": "510300",
+        "name": "沪深300ETF",
+        "targetWeightPct": 20,
+        "assetClass": "防守:equity_core"
+      },
+      {
+        "symbol": "511880",
+        "name": "银华日利ETF",
+        "targetWeightPct": 18,
+        "assetClass": "增长:cash"
+      },
+      {
+        "symbol": "512010",
+        "name": "医药ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth"
+      },
+      {
+        "symbol": "512660",
+        "name": "军工ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth"
+      },
+      {
+        "symbol": "513500",
+        "name": "标普500ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth"
+      },
+      {
+        "symbol": "159920",
+        "name": "恒生ETF",
+        "targetWeightPct": 10.5,
+        "assetClass": "增长:growth"
+      },
+      {
+        "symbol": "513100",
+        "name": "纳指ETF",
+        "targetWeightPct": 1.4964,
+        "assetClass": "防守:equity_core"
+      },
+      {
+        "symbol": "512480",
+        "name": "半导体ETF国联安",
+        "targetWeightPct": 0.5548,
+        "assetClass": "防守:equity_tactical"
+      }
+    ]
+  },
+  "capitalReadiness": {
+    "decision": "not_ready",
+    "canAcceptRealCapital": false,
+    "minimumRemainingTradingDays": 60,
+    "estimatedEarliestReviewDate": "2026-10-02",
+    "blockers": [
+      "shadowExecution",
+      "paperExecution",
+      "observedRisk",
+      "reviewDiscipline"
+    ]
+  },
+  "observations": [
+    "本周记录 1 个权益快照，数据足以做周级路径复盘。",
+    "长青 V3 已通过历史准入门槛，当前进入影子观察；双袖套执行一致性核验完成前仍不自动下单。",
+    "已记录 8 个 V3 影子目标；ETF目标合计 82.05%，主动现金储备 17.95%。",
+    "长青 V3 复盘只读取长青一号独立仓，不混入旧 ETF 仓的持仓、成交或历史损益。"
+  ],
+  "lessons": [
+    "本周尚无模拟成交，零收益只代表影子观察起点，不评价策略有效性。",
+    "周度表现未显著恶化，保持参数冻结以积累可比较样本。",
+    "只有重复出现且能在历史固定场景中复现的问题，才进入参数候选清单。"
+  ],
+  "nextActions": [
+    "连续记录 V3 影子目标和下一交易日可成交价格；确认双袖套10/20日调仓与止损归属后，再启动自动模拟成交。",
+    "继续观察风险资产实际权重是否围绕目标权重运行。",
+    "保持成交理由字段完整，累积可用于归因的样本。",
+    "月底比较过去 4 份周复盘，提炼重复问题并建立一次带 changeset 的验证实验。"
+  ],
+  "immutableRules": [
+    "不承诺固定收益，不因短期目标压力增加杠杆。",
+    "日线信号只能在下一交易日执行，禁止使用同日收盘价回填成交。",
+    "策略参数不能根据一周或单一年份结果自动修改。",
+    "任何参数、ETF 池或风控变化都要先写 changeset，再跑全区间、固定场景、双倍成本和样本外验证。"
+  ],
+  "markdownPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-stable-weekly-2026-07-11.md",
+  "jsonPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-stable-weekly-2026-07-11.json"
+}

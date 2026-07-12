@@ -48,6 +48,7 @@ export type RunEtfMomentumBacktestInput = {
   weakRegimeMaxExposure?: number | null;
   bullBenchmarkSlotMomentumPct?: number;
   bullBenchmarkSlotCount?: number;
+  minimumBenchmarkSlotCount?: number;
   cashFallbackInWeakRegime?: boolean;
   exitOnTrendBreak?: boolean;
   initialCapital?: number;
@@ -58,6 +59,15 @@ export type RunEtfMomentumBacktestInput = {
   tPlusBudgetPct?: number;
   tPlusMaxTradesPerDay?: number;
   netRebalance?: boolean;
+  signalExecution?: 'same_close' | 'next_open';
+  drawdownGuardEnabled?: boolean;
+  maxExposure?: number;
+  targetVolPct?: number;
+  minExposure?: number;
+  maxAssetVolPct?: number;
+  riskAdjustedMomentum?: boolean;
+  stopLossPct?: number;
+  stopCooldownDays?: number;
 };
 
 type MomentumBar = {
@@ -1541,6 +1551,10 @@ export async function buildEtfMomentumLivePlan(input?: {
 export async function runEtfMomentumBacktest(
   input: RunEtfMomentumBacktestInput = {},
 ): Promise<BacktestRunResult> {
+  if (input.signalExecution === 'next_open') {
+    const { runEtfMomentumT1Backtest } = await import('./etf-momentum-t1.js');
+    return runEtfMomentumT1Backtest(input);
+  }
   const topN = clampPositiveInt(input.topN, DEFAULT_TOP_N, 1, 10);
   const momentumDays = clampPositiveInt(
     input.momentumDays,

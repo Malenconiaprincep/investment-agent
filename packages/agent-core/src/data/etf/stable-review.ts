@@ -13,6 +13,8 @@ import {
   listEquitySnapshots,
   listPaperTrades,
 } from '../paper/store.js';
+import { ETF_EVERGREEN_BUCKET } from '../paper/bucket.js';
+import { generateEtfEvergreenCapitalReadiness } from './capital-readiness.js';
 import { PACKAGE_ROOT } from '../../mastra/config/paths.js';
 import type {
   EtfStableV2BacktestResult,
@@ -41,10 +43,42 @@ export type EtfStableWeeklyReview = {
     generatedAt: string | null;
     metrics: StableV2Metrics | null;
     status: string | null;
+    validation: {
+      status: string;
+      generatedAt: string | null;
+      reportPath: string;
+      candidate?: string;
+      annualizedReturnPct?: number;
+      maxDrawdownPct?: number;
+      beatCount?: number;
+      positiveCount?: number;
+      evaluationCount?: number;
+    } | null;
   };
   comparison: {
     previousWeekReturnPct: number | null;
     returnTrend: 'improving' | 'stable' | 'deteriorating' | 'no_history';
+  };
+  shadowPlan: {
+    strategy: string;
+    signalDate: string;
+    executionDate: string;
+    generatedAt: string;
+    cashReservePct: number;
+    targetTotalPct: number;
+    targets: Array<{
+      symbol: string;
+      name: string;
+      targetWeightPct: number;
+      assetClass?: string;
+    }>;
+  } | null;
+  capitalReadiness: {
+    decision: string;
+    canAcceptRealCapital: boolean;
+    minimumRemainingTradingDays: number;
+    estimatedEarliestReviewDate: string;
+    blockers: string[];
   };
   observations: string[];
   lessons: string[];
@@ -99,7 +133,7 @@ function loadOrCreateStableBaseline(
   reviewDir: string,
   input: { startedAt: string; currentValue: number },
 ): { startedAt: string; value: number; createdAt: string } {
-  const baselinePath = path.join(reviewDir, 'etf-stable-baseline.json');
+  const baselinePath = path.join(reviewDir, 'etf-evergreen-baseline.json');
   if (existsSync(baselinePath)) {
     try {
       const parsed = JSON.parse(readFileSync(baselinePath, 'utf-8')) as {
@@ -141,11 +175,83 @@ async function latestStableBacktest(): Promise<{
   generatedAt: string | null;
   metrics: StableV2Metrics | null;
   status: string | null;
+  validation: {
+    status: string;
+    generatedAt: string | null;
+    reportPath: string;
+    candidate?: string;
+    annualizedReturnPct?: number;
+    maxDrawdownPct?: number;
+    beatCount?: number;
+    positiveCount?: number;
+    evaluationCount?: number;
+  } | null;
 }> {
+  const repoRoot = path.resolve(PACKAGE_ROOT, '../..');
+  const comparisonDir = path.join(repoRoot, 'docs/backtests');
+  const comparisonFile = existsSync(comparisonDir)
+    ? readdirSync(comparisonDir)
+      .filter((name) => /^etf-evergreen-compare-\d{8}\.json$/.test(name))
+      .sort()
+      .at(-1)
+    : null;
+  let validation: {
+    status: string;
+    generatedAt: string | null;
+    reportPath: string;
+    candidate?: string;
+    annualizedReturnPct?: number;
+    maxDrawdownPct?: number;
+    beatCount?: number;
+    positiveCount?: number;
+    evaluationCount?: number;
+  } | null = null;
+  if (comparisonFile) {
+    const reportPath = path.join(comparisonDir, comparisonFile);
+    try {
+      const parsed = JSON.parse(readFileSync(reportPath, 'utf-8')) as {
+        status?: string;
+        generatedAt?: string;
+        summaries?: Array<{
+          id?: string;
+          label?: string;
+          fullAnnualizedPct?: number;
+          fullMaxDrawdownPct?: number;
+          beatCount?: number;
+          positiveCount?: number;
+          evaluationCount?: number;
+        }>;
+      };
+      if (parsed.status) {
+        const candidate = parsed.summaries?.find((item) => item.id === 'evergreen-v3-60-40');
+        validation = {
+          status: parsed.status,
+          generatedAt: parsed.generatedAt ?? null,
+          reportPath,
+          candidate: candidate?.label,
+          annualizedReturnPct: candidate?.fullAnnualizedPct,
+          maxDrawdownPct: candidate?.fullMaxDrawdownPct,
+          beatCount: candidate?.beatCount,
+          positiveCount: candidate?.positiveCount,
+          evaluationCount: candidate?.evaluationCount,
+        };
+      }
+    } catch {
+      // Invalid comparison reports are ignored; the persisted run remains the fallback.
+    }
+  }
   const record = (await listBacktestRuns(100)).find(
     (item) => item.strategy === 'etf-stable-v2',
   );
-  if (!record) return { runId: null, generatedAt: null, metrics: null, status: null };
+  if (!record) {
+    return {
+      runId: null,
+      generatedAt: null,
+      metrics: null,
+      status: validation?.status ?? null,
+      validation,
+    };
+  }
   const detail = await getBacktestRun(record.id);
   const result = detail?.result as
     | (EtfStableV2BacktestResult & { validation?: { status?: string } })
@@ -154,13 +260,14 @@ async function latestStableBacktest(): Promise<{
     runId: record.id,
     generatedAt: record.generatedAt,
     metrics: result?.stableMetrics ?? null,
-    status: result?.validation?.status ?? result?.review?.status ?? null,
+    status: validation?.status ?? result?.validation?.status ?? result?.review?.status ?? null,
+    validation,
   };
 }
 
 function renderReview(review: Omit<EtfStableWeeklyReview, 'markdownPath' | 'jsonPath'>): string {
   return [
-    `# ETF Stable V2 周复盘（${review.weekStart} ~ ${review.weekEnd}）`,
+    `# 长青一号周复盘（${review.weekStart} ~ ${review.weekEnd}）`,
     '',
     '> 复盘用于发现策略、数据和执行偏差，不会根据一周输赢自动修改参数。',
     '',
@@ -169,18 +276,39 @@ function renderReview(review: Omit<EtfStableWeeklyReview, 'markdownPath' | 'json
     `- 当前资产：¥${review.paper.currentValue.toFixed(2)}`,
     `- Stable V2 起点：${review.paper.stableStartedAt}，基准资产 ¥${review.paper.stableBaselineValue.toFixed(2)}`,
     `- Stable V2 累计收益：${pct(review.paper.stableCumulativeReturnPct)}`,
-    `- 账户全历史累计收益（含旧策略）：${pct(review.paper.accountCumulativeReturnPct)}`,
+    `- 长青一号全历史累计收益：${pct(review.paper.accountCumulativeReturnPct)}`,
     `- 本周收益：${pct(review.paper.weekReturnPct)}`,
     `- 本周最大回撤：${pct(review.paper.weekMaxDrawdownPct)}`,
     `- 当前相对历史峰值回撤：${pct(review.paper.currentDrawdownPct)}`,
-    `- 账户全历史峰值回撤（含旧策略）：${pct(review.paper.accountCurrentDrawdownPct)}`,
+    `- 长青一号历史峰值回撤：${pct(review.paper.accountCurrentDrawdownPct)}`,
     `- 本周成交 ${review.paper.tradeCount} 笔，其中 ${review.paper.missingReasonCount} 笔缺少可复盘理由。`,
     '',
     '## 历史验证锚点',
     '',
     review.backtest.metrics
-      ? `- 最近回测 ${review.backtest.runId}：年化 ${pct(review.backtest.metrics.annualizedReturnPct)}，最大回撤 ${pct(review.backtest.metrics.maxDrawdownPct)}，状态 ${review.backtest.status}。`
+      ? `- 防守袖套持久化回测 ${review.backtest.runId}：年化 ${pct(review.backtest.metrics.annualizedReturnPct)}，最大回撤 ${pct(review.backtest.metrics.maxDrawdownPct)}。`
       : '- 尚无持久化的 Stable V2 回测；本周结论降级为数据观察。',
+    review.backtest.validation
+      ? `- V3 全场景验证：${review.backtest.validation.status}；年化 ${pct(review.backtest.validation.annualizedReturnPct ?? null)}，最大回撤 ${pct(review.backtest.validation.maxDrawdownPct ?? null)}，跑赢 ${review.backtest.validation.beatCount ?? '—'}/${review.backtest.validation.evaluationCount ?? '—'}，正收益 ${review.backtest.validation.positiveCount ?? '—'}/${review.backtest.validation.evaluationCount ?? '—'}。`
+      : '- 尚无全场景公平验证报告，禁止据此恢复自动开仓。',
+    '',
+    '## V3 影子目标',
+    '',
+    ...(review.shadowPlan
+      ? [
+          `- 策略：${review.shadowPlan.strategy}，信号日 ${review.shadowPlan.signalDate}，计划执行日 ${review.shadowPlan.executionDate}。`,
+          `- ETF目标合计 ${review.shadowPlan.targetTotalPct.toFixed(2)}%，主动现金储备 ${review.shadowPlan.cashReservePct.toFixed(2)}%。`,
+          ...review.shadowPlan.targets.map((target) =>
+            `- ${target.symbol} ${target.name}：${target.targetWeightPct.toFixed(2)}%${target.assetClass ? `（${target.assetClass}）` : ''}`,
+          ),
+        ]
+      : ['- 尚未生成长青 V3 影子目标；自动开仓继续暂停。']),
+    '',
+    '## 真实资金准入',
+    '',
+    `- 当前结论：${review.capitalReadiness.canAcceptRealCapital ? '允许首批小额资金' : '不接受真实资金'}。`,
+    `- 最少还需 ${review.capitalReadiness.minimumRemainingTradingDays} 个有效交易日；最早复核估算日 ${review.capitalReadiness.estimatedEarliestReviewDate}。`,
+    `- 未通过环节：${review.capitalReadiness.blockers.join('、') || '无'}。`,
     '',
     '## 与上周比较',
     '',
@@ -215,11 +343,12 @@ export async function generateEtfStableWeeklyReview(options?: {
   const reviewDir = path.join(repoRoot, 'docs/reviews');
   mkdirSync(reviewDir, { recursive: true });
 
-  const [summary, snapshots, trades, backtest] = await Promise.all([
-    getPaperAccountSummary('etf'),
-    listEquitySnapshots(5_000, 'etf'),
-    listPaperTrades(2_000, 'etf'),
+  const [summary, snapshots, trades, backtest, capitalReadiness] = await Promise.all([
+    getPaperAccountSummary(ETF_EVERGREEN_BUCKET),
+    listEquitySnapshots(5_000, ETF_EVERGREEN_BUCKET),
+    listPaperTrades(2_000, ETF_EVERGREEN_BUCKET),
     latestStableBacktest(),
+    generateEtfEvergreenCapitalReadiness({ asOfDate: weekEnd }),
   ]);
   const baseline = loadOrCreateStableBaseline(reviewDir, {
     startedAt: weekEnd,
@@ -273,6 +402,26 @@ export async function generateEtfStableWeeklyReview(options?: {
         : 'stable';
 
   const observations: string[] = [];
+  const rawShadowPlan = 'shadowPlan' in summary ? summary.shadowPlan : null;
+  const shadowPlan = rawShadowPlan
+    ? {
+        strategy: rawShadowPlan.strategy,
+        signalDate: rawShadowPlan.signalDate,
+        executionDate: rawShadowPlan.executionDate,
+        generatedAt: rawShadowPlan.generatedAt,
+        cashReservePct: rawShadowPlan.cashReservePct ?? 0,
+        targetTotalPct: Number(rawShadowPlan.targets.reduce(
+          (sum, target) => sum + target.targetWeightPct,
+          0,
+        ).toFixed(4)),
+        targets: rawShadowPlan.targets.map((target) => ({
+          symbol: target.symbol,
+          name: target.name,
+          targetWeightPct: target.targetWeightPct,
+          assetClass: target.assetClass,
+        })),
+      }
+    : null;
   if (weekSnapshots.length === 0) {
     observations.push(
       baseline.startedAt === weekEnd
@@ -285,7 +434,15 @@ export async function generateEtfStableWeeklyReview(options?: {
   if (accountCurrentDrawdownPct <= -6) {
     observations.push('组合已触发至少一级回撤保护，应核对下一次计划是否降低风险资产权重。');
   }
-  observations.push('Stable V2 复盘从切换日单独建立资产基线，旧策略损益只作为账户背景，不计入 V2 收益。');
+  if (backtest.validation?.status === 'needs_iteration') {
+    observations.push('全场景公平验证未通过，长青一号自动新开仓保持暂停；本周记录 V3 影子目标、净值和数据质量。');
+  } else if (backtest.validation?.status === 'paper_candidate') {
+    observations.push('长青 V3 已通过历史准入门槛，当前进入影子观察；双袖套执行一致性核验完成前仍不自动下单。');
+  }
+  if (shadowPlan) {
+    observations.push(`已记录 ${shadowPlan.targets.length} 个 V3 影子目标；ETF目标合计 ${shadowPlan.targetTotalPct.toFixed(2)}%，主动现金储备 ${shadowPlan.cashReservePct.toFixed(2)}%。`);
+  }
+  observations.push('长青 V3 复盘只读取长青一号独立仓，不混入旧 ETF 仓的持仓、成交或历史损益。');
   if (missingReasonCount > 0) {
     observations.push('存在成交缺少结构化理由，收益归因可信度需要降级。');
   }
@@ -298,13 +455,18 @@ export async function generateEtfStableWeeklyReview(options?: {
       ? '切换日没有足够路径样本，收益和策略有效性均不作判断。'
       : weekReturnPct != null && weekReturnPct < 0
         ? '本周亏损不能单独证明策略失效；先区分市场风险、信号选择、仓位和执行滑点。'
-        : '本周正收益不能单独证明参数有效；仍要检查收益是否集中于单一 ETF。',
+        : weekReturnPct != null && weekReturnPct > 0
+          ? '本周正收益不能单独证明参数有效；仍要检查收益是否集中于单一 ETF。'
+          : '本周尚无模拟成交，零收益只代表影子观察起点，不评价策略有效性。',
     returnTrend === 'deteriorating'
       ? '表现较上周恶化，下一周优先验证风险状态和实际成交偏差，不直接放宽仓位。'
       : '周度表现未显著恶化，保持参数冻结以积累可比较样本。',
     '只有重复出现且能在历史固定场景中复现的问题，才进入参数候选清单。',
   ];
   const nextActions = [
+    backtest.validation?.status === 'needs_iteration'
+      ? '继续改进候选策略并重跑全历史、近期窗口、压力年份和逐年场景；未全部过门槛前不恢复自动开仓。'
+      : '连续记录 V3 影子目标和下一交易日价格，让增长/防守虚拟账本并行累计60个有效交易日；期间不下真实或聚合模拟订单。',
     accountCurrentDrawdownPct <= -6
       ? '下次运行前核对回撤档位、现金/国债目标权重与实际持仓是否一致。'
       : '继续观察风险资产实际权重是否围绕目标权重运行。',
@@ -341,6 +503,14 @@ export async function generateEtfStableWeeklyReview(options?: {
     },
     backtest,
     comparison: { previousWeekReturnPct, returnTrend },
+    shadowPlan,
+    capitalReadiness: {
+      decision: capitalReadiness.decision,
+      canAcceptRealCapital: capitalReadiness.canAcceptRealCapital,
+      minimumRemainingTradingDays: capitalReadiness.minimumRemainingTradingDays,
+      estimatedEarliestReviewDate: capitalReadiness.estimatedEarliestReviewDate,
+      blockers: capitalReadiness.blockers,
+    },
     observations,
     lessons,
     nextActions,

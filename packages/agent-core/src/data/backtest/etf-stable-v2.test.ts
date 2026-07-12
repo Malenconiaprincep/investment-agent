@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ETF_STABLE_V2_UNIVERSE } from '../etf/stable-universe.js';
 import {
+  advanceStableV2RiskControl,
   buildStableV2Allocation,
   createStableV2History,
   runEtfStableV2Backtest,
@@ -57,6 +58,18 @@ describe('ETF Stable V2 allocation', () => {
     expect(allocation.targets.reduce((sum, target) => sum + target.targetWeight, 0)).toBeCloseTo(1, 6);
   });
 
+  it('keeps a benchmark core allocation in a confirmed bull regime', () => {
+    const histories = universe();
+    const allocation = buildStableV2Allocation({
+      histories,
+      signalDate: histories[0]!.bars[150]!.tradeDate,
+    });
+    const benchmark = allocation.targets.find((target) => target.symbol === '510300');
+
+    expect(allocation.regime).toBe('bull');
+    expect(benchmark?.targetWeight).toBeGreaterThanOrEqual(0.49);
+  });
+
   it('switches to the cash ETF at the hard drawdown guard', () => {
     const histories = universe();
     const allocation = buildStableV2Allocation({
@@ -68,6 +81,41 @@ describe('ETF Stable V2 allocation', () => {
     expect(allocation.targets).toHaveLength(1);
     expect(allocation.targets[0]?.symbol).toBe('511880');
     expect(allocation.targets[0]?.targetWeight).toBeCloseTo(1, 6);
+  });
+
+  it('exits hard risk-off after a minimum hold and confirmed market recovery', () => {
+    const recovered = advanceStableV2RiskControl({
+      state: {
+        stage: 'hard',
+        stageDays: 19,
+        recoveryDays: 4,
+        anchorPeakEquity: 100_000,
+      },
+      equity: 88_000,
+      recoveryEligible: true,
+    });
+
+    expect(recovered.stage).toBe('defensive');
+    expect(recovered.changed).toBe(true);
+    expect(recovered.anchorPeakEquity).toBe(88_000);
+    expect(recovered.controlDrawdownPct).toBe(0);
+  });
+
+  it('does not exit hard risk-off while the market recovery is unconfirmed', () => {
+    const guarded = advanceStableV2RiskControl({
+      state: {
+        stage: 'hard',
+        stageDays: 60,
+        recoveryDays: 0,
+        anchorPeakEquity: 100_000,
+      },
+      equity: 88_000,
+      recoveryEligible: false,
+    });
+
+    expect(guarded.stage).toBe('hard');
+    expect(guarded.changed).toBe(false);
+    expect(guarded.anchorPeakEquity).toBe(100_000);
   });
 
   it('generates the signal at T close and executes at T+1 open', async () => {

@@ -5,7 +5,8 @@ export type BacktestStrategy =
   | 'red-diamond-momentum'
   | 'etf-tail-rules'
   | 'etf-momentum-rotation'
-  | 'etf-stable-v2';
+  | 'etf-stable-v2'
+  | 'etf-evergreen-v3';
 
 export type BacktestSignal = {
   symbol: string;
@@ -166,6 +167,8 @@ export type BacktestRunConfig = {
   trendMaDays?: number;
   commissionRate?: number;
   slippageRate?: number;
+  totalTradingCost?: number;
+  tradingCostPct?: number;
   volTargetPct?: number;
   minVolExposure?: number;
   maxVolExposure?: number;
@@ -190,8 +193,16 @@ export type BacktestRunConfig = {
   signalExecution?: 'same_close' | 'next_open';
   momentumWindows?: number[];
   targetPortfolioVolPct?: number;
+  maxAssetVolPct?: number;
+  riskAdjustedMomentum?: boolean;
+  growthSleeveWeightPct?: number;
+  defensiveSleeveWeightPct?: number;
   maxTacticalWeightPct?: number;
+  benchmarkCoreWeightPct?: number;
   drawdownGuardPct?: number[];
+  hardMinimumDays?: number;
+  recoveryConfirmDays?: number;
+  recoveryStepDays?: number;
   minimumCommission?: number;
   rebalanceDriftPct?: number;
   stockUniverse?: 'manual' | 'retail-stock';

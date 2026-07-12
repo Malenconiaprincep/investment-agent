@@ -294,11 +294,13 @@ export async function runPaperAutoPipeline(options?: {
   force?: boolean;
 }) {
   const { runEtfPaperAutoPipeline } = await import('./etf-paper-pipeline.js');
-  const [stock, etf] = await Promise.all([
+  const { ETF_EVERGREEN_BUCKET } = await import('./bucket.js');
+  const [stock, etf, etfEvergreen] = await Promise.all([
     runStockPaperAutoPipeline(options),
     runEtfPaperAutoPipeline(options),
+    runEtfPaperAutoPipeline({ ...options, bucket: ETF_EVERGREEN_BUCKET }),
   ]);
-  return { tradeDate: stock.tradeDate, stock, etf };
+  return { tradeDate: stock.tradeDate, stock, etf, etfEvergreen };
 }
 
 export async function getPaperAutoStatus() {

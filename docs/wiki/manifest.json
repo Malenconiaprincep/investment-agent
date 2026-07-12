@@ -1,19 +1,30 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-07-08T14:23:42.042Z",
+  "updatedAt": "2026-07-10T09:20:20.726Z",
   "latest": {
-    "date": "2026-07-08",
-    "generatedAt": "2026-07-08T14:23:42.042Z",
-    "markdownPath": "docs/wiki/daily/2026-07-08.md",
-    "jsonPath": "docs/wiki/daily/2026-07-08.json",
-    "overallScore": 64,
+    "date": "2026-07-10",
+    "generatedAt": "2026-07-10T09:20:20.726Z",
+    "markdownPath": "docs/wiki/daily/2026-07-10.md",
+    "jsonPath": "docs/wiki/daily/2026-07-10.json",
+    "overallScore": 68,
     "grade": "C",
-    "paperReturnPct": -1.26,
+    "paperReturnPct": -0.75,
     "riskScore": 0,
-    "taskFailures": 0
+    "taskFailures": 1
   },
-  "reportCount": 1,
+  "reportCount": 2,
   "reports": [
+    {
+      "date": "2026-07-10",
+      "generatedAt": "2026-07-10T09:20:20.726Z",
+      "markdownPath": "docs/wiki/daily/2026-07-10.md",
+      "jsonPath": "docs/wiki/daily/2026-07-10.json",
+      "overallScore": 68,
+      "grade": "C",
+      "paperReturnPct": -0.75,
+      "riskScore": 0,
+      "taskFailures": 1
+    },
     {
       "date": "2026-07-08",
       "generatedAt": "2026-07-08T14:23:42.042Z",

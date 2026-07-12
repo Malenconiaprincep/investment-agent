@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-
-import { evaluateEtfBuyExecutionGuard } from './etf-paper-pipeline.js';
+import {
+  evaluateEtfBuyExecutionGuard,
+  isEtfEvergreenAutoTradingEnabled,
+} from './etf-paper-pipeline.js';
 
 describe('evaluateEtfBuyExecutionGuard', () => {
   it('skips buy when bid/ask spread is too wide', () => {
@@ -56,5 +58,16 @@ describe('evaluateEtfBuyExecutionGuard', () => {
     expect(result.action).toBe('buy');
     expect(result.shares).toBe(1000);
     expect(result.premiumPct).toBe(1.5);
+  });
+});
+
+describe('长青一号自动交易准入', () => {
+  it('默认暂停自动开仓', () => {
+    expect(isEtfEvergreenAutoTradingEnabled({})).toBe(false);
+  });
+
+  it('只有显式设置为 1 才恢复', () => {
+    expect(isEtfEvergreenAutoTradingEnabled({ ETF_EVERGREEN_ALLOW_TRADING: 'true' })).toBe(false);
+    expect(isEtfEvergreenAutoTradingEnabled({ ETF_EVERGREEN_ALLOW_TRADING: '1' })).toBe(true);
   });
 });

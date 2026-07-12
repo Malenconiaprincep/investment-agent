@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-07-12T14:53:50.532Z",
+  "tradingDays": 0,
+  "orderCount": 0,
+  "rebalanceCount": 0,
+  "firstTradeDate": null,
+  "lastTradeDate": null,
+  "totalValue": 100000,
+  "returnPct": 0,
+  "maxDrawdownPct": null,
+  "equityCurve": [],
+  "sleeves": {
+    "growth": {
+      "initialCapital": 60000,
+      "cash": 60000,
+      "totalValue": 60000,
+      "positionCount": 0,
+      "lastRebalanceDate": null
+    },
+    "defensive": {
+      "initialCapital": 40000,
+      "cash": 40000,
+      "totalValue": 40000,
+      "positionCount": 0,
+      "lastRebalanceDate": null
+    }
+  }
+}

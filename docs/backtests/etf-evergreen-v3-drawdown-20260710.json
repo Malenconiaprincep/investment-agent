@@ -1,0 +1,123 @@
+{
+  "generatedAt": "2026-07-11T04:58:44.739Z",
+  "startDate": "2014-01-02",
+  "endDate": "2026-07-10",
+  "maxDrawdown": {
+    "peakDate": "20211025",
+    "peakEquity": 267370.42,
+    "troughDate": "20230310",
+    "troughEquity": 217977.81,
+    "recoveryDate": "20241008",
+    "maxDrawdownPct": -18.47,
+    "underwaterTradingDays": 715
+  },
+  "sleeves": {
+    "defensive": {
+      "weightPct": 40,
+      "peakToTroughReturnPct": -8.12,
+      "contributionPctOfPeak": -3.04
+    },
+    "growth": {
+      "weightPct": 60,
+      "peakToTroughReturnPct": -24.66,
+      "contributionPctOfPeak": -15.43
+    }
+  },
+  "benchmarkPeakToTroughReturnPct": -20.57,
+  "worstTrades": [
+    {
+      "symbol": "512660",
+      "name": "军工ETF",
+      "sleeve": "defensive",
+      "entryDate": "20211220",
+      "exitDate": "20220124",
+      "returnPct": -12.53,
+      "exitReason": "signal_lost"
+    },
+    {
+      "symbol": "515790",
+      "name": "光伏ETF",
+      "sleeve": "defensive",
+      "entryDate": "20220701",
+      "exitDate": "20220930",
+      "returnPct": -9.18,
+      "exitReason": "signal_lost"
+    },
+    {
+      "symbol": "513050",
+      "name": "中概互联ETF",
+      "sleeve": "growth",
+      "entryDate": "20220609",
+      "exitDate": "20220614",
+      "returnPct": -9.01,
+      "exitReason": "stop_loss"
+    },
+    {
+      "symbol": "512760",
+      "name": "芯片ETF国泰",
+      "sleeve": "growth",
+      "entryDate": "20221216",
+      "exitDate": "20221223",
+      "returnPct": -8.1,
+      "exitReason": "stop_loss"
+    },
+    {
+      "symbol": "513100",
+      "name": "纳指科技ETF",
+      "sleeve": "growth",
+      "entryDate": "20220105",
+      "exitDate": "20220119",
+      "returnPct": -7.19,
+      "exitReason": "fixed_hold"
+    },
+    {
+      "symbol": "159995",
+      "name": "芯片ETF华夏",
+      "sleeve": "growth",
+      "entryDate": "20221118",
+      "exitDate": "20221129",
+      "returnPct": -7.09,
+      "exitReason": "stop_loss"
+    },
+    {
+      "symbol": "159941",
+      "name": "纳指ETF",
+      "sleeve": "growth",
+      "entryDate": "20220105",
+      "exitDate": "20220119",
+      "returnPct": -6.98,
+      "exitReason": "fixed_hold"
+    },
+    {
+      "symbol": "512480",
+      "name": "半导体ETF国联安",
+      "sleeve": "growth",
+      "entryDate": "20211207",
+      "exitDate": "20211220",
+      "returnPct": -6.96,
+      "exitReason": "stop_loss"
+    },
+    {
+      "symbol": "512480",
+      "name": "半导体ETF国联安",
+      "sleeve": "growth",
+      "entryDate": "20221118",
+      "exitDate": "20221129",
+      "returnPct": -6.9,
+      "exitReason": "stop_loss"
+    },
+    {
+      "symbol": "512760",
+      "name": "芯片ETF国泰",
+      "sleeve": "growth",
+      "entryDate": "20211207",
+      "exitDate": "20211221",
+      "returnPct": -6.88,
+      "exitReason": "stop_loss"
+    }
+  ],
+  "conclusion": [
+    "最大回撤按增长与防守袖套拆解，不用单笔亏损替代组合路径归因。",
+    "改进候选必须针对主要贡献袖套，并重跑全部固定场景；禁止只优化这一段历史。"
+  ]
+}

@@ -13,7 +13,8 @@ type Strategy =
   | 'diamond-momentum'
   | 'etf'
   | 'etf-momentum'
-  | 'etf-stable';
+  | 'etf-stable'
+  | 'etf-evergreen';
 type StockUniverseMode = 'retail-stock' | 'manual';
 type StockMarketFilter = 'require_bullish' | 'avoid_bearish' | 'off';
 type EtfMomentumVariant = 'baseline' | 'weak-cash' | 'active-risk' | 't-plus';
@@ -199,9 +200,19 @@ type BacktestRunConfig = {
   momentumWindows?: number[];
   targetPortfolioVolPct?: number;
   maxTacticalWeightPct?: number;
+  benchmarkCoreWeightPct?: number;
   drawdownGuardPct?: number[];
   minimumCommission?: number;
+  commissionRate?: number;
+  slippageRate?: number;
+  totalTradingCost?: number;
+  tradingCostPct?: number;
   rebalanceDriftPct?: number;
+  growthSleeveWeightPct?: number;
+  defensiveSleeveWeightPct?: number;
+  maxAssetVolPct?: number;
+  riskAdjustedMomentum?: boolean;
+  stopLossPct?: number;
 };
 
 type StableV2Metrics = {
@@ -215,7 +226,18 @@ type StableV2Metrics = {
   rolling12mPositivePct: number | null;
   positiveYearPct: number | null;
   tradingCostPct: number;
+  totalTradingCost: number;
   averageRiskAssetPct: number;
+};
+
+type EvergreenV3Metrics = {
+  growthWeightPct: number;
+  defensiveWeightPct: number;
+  totalReturnPct: number;
+  annualizedReturnPct: number;
+  maxDrawdownPct: number;
+  totalTradingCost: number;
+  tradingCostPct: number;
 };
 
 type BacktestTrade = {
@@ -262,6 +284,7 @@ type BacktestResult = {
   config?: BacktestRunConfig;
   notes: string[];
   stableMetrics?: StableV2Metrics;
+  evergreenMetrics?: EvergreenV3Metrics;
   review?: {
     status: string;
     summary: string;
@@ -293,21 +316,33 @@ type BacktestStreamEvent =
 type BacktestPanel = 'overview' | 'current' | 'etfs' | 'holdings' | 'trades' | 'notes';
 type StockBacktestPanel = 'overview' | 'chart' | 'groups' | 'holdings' | 'trades' | 'notes';
 
-const STRATEGIES: Array<{ value: Strategy; label: string; help: string }> = [
+const STRATEGIES: Array<{
+  value: Strategy;
+  label: string;
+  help: string;
+  badge?: string;
+}> = [
+  {
+    value: 'etf-evergreen',
+    label: '长青一号 V3 · ETF 双袖套',
+    badge: '历史准入通过',
+    help: '主策略：60% 风险调整 T+1 增长袖套 + 40% 多资产防守袖套；弱市空位进入货币 ETF，计入滑点、佣金、最低佣金和整手约束。',
+  },
+  {
+    value: 'etf-stable',
+    label: 'ETF Stable V2 · 防守对照',
+    badge: '对照',
+    help: '长青一号 V3 的 40% 防守袖套来源；保留为单独回测对照，不是当前主策略。',
+  },
+  {
+    value: 'etf-momentum',
+    label: 'ETF T+1 动量轮动',
+    help: '每 10 个交易日按 T 日收盘信号选 20 日动量最强且站上 MA20 的前 4 只 ETF，统一在 T+1 开盘成交，并计入滑点、佣金、最低佣金和整手约束。',
+  },
   {
     value: 'stock',
     label: '股票策略',
     help: '全市场 A 股前复权日线选动量启动信号；默认过滤 ST/8 元以下/低成交额，并在沪深300中期不强时要求 20 日动量 ≥3%。',
-  },
-  {
-    value: 'etf-stable',
-    label: 'ETF Stable V2',
-    help: '20/60/120 日多周期动量，核心权益、黄金、国债和现金动态配置；T+1 开盘执行并叠加波动率及回撤分级。',
-  },
-  {
-    value: 'etf-momentum',
-    label: 'ETF 动量轮动（旧版）',
-    help: '每 10 个交易日选 20 日动量最强且站上 MA20 的前 4 只 ETF，并按市场状态调节宽基和熊市仓位。',
   },
 ];
 
@@ -459,7 +494,7 @@ function returnClass(value: number | null) {
 }
 
 function isEtfStrategy(value: Strategy): boolean {
-  return value === 'etf' || value === 'etf-momentum' || value === 'etf-stable';
+  return value === 'etf' || value === 'etf-momentum' || value === 'etf-stable' || value === 'etf-evergreen';
 }
 
 function displayStrategyName(value: string) {
@@ -473,8 +508,10 @@ function displayStrategyName(value: string) {
     'etf-tail-rules': 'ETF 尾盘规则',
     'etf-momentum': 'ETF 动量轮动',
     'etf-momentum-rotation': 'ETF 动量轮动',
-    'etf-stable': 'ETF Stable V2',
-    'etf-stable-v2': 'ETF Stable V2',
+    'etf-stable': '长青一号 · ETF Stable V2',
+    'etf-stable-v2': '长青一号 · ETF Stable V2',
+    'etf-evergreen': '长青一号 V3 · ETF 双袖套',
+    'etf-evergreen-v3': '长青一号 V3 · ETF 双袖套',
   };
   return labels[value] ?? value;
 }
@@ -510,7 +547,9 @@ function displayTradeName(trade: Pick<BacktestTrade, 'name' | 'symbol'>) {
 }
 
 function displayHoldingName(position: Pick<BacktestPositionSnapshot, 'name' | 'symbol'>) {
-  return position.name && position.name !== position.symbol ? position.name : position.symbol;
+  return position.name && position.name !== position.symbol
+    ? `${position.name}（${position.symbol}）`
+    : position.symbol;
 }
 
 function sortTradesOldestFirst(trades: BacktestTrade[]) {
@@ -879,7 +918,7 @@ function lastEquityAtOrBefore(
 
 export default function BacktestPage() {
   const defaultRange = rangeFromPresetDays(365);
-  const [strategy, setStrategy] = useState<Strategy>('stock');
+  const [strategy, setStrategy] = useState<Strategy>('etf-evergreen');
   const [symbols, setSymbols] = useState('600519:贵州茅台,000001:平安银行');
   const [stockUniverse, setStockUniverse] = useState<StockUniverseMode>('retail-stock');
   const [startDate, setStartDate] = useState(defaultRange.startDate);
@@ -1144,7 +1183,7 @@ export default function BacktestPage() {
           <div className="backtest-control-head">
             <strong>选择策略</strong>
             <span className="muted">
-              A 股策略读取本地前复权日线；ETF 默认使用动量轮动。
+              长青一号 V3 是当前主策略；Stable V2 与基准轮动保留为对照。
             </span>
           </div>
           <div className="backtest-strategy-grid">
@@ -1153,13 +1192,27 @@ export default function BacktestPage() {
                 key={item.value}
                 type="button"
                 className={`backtest-strategy-card${strategy === item.value ? ' backtest-strategy-card--active' : ''}`}
+                aria-pressed={strategy === item.value}
                 onClick={() => setStrategy(item.value)}
               >
-                <span>{item.label}</span>
+                <span className="backtest-strategy-card-title">
+                  {item.label}
+                  {item.badge && <em>{item.badge}</em>}
+                </span>
                 <small>{item.help}</small>
               </button>
             ))}
           </div>
+          {(strategy === 'etf-evergreen' || strategy === 'etf-stable') && (
+            <div className="backtest-strategy-context">
+              <span>
+                {strategy === 'etf-evergreen'
+                  ? '这里可按 3个月、6个月、1年、2年或自定义区间回测长青一号 V3；历史准入已通过，真实资金仍需完成影子仓观察门。'
+                  : 'Stable V2 是长青一号 V3 的防守袖套，可用于单独对照。'}
+              </span>
+              <Link href="/paper">查看长青一号模拟仓</Link>
+            </div>
+          )}
         </div>
 
         {strategy === 'etf-momentum' && (
@@ -1522,7 +1575,8 @@ export default function BacktestPage() {
 
           {displayedResult.strategy === 'etf-tail-rules' ||
           displayedResult.strategy === 'etf-momentum-rotation' ||
-          displayedResult.strategy === 'etf-stable-v2' ? (
+          displayedResult.strategy === 'etf-stable-v2' ||
+          displayedResult.strategy === 'etf-evergreen-v3' ? (
             <EtfStrategyReport
               result={displayedResult}
               comparisonResults={comparisonResults ?? undefined}
@@ -2005,8 +2059,9 @@ function EtfStrategyReport({
   const sharpe = calcSharpe(result.equityCurve);
   const startDate = result.equityCurve?.[0]?.tradeDate ?? null;
   const endDate = result.equityCurve?.at(-1)?.tradeDate ?? null;
+  const isEvergreen = result.strategy === 'etf-evergreen-v3';
   const isStable = result.strategy === 'etf-stable-v2';
-  const isMomentum = result.strategy === 'etf-momentum-rotation' || isStable;
+  const isMomentum = result.strategy === 'etf-momentum-rotation' || isStable || isEvergreen;
   const comparisonSeries =
     isMomentum && comparisonResults && comparisonResults.length > 1
       ? comparisonResults.map((item) => ({
@@ -2061,8 +2116,10 @@ function EtfStrategyReport({
                 <h2 className="section-title">收益概述</h2>
                 <p className="muted">
                   {isMomentum
-                    ? isStable
-                      ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。Stable V2 使用 20/60/120 日波动率调整动量、风险集群去重和逆波动率权重；权益、黄金、国债与货币 ETF 合计配置，每 ${result.config?.rebalanceDays ?? 20} 个交易日检查一次，目标权重漂移不足 ${Math.round((result.config?.rebalanceDriftPct ?? 0.03) * 100)}% 不交易；T 日收盘生成信号，T+1 开盘执行，并按 ${result.config?.drawdownGuardPct?.join('/') ?? '-6/-9/-12'}% 分级降风险。`
+                    ? isEvergreen
+                      ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。长青一号 V3 将 ${result.evergreenMetrics?.growthWeightPct ?? 60}% 资金配置到风险调整 T+1 增长袖套，${result.evergreenMetrics?.defensiveWeightPct ?? 40}% 配置到多资产防守袖套；增长袖套限制单 ETF 年化波动率不高于 ${result.config?.maxAssetVolPct ?? 40}%，采用 ${result.config?.stopLossPct ?? -6}% 止损和 ${result.config?.stopCooldownDays ?? 20} 个交易日冷却，弱市未分配资金进入货币 ETF。全部交易按 T 日收盘信号、T+1 开盘执行并计入成本。`
+                      : isStable
+                      ? `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。长青一号（Stable V2）使用 20/60/120 日波动率调整动量、风险集群去重和逆波动率权重；权益、黄金、国债与货币 ETF 合计配置，每 ${result.config?.rebalanceDays ?? 20} 个交易日检查一次，目标权重漂移不足 ${Math.round((result.config?.rebalanceDriftPct ?? 0.03) * 100)}% 不交易；T 日收盘生成信号，T+1 开盘执行，并按 ${result.config?.drawdownGuardPct?.join('/') ?? '-6/-9/-12'}% 分级降风险。`
                       : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：每 ${result.config?.rebalanceDays ?? 10} 个交易日调仓，选择 ${result.config?.momentumDays ?? 20} 日动量最强且站上 MA${result.config?.trendMaDays ?? 20} 的前 ${result.config?.topN ?? 4} 只 ETF 等权持有；不足时${result.config?.cashFallbackInWeakRegime ? '弱市留现金' : '用沪深300兜底'}，大盘站上 MA20 时放宽至 MA10，若沪深300 ${result.config?.momentumDays ?? 20} 日动量不低于 ${result.config?.bullBenchmarkSlotMomentumPct ?? 8}% 则保留 ${result.config?.bullBenchmarkSlotCount ?? 1} 个宽基槽位；跌破 MA20 或 ${result.config?.momentumDays ?? 20} 日动量为负时预防性仓位上限 ${Math.round((result.config?.weakRegimeMaxExposure ?? 0.7) * 100)}%，跌破 MA20 且动量为负时仓位上限 ${Math.round((result.config?.bearRegimeMaxExposure ?? 0.25) * 100)}%，单笔 -12% 止损后 ${result.config?.stopCooldownDays ?? 10} 日冷却${result.config?.exitOnTrendBreak ? '，弱市破趋势提前退出' : ''}${result.config?.tPlusEnabled ? '，并启用正T日线代理' : ''}，含交易成本与波动率目标仓位，权益按日线滚动。`
                     : `区间 ${fmtTradeDate(startDate)} 至 ${fmtTradeDate(endDate)}。规则：8 条 ETF 尾盘规则 + 买入前 ${result.config?.newsLookbackDays ?? 3} 日新闻过滤；最多同时持有 ${result.config?.maxConcurrentPositions ?? 5} 只；失效出场允许 ${result.config?.exitMaxFailCount ?? 2} 条规则失败；收益曲线按组合槽位复利。`}
                 </p>
@@ -2091,9 +2148,24 @@ function EtfStrategyReport({
               <SummaryMetric label="单笔最高收益" value={fmtPct(result.metrics.bestReturnPct)} tone={result.metrics.bestReturnPct} />
               {isMomentum ? (
                 <>
-                  <SummaryMetric label="方案" value={isStable ? 'Stable V2' : momentumModeLabel ?? '基准轮动'} />
-                  <SummaryMetric label="调仓周期" value={`${result.config?.rebalanceDays ?? 10} 日`} />
-                  <SummaryMetric label="持仓数量" value={isStable ? `最多 ${result.config?.maxConcurrentPositions ?? 4}` : `Top ${result.config?.topN ?? 4}`} />
+                  <SummaryMetric
+                    label="方案"
+                    value={isEvergreen ? '长青一号 V3 · 双袖套' : isStable ? '长青一号 · Stable V2' : momentumModeLabel ?? '基准轮动'}
+                  />
+                  <SummaryMetric label="调仓周期" value={isEvergreen ? '增长 10 / 防守 20 日' : `${result.config?.rebalanceDays ?? 10} 日`} />
+                  <SummaryMetric label="持仓数量" value={isEvergreen ? '双袖套组合' : isStable ? `最多 ${result.config?.maxConcurrentPositions ?? 4}` : `Top ${result.config?.topN ?? 4}`} />
+                  {isEvergreen && result.evergreenMetrics ? (
+                    <>
+                      <SummaryMetric label="增长袖套" value={fmtPct(result.evergreenMetrics.growthWeightPct)} />
+                      <SummaryMetric label="防守袖套" value={fmtPct(result.evergreenMetrics.defensiveWeightPct)} />
+                      <SummaryMetric label="策略口径年化" value={fmtPct(result.evergreenMetrics.annualizedReturnPct)} tone={result.evergreenMetrics.annualizedReturnPct} />
+                      <SummaryMetric label="策略口径回撤" value={fmtPct(result.evergreenMetrics.maxDrawdownPct)} tone={result.evergreenMetrics.maxDrawdownPct} inverse />
+                      <SummaryMetric label="交易成本合计" value={`${fmtMoney(result.evergreenMetrics.totalTradingCost, 2)} 元`} />
+                      <SummaryMetric label="交易成本占本金" value={fmtPct(result.evergreenMetrics.tradingCostPct)} />
+                      <SummaryMetric label="佣金口径" value={`${fmtPct((result.config?.commissionRate ?? 0.0003) * 100)} / 最低 ${fmtMoney(result.config?.minimumCommission ?? 5)} 元`} />
+                      <SummaryMetric label="单边滑点假设" value={fmtPct((result.config?.slippageRate ?? 0.0005) * 100)} />
+                    </>
+                  ) : null}
                   {isStable && result.stableMetrics ? (
                     <>
                       <SummaryMetric label="滚动12月为正" value={fmtPct(result.stableMetrics.rolling12mPositivePct)} />
@@ -2102,7 +2174,7 @@ function EtfStrategyReport({
                       <SummaryMetric label="交易成本占比" value={fmtPct(result.stableMetrics.tradingCostPct)} />
                     </>
                   ) : null}
-                  {!isStable ? (
+                  {!isStable && !isEvergreen ? (
                     <>
                       <SummaryMetric
                         label="弱市空槽"
@@ -2138,7 +2210,7 @@ function EtfStrategyReport({
                 tradeDate: point.tradeDate,
                 returnPct: point.returnPct,
               }))}
-              strategyName={isStable ? 'Stable V2' : momentumModeLabel ?? '策略'}
+              strategyName={isEvergreen ? '长青一号 V3' : isStable ? '长青一号 · Stable V2' : momentumModeLabel ?? '策略'}
               strategySeries={comparisonSeries}
               benchmark={
                 result.benchmark
@@ -2817,7 +2889,7 @@ function PortfolioPositionActivityTable({ snapshot }: { snapshot: PortfolioSnaps
               const action = row.action;
               return (
                 <tr key={row.key} className="portfolio-position-row--sold">
-                  <td title={action.symbol}>{action.name}</td>
+                  <td title={action.symbol}>{displayHoldingName(action)}</td>
                   <td>
                     <PortfolioActivityCell actions={[action]} tPlusTrades={[]} />
                   </td>
@@ -2960,7 +3032,7 @@ function PortfolioActionChip({ action }: { action: PortfolioSnapshotAction }) {
       <div className="portfolio-action-chip portfolio-action-chip--rebalance">
         <strong>{label}</strong>
         <span title={action.symbol}>
-          {action.name && action.name !== action.symbol ? action.name : action.symbol}
+          {displayHoldingName(action)}
         </span>
         <small>
           {action.assetType === 'etf' ? 'ETF' : '股票'} · 卖 {fmtNumber(action.sellShares ?? 0, 0)} 份 @{' '}
@@ -2974,7 +3046,7 @@ function PortfolioActionChip({ action }: { action: PortfolioSnapshotAction }) {
     <div className={`portfolio-action-chip portfolio-action-chip--${action.action}`}>
       <strong>{action.action === 'buy' ? '买入' : '卖出'}</strong>
       <span title={action.symbol}>
-        {action.name && action.name !== action.symbol ? action.name : action.symbol}
+        {displayHoldingName(action)}
       </span>
       <small>
         {action.assetType === 'etf' ? 'ETF' : '股票'} · {fmtPrice(action.price)}

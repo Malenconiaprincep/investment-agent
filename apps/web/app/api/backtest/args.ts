@@ -53,6 +53,7 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
 
   if (strategy === 'etf-momentum') {
     const args = ['etf-momentum', searchParams.get('days') ?? '365'];
+    args.push('--next-open');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     if (startDate) args.push(`--from=${startDate}`);
@@ -102,6 +103,16 @@ export function getBacktestArgsFromSearchParams(searchParams: URLSearchParams): 
     const volTarget = searchParams.get('volTarget');
     if (rebalance) args.push(`--rebalance=${rebalance}`);
     if (volTarget) args.push(`--vol-target=${volTarget}`);
+    return args;
+  }
+
+  if (strategy === 'etf-evergreen' || strategy === 'etf-evergreen-v3') {
+    const args = ['etf-evergreen', searchParams.get('days') ?? String(365 * 10)];
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    if (startDate) args.push(`--from=${startDate}`);
+    if (endDate) args.push(`--to=${endDate}`);
+    if (initialCapital) args.push(`--capital=${initialCapital}`);
     return args;
   }
 

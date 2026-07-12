@@ -1,0 +1,3175 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-10",
+  "generatedAt": "2026-07-10T09:20:20.726Z",
+  "timeZone": "Asia/Shanghai",
+  "paths": {
+    "repoRoot": "/Users/wangbo/workspace/study/investment-agent",
+    "dataDir": "/Users/wangbo/workspace/study/investment-agent/packages/agent-core/src/data",
+    "markdown": "docs/wiki/daily/2026-07-10.md",
+    "json": "docs/wiki/daily/2026-07-10.json"
+  },
+  "workSummary": {
+    "current": {
+      "id": "a0de5ef2-30b1-4bfd-b833-0b9f317408aa",
+      "generatedAt": "2026-07-10T09:20:20.728Z",
+      "createdAt": "2026-07-10T09:20:20.991Z",
+      "overallScore": 68,
+      "grade": "C",
+      "paperReturnPct": -0.75,
+      "backtestAvgReturnPct": 61.69,
+      "riskScore": 0,
+      "coverageScore": 95,
+      "validationScore": 99,
+      "iterationScore": 72,
+      "urgentAlerts": 6,
+      "unacknowledgedAlerts": 100
+    },
+    "comparison": {
+      "previous": {
+        "id": "e05de93c-a916-4926-b447-befcff9a35a7",
+        "generatedAt": "2026-07-08T16:09:18.605Z",
+        "createdAt": "2026-07-08T16:09:18.634Z",
+        "overallScore": 64,
+        "grade": "C",
+        "paperReturnPct": -1.26,
+        "backtestAvgReturnPct": 34.23,
+        "riskScore": 0,
+        "coverageScore": 79,
+        "validationScore": 99,
+        "iterationScore": 70,
+        "urgentAlerts": 0,
+        "unacknowledgedAlerts": 100
+      },
+      "scoreDelta": 4,
+      "paperReturnDeltaPct": 0.51,
+      "riskScoreDelta": 0,
+      "coverageScoreDelta": 16,
+      "verdict": "improved"
+    },
+    "conclusion": "系统已有可复盘证据，但收益、风险或验证覆盖仍需补强，当前更适合稳态观察和小步迭代。",
+    "components": [
+      {
+        "key": "coverage",
+        "label": "数据闭环",
+        "score": 95,
+        "detail": "8/9 个数据源近期有效"
+      },
+      {
+        "key": "return",
+        "label": "收益贡献",
+        "score": 72,
+        "detail": "模拟盘 -0.75%，回测均值 +61.69%"
+      },
+      {
+        "key": "risk",
+        "label": "风险控制",
+        "score": 0,
+        "detail": "6 个紧急告警，最差跟踪收益 -14.06%"
+      },
+      {
+        "key": "validation",
+        "label": "策略验证",
+        "score": 99,
+        "detail": "40 次回测，50 次选股，Eval +92.90%"
+      },
+      {
+        "key": "iteration",
+        "label": "迭代复盘",
+        "score": 72,
+        "detail": "0 份周复盘，12 份合格研报"
+      }
+    ],
+    "coverageSources": [
+      {
+        "key": "signals",
+        "label": "信号",
+        "count": 1,
+        "latestAt": "2026-07-10T07:35:24.325Z",
+        "status": "good"
+      },
+      {
+        "key": "monitor",
+        "label": "监控雷达",
+        "count": 101,
+        "latestAt": "2026-07-10T09:16:21.398Z",
+        "status": "good"
+      },
+      {
+        "key": "watchlist",
+        "label": "跟踪池",
+        "count": 19,
+        "latestAt": "2026-07-10T07:07:16.687Z",
+        "status": "good"
+      },
+      {
+        "key": "paper",
+        "label": "模拟盘",
+        "count": 20,
+        "latestAt": "2026-07-10T06:00:14.920Z",
+        "status": "good"
+      },
+      {
+        "key": "backtest",
+        "label": "回测",
+        "count": 40,
+        "latestAt": "2026-07-10T07:45:41.645Z",
+        "status": "good"
+      },
+      {
+        "key": "reports",
+        "label": "研报",
+        "count": 12,
+        "latestAt": "2026-07-09T00:50:24.174Z",
+        "status": "good"
+      },
+      {
+        "key": "screenings",
+        "label": "智能选股",
+        "count": 50,
+        "latestAt": "2026-07-10T07:07:12.511Z",
+        "status": "good"
+      },
+      {
+        "key": "etf",
+        "label": "ETF 轮动",
+        "count": 30,
+        "latestAt": "2026-07-10T06:45:27.929Z",
+        "status": "good"
+      },
+      {
+        "key": "eval",
+        "label": "Eval/Harness",
+        "count": 1,
+        "latestAt": "2026-06-21T03:41:23.446Z",
+        "status": "stale"
+      }
+    ],
+    "performance": {
+      "paperReturnPct": -0.75,
+      "paperTotalValue": 496254.03,
+      "paperInitialCash": 500000,
+      "equityTrend": "flat",
+      "backtestAvgReturnPct": 61.69,
+      "profitableBacktestCount": 30,
+      "backtestCount": 39,
+      "bestBacktest": {
+        "id": "10c3d8d5-e874-45cd-b088-be68f98fad8e",
+        "strategy": "red-diamond-momentum",
+        "assetType": "stock",
+        "generatedAt": "2026-07-03T15:12:11.592Z",
+        "createdAt": "2026-07-03T15:12:11.593Z",
+        "requestedDays": 800,
+        "startDate": "2018-01-02",
+        "endDate": "2026-07-03",
+        "tradeCount": 282,
+        "validTradeCount": 282,
+        "finalReturnPct": 292.17,
+        "initialCapital": 100000
+      },
+      "worstBacktest": {
+        "id": "002ee199-d400-4985-9916-c0ec4dfead62",
+        "strategy": "red-diamond-momentum",
+        "assetType": "stock",
+        "generatedAt": "2026-07-03T15:09:48.522Z",
+        "createdAt": "2026-07-03T15:09:48.522Z",
+        "requestedDays": 800,
+        "startDate": "2020-01-02",
+        "endDate": "2020-12-31",
+        "tradeCount": 164,
+        "validTradeCount": 164,
+        "finalReturnPct": -26.74,
+        "initialCapital": 100000
+      }
+    },
+    "risk": {
+      "score": 0,
+      "openPositionCount": 4,
+      "unacknowledgedAlerts": 100,
+      "urgentAlerts": 6,
+      "worstWatchlistReturnPct": -14.06,
+      "exposurePct": 6.61
+    },
+    "loop": [
+      {
+        "key": "signal",
+        "label": "信号产生",
+        "score": 100,
+        "status": "strong",
+        "headline": "1 条近期钻石信号",
+        "detail": "最新信号 中电港 蓝钻，评分 62"
+      },
+      {
+        "key": "monitor",
+        "label": "监控跟踪",
+        "score": 65,
+        "status": "watch",
+        "headline": "19 只跟踪标的，100 条监控告警",
+        "detail": "最近监控扫描 2026-07-10，扫描 21 个标的。"
+      },
+      {
+        "key": "execution",
+        "label": "模拟执行",
+        "score": 72,
+        "status": "watch",
+        "headline": "模拟盘收益 -0.75%",
+        "detail": "当前 4 个持仓，仓位约 6.6%。"
+      },
+      {
+        "key": "risk-return",
+        "label": "收益/风险统计",
+        "score": 36,
+        "status": "weak",
+        "headline": "风险分 0，收益分 72",
+        "detail": "权益趋势 横盘，未确认告警 100 条。"
+      },
+      {
+        "key": "system-score",
+        "label": "系统评分",
+        "score": 68,
+        "status": "watch",
+        "headline": "总分 68，评级 C",
+        "detail": "由数据闭环、收益贡献、风险控制、策略验证和迭代复盘共同加权。"
+      },
+      {
+        "key": "review",
+        "label": "问题复盘",
+        "score": 48,
+        "status": "weak",
+        "headline": "6 个紧急告警，100 个未确认告警",
+        "detail": "复盘重点转向信号误报、止损执行和收益归因。"
+      },
+      {
+        "key": "optimization",
+        "label": "策略优化建议",
+        "score": 72,
+        "status": "watch",
+        "headline": "0 份周复盘，Eval +92.90%",
+        "detail": "复盘与评测可作为下一轮策略迭代依据。"
+      },
+      {
+        "key": "next-iteration",
+        "label": "下一轮迭代",
+        "score": 86,
+        "status": "strong",
+        "headline": "已有回测样本，可进入参数对比",
+        "detail": "下一轮重点比较调整前后的评分、模拟盘收益、风险告警和 Eval 通过率。"
+      }
+    ],
+    "strategyHealth": [
+      {
+        "key": "paper",
+        "label": "模拟盘执行",
+        "score": 72,
+        "status": "watch",
+        "evidence": "累计收益 -0.75%，最近成交 16 条。",
+        "suggestion": "复查自动买入来源、止损执行和单票仓位，先降低亏损来源权重。"
+      },
+      {
+        "key": "backtest",
+        "label": "策略回测",
+        "score": 99,
+        "status": "strong",
+        "evidence": "40 次记录，正收益 30/39，均值 +61.69%。",
+        "suggestion": "保留正收益且交易数足够的参数组合，淘汰稳定跑输的组合。"
+      },
+      {
+        "key": "screening",
+        "label": "选股与信号",
+        "score": 72,
+        "status": "watch",
+        "evidence": "50 次选股，1 条钻石信号。",
+        "suggestion": "把选股结果进入跟踪池后的 1/3/5/10 日表现作为信号胜率口径。"
+      },
+      {
+        "key": "etf",
+        "label": "ETF 轮动",
+        "score": 75,
+        "status": "strong",
+        "evidence": "30 次尾盘/轮动筛选，ETF 仓收益 -3.62%。",
+        "suggestion": "对比 ETF 动量回测与模拟盘滑点，检查调仓频率和趋势过滤是否匹配实盘节奏。"
+      },
+      {
+        "key": "eval",
+        "label": "Eval/Harness",
+        "score": 93,
+        "status": "strong",
+        "evidence": "最近通过率 +92.90%，失败 0 项。",
+        "suggestion": "新增收益归因、风险暴露和信号失效相关 harness 用例。"
+      }
+    ],
+    "optimizationQueue": [
+      "复盘模拟盘亏损成交，按来源拆分消息雷达、ETF 轮动、手动交易的贡献。",
+      "处理紧急监控告警，确认是否触发减仓、止损或移出跟踪池。"
+    ],
+    "focus": {
+      "daily": [
+        "查看未确认监控告警与持仓止损线。",
+        "记录新增信号进入跟踪池后的表现。",
+        "确认模拟盘成交是否符合策略触发原因。"
+      ],
+      "weekly": [
+        "按策略来源统计收益、胜率、最大回撤和误报率。",
+        "复盘表现最差的跟踪标的和回测组合。",
+        "把有效信号沉淀为可测试规则。"
+      ],
+      "monthly": [
+        "淘汰持续跑输且样本充足的信号或参数。",
+        "对 ETF 轮动、动量选股和消息雷达做横向收益归因。",
+        "比较系统调整前后的 Eval、回测和模拟盘变化。"
+      ]
+    },
+    "eval": {
+      "ranAt": "2026-06-21T03:41:23.446Z",
+      "passRate": 92.9,
+      "suiteCount": 3,
+      "failureCount": 0
+    }
+  },
+  "scheduledTasks": {
+    "summary": {
+      "total": 261,
+      "completed": 258,
+      "skipped": 1,
+      "failed": 1,
+      "disabled": 0
+    },
+    "entries": [
+      {
+        "runId": "work-summary-snapshot:2026-07-10:2026-07-10T09:20:20.725Z",
+        "taskId": "work-summary-snapshot",
+        "label": "工作总结与 Wiki 日报",
+        "tradeDate": "2026-07-10",
+        "status": "running",
+        "summary": "任务已开始",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:20:20.725Z",
+        "ranAtBeijing": "2026/07/10 17:20:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:16:21.718Z",
+        "ranAtBeijing": "2026/07/10 17:16:21"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:11:21.968Z",
+        "ranAtBeijing": "2026/07/10 17:11:21"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 15 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:06:25.506Z",
+        "ranAtBeijing": "2026/07/10 17:06:25"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 12 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:01:24.554Z",
+        "ranAtBeijing": "2026/07/10 17:01:24"
+      },
+      {
+        "runId": "stock-daily-csv-update:2026-07-10:2026-07-10T09:00:20.675Z",
+        "taskId": "stock-daily-csv-update",
+        "label": "股票日线手动更新提醒",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "已发送 2026-07-10 股票日线手动更新提醒",
+        "elapsedMs": 1225,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T09:00:20.675Z",
+        "ranAtBeijing": "2026/07/10 17:00:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:56:23.918Z",
+        "ranAtBeijing": "2026/07/10 16:56:23"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:51:25.642Z",
+        "ranAtBeijing": "2026/07/10 16:51:25"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 13 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:46:26.003Z",
+        "ranAtBeijing": "2026/07/10 16:46:26"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 11 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:41:25.790Z",
+        "ranAtBeijing": "2026/07/10 16:41:25"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:36:25.386Z",
+        "ranAtBeijing": "2026/07/10 16:36:25"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:31:20.592Z",
+        "ranAtBeijing": "2026/07/10 16:31:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 11 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:30:34.026Z",
+        "ranAtBeijing": "2026/07/10 16:30:34"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:25:28.846Z",
+        "ranAtBeijing": "2026/07/10 16:25:28"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:22:18.237Z",
+        "ranAtBeijing": "2026/07/10 16:22:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:17:18.021Z",
+        "ranAtBeijing": "2026/07/10 16:17:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:12:18.336Z",
+        "ranAtBeijing": "2026/07/10 16:12:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:07:17.998Z",
+        "ranAtBeijing": "2026/07/10 16:07:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T08:02:18.359Z",
+        "ranAtBeijing": "2026/07/10 16:02:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 14 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:57:13.925Z",
+        "ranAtBeijing": "2026/07/10 15:57:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 8 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:52:19.776Z",
+        "ranAtBeijing": "2026/07/10 15:52:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:47:19.867Z",
+        "ranAtBeijing": "2026/07/10 15:47:19"
+      },
+      {
+        "runId": "etf-observation-snapshot:2026-07-10:2026-07-10T07:45:13.601Z",
+        "taskId": "etf-observation-snapshot",
+        "label": "ETF 观察快照",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "总分 100 · pass · 已观察 12/56 天 · 失败 0 项 · 预警 0 项",
+        "elapsedMs": 1547,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:45:13.601Z",
+        "ranAtBeijing": "2026/07/10 15:45:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:42:19.147Z",
+        "ranAtBeijing": "2026/07/10 15:42:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:37:19.284Z",
+        "ranAtBeijing": "2026/07/10 15:37:19"
+      },
+      {
+        "runId": "watchlist-snapshot:2026-07-10:2026-07-10T07:35:13.584Z",
+        "taskId": "watchlist-snapshot",
+        "label": "跟踪池快照",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "刷新 19 只 · 钻石 1 只 · 清理 0 只 · 保护 0 只 · 失败 0 只",
+        "elapsedMs": 29752,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:35:13.584Z",
+        "ranAtBeijing": "2026/07/10 15:35:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:32:19.684Z",
+        "ranAtBeijing": "2026/07/10 15:32:19"
+      },
+      {
+        "runId": "etf-daily-csv-update:2026-07-10:2026-07-10T07:30:13.555Z",
+        "taskId": "etf-daily-csv-update",
+        "label": "ETF 日线更新",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "标的 20 只 · 新增 20 行 · 修正 12 行 · 失败 0 只",
+        "elapsedMs": 3398,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:30:13.555Z",
+        "ranAtBeijing": "2026/07/10 15:30:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 11 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:27:20.222Z",
+        "ranAtBeijing": "2026/07/10 15:27:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:22:19.321Z",
+        "ranAtBeijing": "2026/07/10 15:22:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:17:19.431Z",
+        "ranAtBeijing": "2026/07/10 15:17:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:12:19.575Z",
+        "ranAtBeijing": "2026/07/10 15:12:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:07:22.053Z",
+        "ranAtBeijing": "2026/07/10 15:07:22"
+      },
+      {
+        "runId": "stock-paper:2026-07-10:2026-07-10T07:05:13.495Z",
+        "taskId": "stock-paper",
+        "label": "股票模拟盘选股",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "elapsedMs": 124093,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:05:13.495Z",
+        "ranAtBeijing": "2026/07/10 15:05:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T07:02:21.420Z",
+        "ranAtBeijing": "2026/07/10 15:02:21"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:57:18.011Z",
+        "ranAtBeijing": "2026/07/10 14:57:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 4 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:52:21.431Z",
+        "ranAtBeijing": "2026/07/10 14:52:21"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:47:20.374Z",
+        "ranAtBeijing": "2026/07/10 14:47:20"
+      },
+      {
+        "runId": "etf-tail-pick:2026-07-10:2026-07-10T06:45:27.928Z",
+        "taskId": "etf-tail-pick",
+        "label": "ETF 尾盘推荐",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "今日 3/20 只 ETF 通过严格筛选，近通过 7 只",
+        "elapsedMs": 257,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:45:27.928Z",
+        "ranAtBeijing": "2026/07/10 14:45:27"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 14644,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:45:13.284Z",
+        "ranAtBeijing": "2026/07/10 14:45:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 7 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:42:17.633Z",
+        "ranAtBeijing": "2026/07/10 14:42:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:37:15.050Z",
+        "ranAtBeijing": "2026/07/10 14:37:15"
+      },
+      {
+        "runId": "screen-afternoon:2026-07-10:2026-07-10T06:35:13.278Z",
+        "taskId": "screen-afternoon",
+        "label": "智能选股（尾盘前）",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "记录 2d738741-7e36-49db-b026-33b034d286ac · 候选 3 只 · 入池 2 只",
+        "elapsedMs": 117422,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:35:13.278Z",
+        "ranAtBeijing": "2026/07/10 14:35:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:32:17.669Z",
+        "ranAtBeijing": "2026/07/10 14:32:17"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 18890,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:30:13.861Z",
+        "ranAtBeijing": "2026/07/10 14:30:13"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:待卖仓当前反弹 -1.04% 未达 0.6% · 下次观察 2026-07-13",
+        "elapsedMs": 3,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:30:13.857Z",
+        "ranAtBeijing": "2026/07/10 14:30:13"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 583,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:30:13.274Z",
+        "ranAtBeijing": "2026/07/10 14:30:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:27:19.766Z",
+        "ranAtBeijing": "2026/07/10 14:27:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 4 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:22:18.376Z",
+        "ranAtBeijing": "2026/07/10 14:22:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 4 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:17:16.668Z",
+        "ranAtBeijing": "2026/07/10 14:17:16"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 4256,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:15:13.400Z",
+        "ranAtBeijing": "2026/07/10 14:15:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 4 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:12:18.766Z",
+        "ranAtBeijing": "2026/07/10 14:12:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:07:15.025Z",
+        "ranAtBeijing": "2026/07/10 14:07:15"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 5 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:02:18.463Z",
+        "ranAtBeijing": "2026/07/10 14:02:18"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 10841,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:00:16.048Z",
+        "ranAtBeijing": "2026/07/10 14:00:16"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "正T买入待卖 1 笔 · 科创创业ETF易方达@1.352 · 下次观察 2026-07-13",
+        "elapsedMs": 1130,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:00:14.917Z",
+        "ranAtBeijing": "2026/07/10 14:00:14"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 1542,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T06:00:13.374Z",
+        "ranAtBeijing": "2026/07/10 14:00:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:57:20.092Z",
+        "ranAtBeijing": "2026/07/10 13:57:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 6 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:52:19.452Z",
+        "ranAtBeijing": "2026/07/10 13:52:19"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 4 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:47:17.840Z",
+        "ranAtBeijing": "2026/07/10 13:47:17"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 13056,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:45:13.349Z",
+        "ranAtBeijing": "2026/07/10 13:45:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 1 条提醒（新资讯 2 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:42:17.839Z",
+        "ranAtBeijing": "2026/07/10 13:42:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:37:17.925Z",
+        "ranAtBeijing": "2026/07/10 13:37:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:32:17.858Z",
+        "ranAtBeijing": "2026/07/10 13:32:17"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 3566,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:30:14.004Z",
+        "ranAtBeijing": "2026/07/10 13:30:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:当前买价未触发 -1.5% 低吸线；芯片ETF华夏:当前买价未触发 -1.5% 低吸线；半导体ETF国联安:待卖仓当前反弹 0.14% 未达 0.6%；人工智能ETF:当前买价未触发 -1.5% 低吸线 · 下次观察 2026-07-13",
+        "elapsedMs": 5,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:30:13.998Z",
+        "ranAtBeijing": "2026/07/10 13:30:13"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 670,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:30:13.327Z",
+        "ranAtBeijing": "2026/07/10 13:30:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 2 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:27:15.162Z",
+        "ranAtBeijing": "2026/07/10 13:27:15"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 6 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:22:17.836Z",
+        "ranAtBeijing": "2026/07/10 13:22:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 2 条提醒（新资讯 4 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:17:20.072Z",
+        "ranAtBeijing": "2026/07/10 13:17:20"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 4804,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:15:13.312Z",
+        "ranAtBeijing": "2026/07/10 13:15:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 1 条提醒（新资讯 2 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:12:20.669Z",
+        "ranAtBeijing": "2026/07/10 13:12:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 7 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:07:17.796Z",
+        "ranAtBeijing": "2026/07/10 13:07:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，新增 3 条提醒（新资讯 6 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:02:19.002Z",
+        "ranAtBeijing": "2026/07/10 13:02:19"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 17 只，达标 0 只",
+        "elapsedMs": 18971,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:00:14.884Z",
+        "ranAtBeijing": "2026/07/10 13:00:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:当前买价未触发 -1.5% 低吸线；芯片ETF华夏:当前买价未触发 -1.5% 低吸线；半导体ETF国联安:待卖仓当前反弹 0.41% 未达 0.6%；人工智能ETF:当前买价未触发 -1.5% 低吸线 · 下次观察 2026-07-13",
+        "elapsedMs": 2,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:00:14.882Z",
+        "ranAtBeijing": "2026/07/10 13:00:14"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 1599,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T05:00:13.283Z",
+        "ranAtBeijing": "2026/07/10 13:00:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:57:16.486Z",
+        "ranAtBeijing": "2026/07/10 12:57:16"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:52:16.935Z",
+        "ranAtBeijing": "2026/07/10 12:52:16"
+      },
+      {
+        "runId": "screen-noon:2026-07-10:2026-07-10T04:50:13.265Z",
+        "taskId": "screen-noon",
+        "label": "智能选股（午后开盘前）",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "记录 5d269631-25fd-45d4-91f1-1e1085e67d68 · 候选 2 只 · 入池 2 只",
+        "elapsedMs": 112375,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:50:13.265Z",
+        "ranAtBeijing": "2026/07/10 12:50:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:47:16.613Z",
+        "ranAtBeijing": "2026/07/10 12:47:16"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:42:16.626Z",
+        "ranAtBeijing": "2026/07/10 12:42:16"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:37:20.326Z",
+        "ranAtBeijing": "2026/07/10 12:37:20"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:32:21.443Z",
+        "ranAtBeijing": "2026/07/10 12:32:21"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:27:13.071Z",
+        "ranAtBeijing": "2026/07/10 12:27:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:22:24.171Z",
+        "ranAtBeijing": "2026/07/10 12:22:24"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:17:13.065Z",
+        "ranAtBeijing": "2026/07/10 12:17:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:12:26.794Z",
+        "ranAtBeijing": "2026/07/10 12:12:26"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:07:13.062Z",
+        "ranAtBeijing": "2026/07/10 12:07:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T04:02:28.097Z",
+        "ranAtBeijing": "2026/07/10 12:02:28"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:57:13.002Z",
+        "ranAtBeijing": "2026/07/10 11:57:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:52:27.880Z",
+        "ranAtBeijing": "2026/07/10 11:52:27"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:47:13.006Z",
+        "ranAtBeijing": "2026/07/10 11:47:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:42:27.278Z",
+        "ranAtBeijing": "2026/07/10 11:42:27"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:37:13.097Z",
+        "ranAtBeijing": "2026/07/10 11:37:13"
+      },
+      {
+        "runId": "screen-midday:2026-07-10:2026-07-10T03:35:13.168Z",
+        "taskId": "screen-midday",
+        "label": "智能选股（午间）",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "记录 6dfc6988-d30f-4d32-b44c-a7a86d1481f2 · 候选 3 只 · 入池 2 只",
+        "elapsedMs": 95306,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:35:13.168Z",
+        "ranAtBeijing": "2026/07/10 11:35:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 14 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:32:27.233Z",
+        "ranAtBeijing": "2026/07/10 11:32:27"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 16380,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:27:16.329Z",
+        "ranAtBeijing": "2026/07/10 11:27:16"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "正T买入待卖 1 笔 · 半导体ETF国联安@1.447 · 下次观察 2026-07-13",
+        "elapsedMs": 1101,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:27:15.228Z",
+        "ranAtBeijing": "2026/07/10 11:27:15"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 2067,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:27:13.160Z",
+        "ranAtBeijing": "2026/07/10 11:27:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:27:13.087Z",
+        "ranAtBeijing": "2026/07/10 11:27:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 8 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:22:27.177Z",
+        "ranAtBeijing": "2026/07/10 11:22:27"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:17:18.625Z",
+        "ranAtBeijing": "2026/07/10 11:17:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 0 条提醒（新资讯 8 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:12:21.322Z",
+        "ranAtBeijing": "2026/07/10 11:12:21"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 11463,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:12:13.089Z",
+        "ranAtBeijing": "2026/07/10 11:12:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:07:13.034Z",
+        "ranAtBeijing": "2026/07/10 11:07:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 6 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T03:02:29.690Z",
+        "ranAtBeijing": "2026/07/10 11:02:29"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 7 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:57:16.697Z",
+        "ranAtBeijing": "2026/07/10 10:57:16"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 2611,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:57:14.748Z",
+        "ranAtBeijing": "2026/07/10 10:57:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:当前买价未触发 -1.5% 低吸线；芯片ETF华夏:当前买价未触发 -1.5% 低吸线；半导体ETF国联安:当前买价未触发 -1.5% 低吸线；人工智能ETF:当前买价未触发 -1.5% 低吸线 · 下次观察 2026-07-13",
+        "elapsedMs": 7,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:57:14.740Z",
+        "ranAtBeijing": "2026/07/10 10:57:14"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 1730,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:57:13.010Z",
+        "ranAtBeijing": "2026/07/10 10:57:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 5 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:52:18.802Z",
+        "ranAtBeijing": "2026/07/10 10:52:18"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 4 条提醒（新资讯 6 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:47:17.351Z",
+        "ranAtBeijing": "2026/07/10 10:47:17"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 18 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:42:18.228Z",
+        "ranAtBeijing": "2026/07/10 10:42:18"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 6014,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:42:13.024Z",
+        "ranAtBeijing": "2026/07/10 10:42:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:37:12.997Z",
+        "ranAtBeijing": "2026/07/10 10:37:12"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 0 条提醒（新资讯 7 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:32:29.418Z",
+        "ranAtBeijing": "2026/07/10 10:32:29"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 4177,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:27:14.378Z",
+        "ranAtBeijing": "2026/07/10 10:27:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:当前买价未触发 -1.5% 低吸线；芯片ETF华夏:当前买价未触发 -1.5% 低吸线；半导体ETF国联安:当前买价未触发 -1.5% 低吸线；人工智能ETF:当前买价未触发 -1.5% 低吸线 · 下次观察 2026-07-13",
+        "elapsedMs": 8,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:27:14.368Z",
+        "ranAtBeijing": "2026/07/10 10:27:14"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "已有监控扫描正在进行，跳过本次重复触发；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:27:13.032Z",
+        "ranAtBeijing": "2026/07/10 10:27:13"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号 · 下次调仓 2026-07-13",
+        "elapsedMs": 1352,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:27:13.015Z",
+        "ranAtBeijing": "2026/07/10 10:27:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 4 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:22:11.215Z",
+        "ranAtBeijing": "2026/07/10 10:22:11"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 7 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:17:11.977Z",
+        "ranAtBeijing": "2026/07/10 10:17:11"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 3750,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:15:13.298Z",
+        "ranAtBeijing": "2026/07/10 10:15:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 9 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:12:11.314Z",
+        "ranAtBeijing": "2026/07/10 10:12:11"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 8 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:07:12.477Z",
+        "ranAtBeijing": "2026/07/10 10:07:12"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 3 条提醒（新资讯 9 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:02:12.040Z",
+        "ranAtBeijing": "2026/07/10 10:02:12"
+      },
+      {
+        "runId": "etf-morning-confirm:2026-07-10:2026-07-10T02:00:17.188Z",
+        "taskId": "etf-morning-confirm",
+        "label": "ETF 10点承接确认",
+        "tradeDate": "2026-07-10",
+        "status": "failed",
+        "reason": "fetch failed",
+        "elapsedMs": 173,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:00:17.188Z",
+        "ranAtBeijing": "2026/07/10 10:00:17"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 3075,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:00:14.112Z",
+        "ranAtBeijing": "2026/07/10 10:00:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "科创创业ETF易方达:当前买价未触发 -1.5% 低吸线；芯片ETF华夏:当前买价未触发 -1.5% 低吸线；半导体ETF国联安:当前买价未触发 -1.5% 低吸线；人工智能ETF:当前买价未触发 -1.5% 低吸线",
+        "elapsedMs": 15,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:00:14.094Z",
+        "ranAtBeijing": "2026/07/10 10:00:14"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号",
+        "elapsedMs": 882,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T02:00:13.212Z",
+        "ranAtBeijing": "2026/07/10 10:00:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 12 条提醒（新资讯 3 条）；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:57:12.547Z",
+        "ranAtBeijing": "2026/07/10 09:57:12"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 6 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:52:10.948Z",
+        "ranAtBeijing": "2026/07/10 09:52:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 6 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:47:10.828Z",
+        "ranAtBeijing": "2026/07/10 09:47:10"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，达标 0 只",
+        "elapsedMs": 2447,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:45:13.330Z",
+        "ranAtBeijing": "2026/07/10 09:45:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 4 条提醒（新资讯 9 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:42:10.445Z",
+        "ranAtBeijing": "2026/07/10 09:42:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 1 条提醒（新资讯 8 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:37:10.722Z",
+        "ranAtBeijing": "2026/07/10 09:37:10"
+      },
+      {
+        "runId": "etf-morning-radar:2026-07-10:2026-07-10T01:35:13.318Z",
+        "taskId": "etf-morning-radar",
+        "label": "ETF 早盘异动雷达",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "早盘异动观察：暂无 ETF 异动",
+        "elapsedMs": 459,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:35:13.318Z",
+        "ranAtBeijing": "2026/07/10 09:35:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 19 只，新增 2 条提醒（新资讯 5 条）；行情降级；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:32:10.296Z",
+        "ranAtBeijing": "2026/07/10 09:32:10"
+      },
+      {
+        "taskId": "stock-intraday-monitor",
+        "label": "股票实时信号扫描",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "扫描 22 只，达标 0 只",
+        "elapsedMs": 2263,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:30:14.158Z",
+        "ranAtBeijing": "2026/07/10 09:30:14"
+      },
+      {
+        "taskId": "etf-t-plus-paper",
+        "label": "ETF 正T仓监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无正T机会",
+        "elapsedMs": 330,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:30:13.826Z",
+        "ranAtBeijing": "2026/07/10 09:30:13"
+      },
+      {
+        "taskId": "etf-paper-monitor",
+        "label": "ETF 模拟盘监听",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "无信号",
+        "elapsedMs": 516,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:30:13.309Z",
+        "ranAtBeijing": "2026/07/10 09:30:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:27:10.128Z",
+        "ranAtBeijing": "2026/07/10 09:27:10"
+      },
+      {
+        "runId": "screen-morning:2026-07-10:2026-07-10T01:25:13.303Z",
+        "taskId": "screen-morning",
+        "label": "智能选股（早盘）",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "记录 eb43a0df-e3a3-470b-ad1c-9b3bbe69f2b0 · 候选 2 只 · 入池 0 只",
+        "elapsedMs": 115201,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:25:13.303Z",
+        "ranAtBeijing": "2026/07/10 09:25:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:22:09.933Z",
+        "ranAtBeijing": "2026/07/10 09:22:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:17:10.297Z",
+        "ranAtBeijing": "2026/07/10 09:17:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:12:10.201Z",
+        "ranAtBeijing": "2026/07/10 09:12:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:07:09.539Z",
+        "ranAtBeijing": "2026/07/10 09:07:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T01:02:09.599Z",
+        "ranAtBeijing": "2026/07/10 09:02:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:57:09.725Z",
+        "ranAtBeijing": "2026/07/10 08:57:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:52:09.654Z",
+        "ranAtBeijing": "2026/07/10 08:52:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:47:09.574Z",
+        "ranAtBeijing": "2026/07/10 08:47:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:42:09.719Z",
+        "ranAtBeijing": "2026/07/10 08:42:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:37:09.642Z",
+        "ranAtBeijing": "2026/07/10 08:37:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:32:09.886Z",
+        "ranAtBeijing": "2026/07/10 08:32:09"
+      },
+      {
+        "runId": "screen-preopen:2026-07-10:2026-07-10T00:30:13.241Z",
+        "taskId": "screen-preopen",
+        "label": "盘前智能选股通知",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "早报 进攻(3) · 早报质量 100 分 · 数据 96.1 分 · 记录 78899e11-fd29-4685-b0a2-38d9864d0136 · 候选 5 只 · 入池 1 只",
+        "elapsedMs": 98949,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:30:13.241Z",
+        "ranAtBeijing": "2026/07/10 08:30:13"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:27:09.614Z",
+        "ranAtBeijing": "2026/07/10 08:27:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 12 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:22:10.038Z",
+        "ranAtBeijing": "2026/07/10 08:22:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:17:10.052Z",
+        "ranAtBeijing": "2026/07/10 08:17:10"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 23 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:12:09.749Z",
+        "ranAtBeijing": "2026/07/10 08:12:09"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "距离上次扫描较近，复用已有结果；推荐 0 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:07:08.624Z",
+        "ranAtBeijing": "2026/07/10 08:07:08"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:03:13.127Z",
+        "ranAtBeijing": "2026/07/10 08:03:13"
+      },
+      {
+        "runId": "stock-backtest-news-paper:2026-07-10:2026-07-10T00:02:09.521Z",
+        "taskId": "stock-backtest-news-paper",
+        "label": "回测策略+新闻模拟盘买入",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "elapsedMs": 64144,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:02:09.521Z",
+        "ranAtBeijing": "2026/07/10 08:02:09"
+      },
+      {
+        "runId": "stock-backtest-paper:2026-07-10:2026-07-10T00:00:59.799Z",
+        "taskId": "stock-backtest-paper",
+        "label": "回测策略模拟盘买入",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "elapsedMs": 69721,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:00:59.799Z",
+        "ranAtBeijing": "2026/07/10 08:00:59"
+      },
+      {
+        "runId": "market-data-reminder:2026-07-10:2026-07-10T00:00:59.788Z",
+        "taskId": "market-data-reminder",
+        "label": "行情数据更新提醒",
+        "tradeDate": "2026-07-10",
+        "status": "skipped",
+        "reason": "非执行窗口",
+        "summary": "数据已就绪（最新 20260709）",
+        "elapsedMs": 11,
+        "source": "background-worker",
+        "ranAt": "2026-07-10T00:00:59.788Z",
+        "ranAtBeijing": "2026/07/10 08:00:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:56:59.301Z",
+        "ranAtBeijing": "2026/07/10 07:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:51:59.801Z",
+        "ranAtBeijing": "2026/07/10 07:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 12 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:46:59.294Z",
+        "ranAtBeijing": "2026/07/10 07:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:41:59.081Z",
+        "ranAtBeijing": "2026/07/10 07:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:36:59.288Z",
+        "ranAtBeijing": "2026/07/10 07:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:31:59.073Z",
+        "ranAtBeijing": "2026/07/10 07:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:26:59.287Z",
+        "ranAtBeijing": "2026/07/10 07:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 6 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:21:59.429Z",
+        "ranAtBeijing": "2026/07/10 07:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:16:59.188Z",
+        "ranAtBeijing": "2026/07/10 07:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:11:59.234Z",
+        "ranAtBeijing": "2026/07/10 07:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:06:59.348Z",
+        "ranAtBeijing": "2026/07/10 07:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T23:01:59.748Z",
+        "ranAtBeijing": "2026/07/10 07:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:56:59.364Z",
+        "ranAtBeijing": "2026/07/10 06:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:51:59.068Z",
+        "ranAtBeijing": "2026/07/10 06:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:46:59.185Z",
+        "ranAtBeijing": "2026/07/10 06:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:41:59.524Z",
+        "ranAtBeijing": "2026/07/10 06:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:36:59.063Z",
+        "ranAtBeijing": "2026/07/10 06:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:31:59.210Z",
+        "ranAtBeijing": "2026/07/10 06:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:26:59.216Z",
+        "ranAtBeijing": "2026/07/10 06:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:21:59.301Z",
+        "ranAtBeijing": "2026/07/10 06:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:16:59.297Z",
+        "ranAtBeijing": "2026/07/10 06:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:11:59.487Z",
+        "ranAtBeijing": "2026/07/10 06:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 8 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:06:59.053Z",
+        "ranAtBeijing": "2026/07/10 06:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T22:01:59.137Z",
+        "ranAtBeijing": "2026/07/10 06:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:56:59.697Z",
+        "ranAtBeijing": "2026/07/10 05:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:51:59.374Z",
+        "ranAtBeijing": "2026/07/10 05:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:46:59.150Z",
+        "ranAtBeijing": "2026/07/10 05:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:41:59.073Z",
+        "ranAtBeijing": "2026/07/10 05:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:36:59.298Z",
+        "ranAtBeijing": "2026/07/10 05:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:31:59.235Z",
+        "ranAtBeijing": "2026/07/10 05:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:26:59.122Z",
+        "ranAtBeijing": "2026/07/10 05:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:21:59.326Z",
+        "ranAtBeijing": "2026/07/10 05:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:16:59.279Z",
+        "ranAtBeijing": "2026/07/10 05:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:11:59.217Z",
+        "ranAtBeijing": "2026/07/10 05:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:06:59.475Z",
+        "ranAtBeijing": "2026/07/10 05:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T21:01:59.597Z",
+        "ranAtBeijing": "2026/07/10 05:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:56:59.113Z",
+        "ranAtBeijing": "2026/07/10 04:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:51:59.128Z",
+        "ranAtBeijing": "2026/07/10 04:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:46:59.300Z",
+        "ranAtBeijing": "2026/07/10 04:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:41:59.378Z",
+        "ranAtBeijing": "2026/07/10 04:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:36:59.122Z",
+        "ranAtBeijing": "2026/07/10 04:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:31:59.056Z",
+        "ranAtBeijing": "2026/07/10 04:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:26:59.240Z",
+        "ranAtBeijing": "2026/07/10 04:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:21:59.268Z",
+        "ranAtBeijing": "2026/07/10 04:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:17:00.567Z",
+        "ranAtBeijing": "2026/07/10 04:17:00"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 12 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:11:59.062Z",
+        "ranAtBeijing": "2026/07/10 04:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:06:59.047Z",
+        "ranAtBeijing": "2026/07/10 04:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T20:01:59.055Z",
+        "ranAtBeijing": "2026/07/10 04:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:56:59.541Z",
+        "ranAtBeijing": "2026/07/10 03:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:51:59.467Z",
+        "ranAtBeijing": "2026/07/10 03:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:46:59.046Z",
+        "ranAtBeijing": "2026/07/10 03:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:41:59.111Z",
+        "ranAtBeijing": "2026/07/10 03:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:36:59.059Z",
+        "ranAtBeijing": "2026/07/10 03:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 50 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:31:59.251Z",
+        "ranAtBeijing": "2026/07/10 03:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 47 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:26:58.942Z",
+        "ranAtBeijing": "2026/07/10 03:26:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 45 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:21:59.047Z",
+        "ranAtBeijing": "2026/07/10 03:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 44 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:16:59.097Z",
+        "ranAtBeijing": "2026/07/10 03:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 5 条；推荐 41 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:11:59.212Z",
+        "ranAtBeijing": "2026/07/10 03:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 38 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:06:59.351Z",
+        "ranAtBeijing": "2026/07/10 03:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 10 条；推荐 35 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T19:01:59.002Z",
+        "ranAtBeijing": "2026/07/10 03:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 33 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:56:59.178Z",
+        "ranAtBeijing": "2026/07/10 02:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 33 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:51:58.967Z",
+        "ranAtBeijing": "2026/07/10 02:51:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 33 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:46:59.044Z",
+        "ranAtBeijing": "2026/07/10 02:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 7 条；推荐 33 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:41:59.081Z",
+        "ranAtBeijing": "2026/07/10 02:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:36:59.082Z",
+        "ranAtBeijing": "2026/07/10 02:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:31:59.185Z",
+        "ranAtBeijing": "2026/07/10 02:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:26:59.258Z",
+        "ranAtBeijing": "2026/07/10 02:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:21:59.032Z",
+        "ranAtBeijing": "2026/07/10 02:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:16:59.006Z",
+        "ranAtBeijing": "2026/07/10 02:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 32 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:11:59.125Z",
+        "ranAtBeijing": "2026/07/10 02:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 30 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:06:59.250Z",
+        "ranAtBeijing": "2026/07/10 02:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 29 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T18:01:58.964Z",
+        "ranAtBeijing": "2026/07/10 02:01:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 29 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:56:59.454Z",
+        "ranAtBeijing": "2026/07/10 01:56:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 28 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:51:59.128Z",
+        "ranAtBeijing": "2026/07/10 01:51:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 28 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:46:59.138Z",
+        "ranAtBeijing": "2026/07/10 01:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 27 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:41:59.250Z",
+        "ranAtBeijing": "2026/07/10 01:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 26 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:37:01.473Z",
+        "ranAtBeijing": "2026/07/10 01:37:01"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 26 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:31:59.083Z",
+        "ranAtBeijing": "2026/07/10 01:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 24 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:26:59.110Z",
+        "ranAtBeijing": "2026/07/10 01:26:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 24 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:21:59.126Z",
+        "ranAtBeijing": "2026/07/10 01:21:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 22 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:16:59.208Z",
+        "ranAtBeijing": "2026/07/10 01:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 22 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:12:01.376Z",
+        "ranAtBeijing": "2026/07/10 01:12:01"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 19 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:06:59.459Z",
+        "ranAtBeijing": "2026/07/10 01:06:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 18 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T17:01:59.005Z",
+        "ranAtBeijing": "2026/07/10 01:01:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 17 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:56:58.914Z",
+        "ranAtBeijing": "2026/07/10 00:56:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 17 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:51:58.958Z",
+        "ranAtBeijing": "2026/07/10 00:51:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 9 条；推荐 16 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:46:59.073Z",
+        "ranAtBeijing": "2026/07/10 00:46:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 0 条；推荐 15 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:41:59.227Z",
+        "ranAtBeijing": "2026/07/10 00:41:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 1 条；推荐 15 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:36:59.200Z",
+        "ranAtBeijing": "2026/07/10 00:36:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 14 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:31:59.247Z",
+        "ranAtBeijing": "2026/07/10 00:31:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 12 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:26:58.904Z",
+        "ranAtBeijing": "2026/07/10 00:26:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 11 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:21:58.959Z",
+        "ranAtBeijing": "2026/07/10 00:21:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 8 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:16:59.374Z",
+        "ranAtBeijing": "2026/07/10 00:16:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 2 条；推荐 6 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:11:59.278Z",
+        "ranAtBeijing": "2026/07/10 00:11:59"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 4 条；推荐 6 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:06:58.844Z",
+        "ranAtBeijing": "2026/07/10 00:06:58"
+      },
+      {
+        "taskId": "monitor-background",
+        "label": "消息雷达轮询",
+        "tradeDate": "2026-07-10",
+        "status": "completed",
+        "summary": "非交易时段（A 股交易时段：9:30–11:30、13:00–15:00（北京时间）），仅处理资讯 3 条；推荐 3 条，自动交易 0 条",
+        "source": "background-worker",
+        "ranAt": "2026-07-09T16:01:59.106Z",
+        "ranAtBeijing": "2026/07/10 00:01:59"
+      }
+    ]
+  },
+  "dataUpdates": [
+    {
+      "label": "ETF 日线更新",
+      "assetType": "etf",
+      "mode": null,
+      "tradeDate": "20260710",
+      "ranAt": "2026-07-10T07:30:13.557Z",
+      "status": "completed",
+      "summary": "标的 20 只 · 新增 20 行 · 修正 12 行 · 失败 0 只",
+      "symbolCount": 20,
+      "addedRows": 20,
+      "updatedRows": 12,
+      "errors": 0,
+      "sourceLatestTradeDate": null,
+      "targetLatestTradeDate": null,
+      "reason": null
+    }
+  ],
+  "changesets": [
+    {
+      "title": "2026-07-10 长青一号 ETF 模拟分仓",
+      "file": "2026-07-10-etf-evergreen-paper.md",
+      "path": "docs/changesets/2026-07-10-etf-evergreen-paper.md",
+      "relativeLink": "../../changesets/2026-07-10-etf-evergreen-paper.md",
+      "updatedAt": "2026-07-10T08:30:38.591Z"
+    },
+    {
+      "title": "2026-07-10 ETF Stable V2",
+      "file": "2026-07-10-etf-stable-v2.md",
+      "path": "docs/changesets/2026-07-10-etf-stable-v2.md",
+      "relativeLink": "../../changesets/2026-07-10-etf-stable-v2.md",
+      "updatedAt": "2026-07-10T07:49:57.785Z"
+    }
+  ],
+  "backtests": {
+    "recentRuns": [
+      {
+        "id": "7da61346-ecdb-4a82-a52d-ab0c9f8e62df",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:45:41.202Z",
+        "createdAt": "2026-07-10T07:45:41.645Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      },
+      {
+        "id": "11a42a59-4eaf-4431-ae4d-39a4ac2ccbae",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:43:32.001Z",
+        "createdAt": "2026-07-10T07:43:32.459Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      },
+      {
+        "id": "d7c0b10d-8160-47c7-b47d-15a1a440fdca",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:42:24.274Z",
+        "createdAt": "2026-07-10T07:42:24.727Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      },
+      {
+        "id": "c2fdd532-b131-4606-8237-72e27da1348a",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:41:20.085Z",
+        "createdAt": "2026-07-10T07:41:20.520Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      },
+      {
+        "id": "37e6b4a8-fbec-4191-9828-1bc06c2597f4",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:39:12.815Z",
+        "createdAt": "2026-07-10T07:39:12.976Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      },
+      {
+        "id": "5276608c-488f-44ad-b6ef-7ceff62904d8",
+        "strategy": "etf-stable-v2",
+        "assetType": "etf",
+        "generatedAt": "2026-07-10T07:35:43.485Z",
+        "createdAt": "2026-07-10T07:35:43.638Z",
+        "requestedDays": 3042,
+        "startDate": "20140102",
+        "endDate": "20260709",
+        "tradeCount": 369,
+        "validTradeCount": 369,
+        "finalReturnPct": 210.17,
+        "initialCapital": 100000
+      }
+    ],
+    "docs": [
+      {
+        "title": "钻石信号有效性复核（2026-07-10）",
+        "file": "diamond-signal-validation-2026-07-10.md",
+        "path": "docs/backtests/diamond-signal-validation-2026-07-10.md",
+        "relativeLink": "../../backtests/diamond-signal-validation-2026-07-10.md",
+        "updatedAt": "2026-07-10T01:15:27.472Z"
+      },
+      {
+        "title": "钻石 V2 信号验证（2026-07-10）",
+        "file": "diamond-v2-validation-2026-07-10.md",
+        "path": "docs/backtests/diamond-v2-validation-2026-07-10.md",
+        "relativeLink": "../../backtests/diamond-v2-validation-2026-07-10.md",
+        "updatedAt": "2026-07-10T01:54:00.098Z"
+      }
+    ]
+  },
+  "observations": [
+    "系统已有可复盘证据，但收益、风险或验证覆盖仍需补强，当前更适合稳态观察和小步迭代。",
+    "系统评分 68/C，风险分 0，数据闭环分 95。",
+    "相对上一份工作总结改善：总分 +4.00，模拟盘收益 +0.51pct。",
+    "今日有 1 个定时任务失败，需要优先排查。",
+    "今日新增 2 条 changeset，可用于后续复盘验证。",
+    "今日新增回测记录 6 条，正收益 6 条。"
+  ],
+  "nextActions": [
+    "先处理失败定时任务，确认数据获取、模拟盘和通知链路没有断点。",
+    "复盘模拟盘亏损成交，按来源拆分消息雷达、ETF 轮动、手动交易的贡献。",
+    "处理紧急监控告警，确认是否触发减仓、止损或移出跟踪池。",
+    "查看未确认监控告警与持仓止损线。",
+    "记录新增信号进入跟踪池后的表现。",
+    "确认模拟盘成交是否符合策略触发原因。"
+  ],
+  "llmNotes": [
+    "日报记录当天事实，不直接替代策略结论；周报/月报应继续对比多日样本。",
+    "复盘策略改动时，优先把 changeset 的预期影响与本日报的实际指标变化对齐。",
+    "下一次 Wiki 提炼重点：按策略来源统计收益、胜率、最大回撤和误报率。"
+  ]
+}

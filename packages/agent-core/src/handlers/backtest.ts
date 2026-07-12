@@ -3,6 +3,7 @@ import {
   type BacktestSymbolInput,
 } from '../data/backtest/diamond.js';
 import { runEtfMomentumBacktest } from '../data/backtest/etf-momentum.js';
+import { runEtfEvergreenV3Backtest } from '../data/backtest/etf-evergreen-v3.js';
 import { runEtfStableV2Backtest } from '../data/backtest/etf-stable-v2.js';
 import { runEtfTailRulesBacktest } from '../data/backtest/etf.js';
 import {
@@ -129,6 +130,17 @@ function parseDateArg(args: string[], flag: string): string | undefined {
   return value || undefined;
 }
 
+function evergreenDateRange(args: string[]): { startDate: string; endDate: string } {
+  const requestedEndDate = parseDateArg(args, '--to');
+  const end = requestedEndDate ? new Date(`${requestedEndDate}T00:00:00Z`) : new Date();
+  const endDate = end.toISOString().slice(0, 10);
+  const requestedStartDate = parseDateArg(args, '--from');
+  if (requestedStartDate) return { startDate: requestedStartDate, endDate };
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - parsePositiveInt(args[1], 365 * 10));
+  return { startDate: start.toISOString().slice(0, 10), endDate };
+}
+
 function parseStockUniverse(args: string[]): 'retail-stock' | undefined {
   const arg = args.find((item) => item.startsWith('--universe='));
   const value = arg?.split('=').slice(1).join('=').trim();
@@ -251,6 +263,7 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
         tPlusBudgetPct: parsePercentFlag(args, '--t-plus-budget'),
         tPlusMaxTradesPerDay: parseFlagInt(args, '--t-plus-max-trades'),
         netRebalance: parseBooleanFlag(args, '--net-rebalance'),
+        signalExecution: args.includes('--next-open') ? 'next_open' : 'same_close',
       }),
     );
   }
@@ -266,6 +279,23 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
       commissionRate: parseFlagNonNegativeNumber(args, '--commission'),
       slippageRate: parseFlagNonNegativeNumber(args, '--slippage'),
       minimumCommission: parseFlagNonNegativeNumber(args, '--min-commission'),
+    });
+    const saved = await saveBacktestRun(result, {
+      source: 'backtest-cli',
+      args,
+    });
+    return JSON.stringify({
+      ...result,
+      runId: saved.id,
+      persistedAt: saved.createdAt,
+    });
+  }
+
+  if (command === 'etf-evergreen' || command === 'etf-evergreen-v3') {
+    const range = evergreenDateRange(args);
+    const result = await runEtfEvergreenV3Backtest({
+      ...range,
+      initialCapital: parseFlagNumber(args, '--capital'),
     });
     const saved = await saveBacktestRun(result, {
       source: 'backtest-cli',
@@ -298,6 +328,6 @@ export async function dispatchBacktest(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [...] | diamond <symbols|all> [days] [...] | diamond-momentum <symbols|all> [days] [...] | etf [days] [...] | etf-momentum [days] [...] | etf-stable [days] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--rebalance=N] [--vol-target=N] [--capital=N] [--commission=N] [--slippage=N] [--min-commission=N] | screening <id> [days]',
+    'Usage: history [limit] | get <runId> | stock <symbols|all> [days] [...] | diamond <symbols|all> [days] [...] | diamond-momentum <symbols|all> [days] [...] | etf [days] [...] | etf-momentum [days] [...] | etf-stable [days] [...] | etf-evergreen [days] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--capital=N] | screening <id> [days]',
   );
 }

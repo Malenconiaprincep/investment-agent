@@ -1,6 +1,11 @@
 import '../../config/load-env.js';
 
+import { buildEtfEvergreenV3LivePlan } from '../backtest/etf-evergreen-v3.js';
 import { buildEtfStableV2LivePlan } from '../backtest/etf-stable-v2.js';
+import {
+  generateEtfEvergreenCapitalReadiness,
+  recordEtfEvergreenShadowPlan,
+} from '../etf/capital-readiness.js';
 import {
   calcEtfBuyCost,
   calcEtfBuyLotsByBudget,
@@ -12,6 +17,7 @@ import { resolvePaperExecutionPrice } from '../market/free/orderbook-quote.js';
 import { getDailyQuote } from '../market/services.js';
 import {
   ETF_T_PLUS_BUCKET,
+  ETF_EVERGREEN_BUCKET,
   ETF_T_PLUS_BUDGET_PCT,
   ETF_T_PLUS_BUY_DIP_PCT,
   ETF_T_PLUS_MAX_TRADES_PER_DAY,
@@ -57,8 +63,16 @@ const ETF_BUY_MAX_SPREAD_PCT = 0.5;
 const ETF_BUY_HALF_POSITION_MIN_PREMIUM_PCT = 2;
 const ETF_BUY_SKIP_PREMIUM_PCT = 4;
 const ETF_T_PLUS_INTRADAY_NOTE_MARK = 'ETF 正T · 30分钟盘中监听';
+const ETF_EVERGREEN_VALIDATION_PAUSE_REASON =
+  '长青一号 V3 已通过历史准入并生成影子目标；双袖套实盘模拟执行仍在核验，暂不自动下单';
 
-type EtfPaperBucket = 'etf' | typeof ETF_T_PLUS_BUCKET;
+type EtfPaperBucket = 'etf' | typeof ETF_EVERGREEN_BUCKET | typeof ETF_T_PLUS_BUCKET;
+
+export function isEtfEvergreenAutoTradingEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.ETF_EVERGREEN_ALLOW_TRADING === '1';
+}
 
 export type EtfPaperPipelineResult = {
   bucket?: EtfPaperBucket;
@@ -67,6 +81,15 @@ export type EtfPaperPipelineResult = {
   nextRebalanceDate?: string;
   lastRebalanceDate?: string | null;
   skipped?: boolean;
+  shadowMode?: boolean;
+  signalDate?: string;
+  cashReservePct?: number;
+  capitalReadiness?: {
+    decision: string;
+    canAcceptRealCapital: boolean;
+    minimumRemainingTradingDays: number;
+    estimatedEarliestReviewDate: string;
+  };
   reason?: string;
   isRebalanceDay?: boolean;
   stopLosses?: Array<{ symbol: string; name: string; shares: number; price: number }>;
@@ -262,7 +285,9 @@ export function evaluateEtfBuyExecutionGuard(input: {
 }
 
 function etfStrategyNote(bucket: EtfPaperBucket, note: string): string {
-  return bucket === ETF_T_PLUS_BUCKET ? `ETF 正T仓动量${note}` : `ETF 动量${note}`;
+  if (bucket === ETF_T_PLUS_BUCKET) return `ETF 正T仓动量${note}`;
+  if (bucket === ETF_EVERGREEN_BUCKET) return `长青一号 V3 ${note}`;
+  return `ETF 动量${note}`;
 }
 
 async function autoStopLossEtfPositions(tradeDate: string, bucket: EtfPaperBucket) {
@@ -383,8 +408,10 @@ export async function runEtfPaperAutoPipeline(options?: {
     }
 
     result.isRebalanceDay = isRebalanceDay;
+    const evergreenPaused = bucket === ETF_EVERGREEN_BUCKET
+      && !isEtfEvergreenAutoTradingEnabled();
 
-    if (!isRebalanceDay) {
+    if (!isRebalanceDay && !evergreenPaused) {
       const equity = await saveEquitySnapshot(tradeDate, bucket);
       result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
       return result;
@@ -406,15 +433,64 @@ export async function runEtfPaperAutoPipeline(options?: {
     const portfolioDrawdownPct = equityPeak > 0
       ? ((summary.totalValue - equityPeak) / equityPeak) * 100
       : 0;
-    const plan = await buildEtfStableV2LivePlan({
-      executionDate: tradeDate,
-      portfolioDrawdownPct,
-      excludedSymbols,
-      rotationContext,
-    });
+    const planExecutionDate = bucket === ETF_EVERGREEN_BUCKET && !isWeekday(now)
+      ? nextTradeDate
+      : tradeDate;
+    const plan = bucket === ETF_EVERGREEN_BUCKET
+      ? await buildEtfEvergreenV3LivePlan({
+          executionDate: planExecutionDate,
+          portfolioDrawdownPct,
+          excludedSymbols,
+          rotationContext,
+        })
+      : await buildEtfStableV2LivePlan({
+          executionDate: tradeDate,
+          portfolioDrawdownPct,
+          excludedSymbols,
+          rotationContext,
+        });
+    result.signalDate = plan.signalDate;
+    result.cashReservePct = 'cashReservePct' in plan ? plan.cashReservePct : undefined;
     result.hotThemes = plan.hotThemes;
     result.rotationSummary = plan.rotationSummary;
     result.targets = plan.targets;
+
+    if (evergreenPaused) {
+      const shadowPlan = {
+        strategy: plan.strategy,
+        signalDate: plan.signalDate,
+        executionDate: plan.executionDate,
+        generatedAt: new Date().toISOString(),
+        cashReservePct: 'cashReservePct' in plan ? plan.cashReservePct : undefined,
+        sleeves: 'sleeves' in plan ? plan.sleeves : undefined,
+        targets: plan.targets.map((target) => ({
+          symbol: target.symbol,
+          name: target.name,
+          targetWeightPct: target.targetWeightPct,
+          assetClass: target.assetClass,
+          reason: target.reason,
+        })),
+      };
+      await savePaperBucketState({
+        bucket,
+        shadowPlan,
+      });
+      recordEtfEvergreenShadowPlan(shadowPlan);
+      const readiness = await generateEtfEvergreenCapitalReadiness({ asOfDate: tradeDate });
+      result.capitalReadiness = {
+        decision: readiness.decision,
+        canAcceptRealCapital: readiness.canAcceptRealCapital,
+        minimumRemainingTradingDays: readiness.minimumRemainingTradingDays,
+        estimatedEarliestReviewDate: readiness.estimatedEarliestReviewDate,
+      };
+      const equity = await saveEquitySnapshot(tradeDate, bucket);
+      result.skipped = true;
+      result.shadowMode = true;
+      result.reason = ETF_EVERGREEN_VALIDATION_PAUSE_REASON;
+      result.isRebalanceDay = false;
+      result.equity = { totalValue: equity.totalValue, returnPct: equity.returnPct };
+      return result;
+    }
 
     const sells: NonNullable<EtfPaperPipelineResult['sells']> = [];
     const buys: NonNullable<EtfPaperPipelineResult['buys']> = [];

@@ -124,11 +124,19 @@ export async function dispatchPaper(args: string[]): Promise<string> {
     );
   }
 
+  if (command === 'capital-readiness') {
+    const { generateEtfEvergreenCapitalReadiness } = await import(
+      '../data/etf/capital-readiness.js'
+    );
+    return JSON.stringify(await generateEtfEvergreenCapitalReadiness());
+  }
+
   if (command === 'etf-auto-run') {
     const { runEtfPaperAutoPipeline } = await import('../data/paper/etf-paper-pipeline.js');
     const { notifyEtfPaperMonitor } = await import('../data/notify/feishu-daily.js');
     const force = args.includes('--force');
-    const result = await runEtfPaperAutoPipeline({ force });
+    const etfBucket = bucket === 'etf-evergreen' ? bucket : 'etf';
+    const result = await runEtfPaperAutoPipeline({ force, bucket: etfBucket });
     await notifyEtfPaperMonitor(result);
     return JSON.stringify(result);
   }
@@ -171,7 +179,7 @@ export async function dispatchPaper(args: string[]): Promise<string> {
 
     if (!side || !symbol || !name || !shares) {
       throw new Error(
-        'Usage: trade <buy|sell> <symbol> <name> <shares> [price] [--bucket etf|etf-t-plus|stock]',
+        'Usage: trade <buy|sell> <symbol> <name> <shares> [price] [--bucket etf|etf-evergreen|etf-t-plus|stock]',
       );
     }
 
@@ -193,6 +201,6 @@ export async function dispatchPaper(args: string[]): Promise<string> {
   }
 
   throw new Error(
-    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|etf-t-plus|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-observation [--snapshot]|etf-auto-run|etf-t-plus-init [--force]|etf-t-plus-auto-run|fix-etf-probe|trade ...',
+    'Usage: account|trades|equity|set-capital [amount] [--bucket etf|etf-evergreen|etf-t-plus|stock|stock-backtest|stock-backtest-news]|status|auto-run|stock-auto-run|stock-backtest-auto-run|stock-backtest-manual-check|stock-backtest-news-auto-run|market-data-status|etf-observation [--snapshot]|capital-readiness|etf-auto-run [--bucket etf|etf-evergreen]|etf-t-plus-init [--force]|etf-t-plus-auto-run|fix-etf-probe|trade ...',
   );
 }

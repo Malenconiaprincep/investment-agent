@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     const args = ['trades', limit];
     if (
       bucket === 'etf' ||
+      bucket === 'etf-evergreen' ||
       bucket === 'etf-t-plus' ||
       bucket === 'stock' ||
       bucket === 'stock-backtest' ||

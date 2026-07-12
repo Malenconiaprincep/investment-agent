@@ -1,0 +1,87 @@
+{
+  "generatedAt": "2026-07-12T14:53:50.535Z",
+  "asOfDate": "20260712",
+  "decision": "not_ready",
+  "canAcceptRealCapital": false,
+  "allowedInitialCapitalTranchePct": 0,
+  "minimumRemainingTradingDays": 60,
+  "estimatedEarliestReviewDate": "2026-10-02",
+  "estimateNote": "日期只按工作日估算，未扣除未来交易所休市日；最终以实际有效交易日计数为准。",
+  "blockers": [
+    "shadowExecution",
+    "paperExecution",
+    "observedRisk",
+    "reviewDiscipline"
+  ],
+  "gates": {
+    "historical": {
+      "passed": true,
+      "annualizedReturnPct": 9.71,
+      "maxDrawdownPct": -18.83,
+      "beatScenarioRatio": 0.6875,
+      "positiveScenarioRatio": 0.7188
+    },
+    "data": {
+      "passed": true,
+      "latestTradeDate": "20260710",
+      "dataAgeDays": 2,
+      "strategyPoolMissing": []
+    },
+    "shadowExecution": {
+      "passed": false,
+      "validDays": 0,
+      "requiredDays": 20,
+      "averageAbsGapPct": null
+    },
+    "paperExecution": {
+      "passed": false,
+      "tradingDays": 0,
+      "requiredTradingDays": 60,
+      "tradeCount": 0,
+      "requiredTrades": 30
+    },
+    "observedRisk": {
+      "passed": false,
+      "maxDrawdownPct": null,
+      "limitPct": -10
+    },
+    "reviewDiscipline": {
+      "passed": false,
+      "weeklyReviewCount": 1,
+      "requiredWeeklyReviews": 8
+    }
+  },
+  "account": {
+    "totalValue": 100000,
+    "returnPct": 0,
+    "positionCount": 0
+  },
+  "dualSleeveLedger": {
+    "tradingDays": 0,
+    "orderCount": 0,
+    "rebalanceCount": 0,
+    "totalValue": 100000,
+    "returnPct": 0,
+    "maxDrawdownPct": null
+  },
+  "acceptance": {
+    "minHistoricalAnnualizedPct": 8,
+    "maxHistoricalDrawdownPct": -20,
+    "minScenarioPassRatio": 0.6,
+    "minShadowExecutionDays": 20,
+    "minShadowPriceCoveragePct": 95,
+    "maxShadowAverageGapPct": 2,
+    "minPaperTradingDays": 60,
+    "minPaperTrades": 30,
+    "minWeeklyReviews": 8,
+    "maxPaperDrawdownPct": -10,
+    "initialCapitalTranchePct": 10
+  },
+  "paths": {
+    "plansPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-evergreen-shadow-plans.json",
+    "evidencePath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-evergreen-shadow-evidence.json",
+    "ledgerPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-evergreen-shadow-ledger.json",
+    "readinessJsonPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-evergreen-capital-readiness.json",
+    "readinessMarkdownPath": "/Users/wangbo/workspace/study/investment-agent/docs/reviews/etf-evergreen-capital-readiness.md"
+  }
+}

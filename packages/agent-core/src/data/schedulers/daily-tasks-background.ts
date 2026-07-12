@@ -18,6 +18,7 @@ import {
   runEtfPaperAutoPipeline,
   runEtfTPlusPaperPipeline,
 } from '../paper/etf-paper-pipeline.js';
+import { ETF_EVERGREEN_BUCKET } from '../paper/bucket.js';
 import { runStockPaperAutoPipeline } from '../paper/auto-pipeline.js';
 import {
   runStockBacktestPaperPipeline,
@@ -959,31 +960,40 @@ async function runEtfPaperMonitor(now = getBeijingNow()) {
   const label = 'ETF 模拟盘监听';
   const startedAt = new Date().toISOString();
   try {
-    const result = await runEtfPaperAutoPipeline();
-    if (result.skipped) {
-      logInfo(`${label} 跳过：${result.reason ?? '非执行窗口'}`);
+    const results = await Promise.all([
+      runEtfPaperAutoPipeline(),
+      runEtfPaperAutoPipeline({ bucket: ETF_EVERGREEN_BUCKET }),
+    ]);
+    if (results.every((result) => result.skipped)) {
+      const reason = results[0]?.reason ?? '非执行窗口';
+      logInfo(`${label} 跳过：${reason}`);
       recordTaskLog({
         taskId: 'etf-paper-monitor',
         label,
         tradeDate,
         status: 'skipped',
-        reason: result.reason ?? '非执行窗口',
+        reason,
         startedAt,
       });
       return;
     }
-    await notifyEtfPaperMonitor(result);
-    const parts: string[] = [];
-    if (result.isRebalanceDay) parts.push('调仓日');
-    if (result.buys?.length) parts.push(`买入 ${result.buys.length} 笔`);
-    if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
-    if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
-    if (result.reason) parts.push(result.reason);
-    const summary = appendNextRebalanceDateSummary(
-      parts.length > 0 ? parts.join(' · ') : '无信号',
-      result.nextRebalanceDate,
-    );
-    logInfo(`${label} 完成${parts.length > 0 ? `：${summary}` : ''}`);
+    await Promise.all(results.map((result) => notifyEtfPaperMonitor(result)));
+    const summaries = results.map((result) => {
+      const bucketLabel = result.bucket === ETF_EVERGREEN_BUCKET ? '长青一号' : 'ETF 仓';
+      const parts: string[] = [];
+      if (result.isRebalanceDay) parts.push('调仓日');
+      if (result.buys?.length) parts.push(`买入 ${result.buys.length} 笔`);
+      if (result.sells?.length) parts.push(`卖出 ${result.sells.length} 笔`);
+      if (result.stopLosses?.length) parts.push(`止损 ${result.stopLosses.length} 笔`);
+      if (result.error) parts.push(`失败 ${result.error}`);
+      if (result.reason) parts.push(result.reason);
+      return `${bucketLabel}：${appendNextRebalanceDateSummary(
+        parts.length > 0 ? parts.join(' · ') : '无信号',
+        result.nextRebalanceDate,
+      )}`;
+    });
+    const summary = summaries.join('；');
+    logInfo(`${label} 完成：${summary}`);
     recordTaskLog({
       taskId: 'etf-paper-monitor',
       label,

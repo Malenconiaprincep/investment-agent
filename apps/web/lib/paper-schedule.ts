@@ -169,6 +169,16 @@ export async function enrichPaperScheduleFields(
       tradeDate: etf.tradeDate,
       rebalanceDays: etf.rebalanceDays,
     });
+  const etfEvergreen = payload.etfEvergreen;
+  const evergreenLast =
+    etfEvergreen.lastRebalanceDate ?? inferLastRebalanceDateFromPositions(etfEvergreen);
+  const evergreenNext =
+    etfEvergreen.nextRebalanceDate ??
+    resolveNextEtfRebalanceDate({
+      lastRebalanceDate: evergreenLast,
+      tradeDate: etfEvergreen.tradeDate,
+      rebalanceDays: etfEvergreen.rebalanceDays,
+    });
 
   return {
     ...payload,
@@ -178,6 +188,14 @@ export async function enrichPaperScheduleFields(
       nextRebalanceDate,
       nextTradeDate: etf.nextTradeDate ?? shiftTradeDateLabel(etf.tradeDate, 1),
       rebalanceDays: etf.rebalanceDays ?? ETF_REBALANCE_DAYS,
+    },
+    etfEvergreen: {
+      ...etfEvergreen,
+      lastRebalanceDate: evergreenLast ?? null,
+      nextRebalanceDate: evergreenNext,
+      nextTradeDate:
+        etfEvergreen.nextTradeDate ?? shiftTradeDateLabel(etfEvergreen.tradeDate, 1),
+      rebalanceDays: etfEvergreen.rebalanceDays ?? ETF_REBALANCE_DAYS,
     },
     etfTPlus: {
       ...payload.etfTPlus,

@@ -14,10 +14,16 @@ import { DATA_DIR } from '../mastra/config/paths.js';
 
 const LOG_PATH = path.join(DATA_DIR, 'scheduled-paper.log');
 
-type PaperScheduleTarget = 'etf' | 'etf-t-plus' | 'stock' | 'all';
+type PaperScheduleTarget = 'etf' | 'etf-evergreen' | 'etf-t-plus' | 'stock' | 'all';
 
 function resolveTarget(arg?: string): PaperScheduleTarget {
-  if (arg === 'etf' || arg === 'etf-t-plus' || arg === 'stock' || arg === 'all') {
+  if (
+    arg === 'etf' ||
+    arg === 'etf-evergreen' ||
+    arg === 'etf-t-plus' ||
+    arg === 'stock' ||
+    arg === 'all'
+  ) {
     return arg;
   }
   return 'all';
@@ -35,8 +41,14 @@ async function main() {
 
   let result: Record<string, unknown>;
   if (target === 'etf') {
-    const etf = await runEtfPaperAutoPipeline();
-    result = { tradeDate: etf.tradeDate, etf };
+    const [etf, etfEvergreen] = await Promise.all([
+      runEtfPaperAutoPipeline(),
+      runEtfPaperAutoPipeline({ bucket: 'etf-evergreen' }),
+    ]);
+    result = { tradeDate: etf.tradeDate, etf, etfEvergreen };
+  } else if (target === 'etf-evergreen') {
+    const etfEvergreen = await runEtfPaperAutoPipeline({ bucket: 'etf-evergreen' });
+    result = { tradeDate: etfEvergreen.tradeDate, etfEvergreen };
   } else if (target === 'etf-t-plus') {
     const etfTPlus = await runEtfTPlusPaperPipeline();
     result = { tradeDate: etfTPlus.tradeDate, etfTPlus };

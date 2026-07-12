@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-07-11T04:21:26.869Z",
+  "dataRoot": "/Users/wangbo/workspace/study/investment-agent/packages/agent-core/data/market-csv/stock/baidu-data/基金数据",
+  "metadataCount": 1768,
+  "listedCount": 1603,
+  "pendingCount": 39,
+  "delistedCount": 126,
+  "qfqFileCount": 1583,
+  "bfqFileCount": 1598,
+  "delistedHistoryFileCount": 123,
+  "qfqRowCount": 1426846,
+  "latestTradeDate": "20260710",
+  "latestFileCount": 1573,
+  "invalidOhlcRowCount": 176,
+  "zeroVolumeRowCount": 735,
+  "strategyPoolMissing": [],
+  "warnings": [
+    "发现 176 条非正或高低价倒挂的前复权记录，回测必须过滤。",
+    "发现 735 条零成交量记录，动态股票池应视为不可交易。",
+    "前复权 1583 只、不复权 1598 只，成交模拟前需逐标的校验双口径。"
+  ]
+}

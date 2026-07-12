@@ -16,8 +16,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const stdout = await runAgentCorePaperJson(['etf-auto-run']);
-    return NextResponse.json(JSON.parse(stdout));
+    const [etfStdout, evergreenStdout] = await Promise.all([
+      runAgentCorePaperJson(['etf-auto-run']),
+      runAgentCorePaperJson(['etf-auto-run', '--bucket', 'etf-evergreen']),
+    ]);
+    return NextResponse.json({
+      etf: JSON.parse(etfStdout),
+      etfEvergreen: JSON.parse(evergreenStdout),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'ETF 模拟盘自动任务失败';
     return NextResponse.json({ error: message }, { status: 500 });

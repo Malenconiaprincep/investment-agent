@@ -144,7 +144,7 @@ export function buildStockPaperLines(result: PaperAutoPipelineResult): string[] 
 }
 
 export function buildEtfPaperMonitorLines(result: EtfPaperPipelineResult): string[] {
-  const label = result.bucket === 'etf-t-plus' ? 'ETF 正T仓' : 'ETF 仓';
+  const label = result.bucket ? BUCKET_LABELS[result.bucket] : BUCKET_LABELS.etf;
   const lines = [
     `时间：${beijingTimeLabel()}`,
     `分仓：${label}`,
@@ -269,7 +269,11 @@ export async function notifyEtfPaperMonitor(result: EtfPaperPipelineResult): Pro
   if (!hasEtfPaperTrades(result)) return;
 
   await notifyFeishuPostSafe(
-    result.bucket === 'etf-t-plus' ? '🤖 ETF 正T仓' : '🤖 ETF 模拟盘',
+    result.bucket === 'etf-t-plus'
+      ? '🤖 ETF 正T仓'
+      : result.bucket === 'etf-evergreen'
+        ? '🌲 长青一号'
+        : '🤖 ETF 模拟盘',
     buildEtfPaperMonitorLines(result),
   );
 }

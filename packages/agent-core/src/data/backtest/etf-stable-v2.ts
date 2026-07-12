@@ -36,6 +36,7 @@ import type {
 } from './types.js';
 
 export type StableV2Regime = 'bull' | 'neutral' | 'weak' | 'bear';
+export type StableV2DrawdownStage = 'normal' | 'soft' | 'defensive' | 'hard';
 
 export type StableV2Bar = {
   tradeDate: string;
@@ -60,9 +61,13 @@ export type StableV2Config = {
   targetPortfolioVolPct: number;
   maxPositions: number;
   maxTacticalWeightPct: number;
+  benchmarkCoreWeightPct: number;
   drawdownSoftPct: number;
   drawdownDefensivePct: number;
   drawdownHardPct: number;
+  hardMinimumDays: number;
+  recoveryConfirmDays: number;
+  recoveryStepDays: number;
   positionStopLossPct: number;
   stopCooldownDays: number;
   commissionRate: number;
@@ -107,7 +112,8 @@ export type StableV2Allocation = {
   regime: StableV2Regime;
   riskAllocation: number;
   drawdownPct: number;
-  drawdownStage: 'normal' | 'soft' | 'defensive' | 'hard';
+  drawdownStage: StableV2DrawdownStage;
+  controlDrawdownPct: number;
   targetPortfolioVolPct: number;
   estimatedPortfolioVolPct: number | null;
   targets: StableV2Target[];
@@ -174,6 +180,7 @@ export type StableV2RebalanceLog = {
   riskAllocationPct: number;
   cashReservePct: number;
   drawdownPct: number;
+  controlDrawdownPct: number;
   drawdownStage: StableV2Allocation['drawdownStage'];
   estimatedPortfolioVolPct: number | null;
   targets: Array<{ symbol: string; weightPct: number; reason: string }>;
@@ -228,9 +235,13 @@ export const ETF_STABLE_V2_DEFAULT_CONFIG: Readonly<StableV2Config> = {
   targetPortfolioVolPct: 12,
   maxPositions: 4,
   maxTacticalWeightPct: 0.2,
+  benchmarkCoreWeightPct: 0.5,
   drawdownSoftPct: -6,
   drawdownDefensivePct: -9,
   drawdownHardPct: -12,
+  hardMinimumDays: 20,
+  recoveryConfirmDays: 5,
+  recoveryStepDays: 10,
   positionStopLossPct: -12,
   stopCooldownDays: 10,
   commissionRate: ETF_COMMISSION_RATE,
@@ -294,6 +305,12 @@ function resolveConfig(input: RunEtfStableV2BacktestInput = {}): StableV2Config 
       0,
       0.4,
     ),
+    benchmarkCoreWeightPct: finite(
+      input.benchmarkCoreWeightPct,
+      defaults.benchmarkCoreWeightPct,
+      0,
+      0.7,
+    ),
     drawdownSoftPct: finite(input.drawdownSoftPct, defaults.drawdownSoftPct, -20, -1),
     drawdownDefensivePct: finite(
       input.drawdownDefensivePct,
@@ -302,6 +319,24 @@ function resolveConfig(input: RunEtfStableV2BacktestInput = {}): StableV2Config 
       -2,
     ),
     drawdownHardPct: finite(input.drawdownHardPct, defaults.drawdownHardPct, -40, -3),
+    hardMinimumDays: positiveInt(
+      input.hardMinimumDays,
+      defaults.hardMinimumDays,
+      5,
+      120,
+    ),
+    recoveryConfirmDays: positiveInt(
+      input.recoveryConfirmDays,
+      defaults.recoveryConfirmDays,
+      2,
+      30,
+    ),
+    recoveryStepDays: positiveInt(
+      input.recoveryStepDays,
+      defaults.recoveryStepDays,
+      5,
+      60,
+    ),
     positionStopLossPct: finite(
       input.positionStopLossPct,
       defaults.positionStopLossPct,
@@ -444,6 +479,82 @@ function drawdownStage(
   if (drawdownPct <= config.drawdownDefensivePct) return 'defensive';
   if (drawdownPct <= config.drawdownSoftPct) return 'soft';
   return 'normal';
+}
+
+export type StableV2RiskControlState = {
+  stage: StableV2DrawdownStage;
+  stageDays: number;
+  recoveryDays: number;
+  anchorPeakEquity: number;
+};
+
+const DRAWDOWN_STAGE_RANK: Record<StableV2DrawdownStage, number> = {
+  normal: 0,
+  soft: 1,
+  defensive: 2,
+  hard: 3,
+};
+
+function nextRecoveryStage(stage: StableV2DrawdownStage): StableV2DrawdownStage {
+  if (stage === 'hard') return 'defensive';
+  if (stage === 'defensive') return 'soft';
+  if (stage === 'soft') return 'normal';
+  return 'normal';
+}
+
+/**
+ * Performance drawdown remains anchored to the true all-time equity peak. Risk control uses a
+ * separate anchor so a hard cash allocation can recover after a confirmed market trend instead
+ * of waiting for a cash ETF to regain the old portfolio peak.
+ */
+export function advanceStableV2RiskControl(input: {
+  state: StableV2RiskControlState;
+  equity: number;
+  recoveryEligible: boolean;
+  config?: StableV2Config;
+}): StableV2RiskControlState & { controlDrawdownPct: number; changed: boolean } {
+  const config = input.config ?? { ...ETF_STABLE_V2_DEFAULT_CONFIG };
+  let anchorPeakEquity = Math.max(input.state.anchorPeakEquity, input.equity);
+  let controlDrawdownPct = anchorPeakEquity > 0
+    ? ((input.equity - anchorPeakEquity) / anchorPeakEquity) * 100
+    : 0;
+  const thresholdStage = drawdownStage(controlDrawdownPct, config);
+  let stage = input.state.stage;
+  let stageDays = input.state.stageDays + 1;
+  let recoveryDays = input.recoveryEligible ? input.state.recoveryDays + 1 : 0;
+
+  if (DRAWDOWN_STAGE_RANK[thresholdStage] > DRAWDOWN_STAGE_RANK[stage]) {
+    stage = thresholdStage;
+    stageDays = 0;
+    recoveryDays = 0;
+  } else if (stage !== 'normal') {
+    const minimumDays = stage === 'hard' ? config.hardMinimumDays : config.recoveryStepDays;
+    if (
+      stageDays >= minimumDays
+      && recoveryDays >= config.recoveryConfirmDays
+    ) {
+      stage = nextRecoveryStage(stage);
+      stageDays = 0;
+      recoveryDays = 0;
+      if (input.state.stage === 'hard') {
+        anchorPeakEquity = input.equity;
+        controlDrawdownPct = 0;
+      }
+    }
+  } else if (thresholdStage !== 'normal') {
+    stage = thresholdStage;
+    stageDays = 0;
+    recoveryDays = 0;
+  }
+
+  return {
+    stage,
+    stageDays,
+    recoveryDays,
+    anchorPeakEquity,
+    controlDrawdownPct,
+    changed: stage !== input.state.stage,
+  };
 }
 
 function baseRiskAllocation(regime: StableV2Regime): number {
@@ -613,6 +724,8 @@ export function buildStableV2Allocation(input: {
   histories: StableV2History[];
   signalDate: string;
   drawdownPct?: number;
+  controlDrawdownPct?: number;
+  drawdownStageOverride?: StableV2DrawdownStage;
   excludedSymbols?: Set<string>;
   config?: StableV2Config;
 }): StableV2Allocation {
@@ -626,14 +739,45 @@ export function buildStableV2Allocation(input: {
     .filter((history) => !candidates.some((candidate) => candidate.history === history))
     .map((history) => ({ symbol: history.item.symbol, reason: '历史长度不足或当日缺少有效行情' }));
   const regime = resolveRegime(candidates);
-  const stage = drawdownStage(drawdownPct, config);
+  const controlDrawdownPct = input.controlDrawdownPct ?? drawdownPct;
+  const stage = input.drawdownStageOverride ?? drawdownStage(controlDrawdownPct, config);
   let riskAllocation = applyDrawdownRiskCap(baseRiskAllocation(regime), stage);
+  const benchmarkCandidate = candidates.find(
+    (candidate) => candidate.history.item.symbol === ETF_STABLE_V2_BENCHMARK_SYMBOL,
+  );
+  const benchmarkEligible = benchmarkCandidate != null
+    && !excludedSymbols.has(ETF_STABLE_V2_BENCHMARK_SYMBOL)
+    && benchmarkCandidate.close >= benchmarkCandidate.trendMa
+    && benchmarkCandidate.momentum60Pct > 0
+    && benchmarkCandidate.rawMomentumPct > 0;
+  const desiredBenchmarkCoreWeight = benchmarkEligible
+    ? regime === 'bull'
+      ? config.benchmarkCoreWeightPct
+      : regime === 'neutral'
+        ? config.benchmarkCoreWeightPct / 2
+        : 0
+    : 0;
 
   const provisionalRiskCount = Math.min(
     Math.max(0, Math.round(riskAllocation * config.maxPositions)),
     Math.max(0, config.maxPositions - 1),
   );
-  let riskCandidates = selectRiskCandidates(candidates, provisionalRiskCount, excludedSymbols);
+  const satelliteExclusions = new Set(excludedSymbols);
+  if (desiredBenchmarkCoreWeight > 0) {
+    satelliteExclusions.add(ETF_STABLE_V2_BENCHMARK_SYMBOL);
+  }
+  const satelliteCount = Math.max(
+    0,
+    provisionalRiskCount - (desiredBenchmarkCoreWeight > 0 ? 1 : 0),
+  );
+  const satelliteCandidates = selectRiskCandidates(
+    candidates,
+    satelliteCount,
+    satelliteExclusions,
+  );
+  let riskCandidates = desiredBenchmarkCoreWeight > 0 && benchmarkCandidate
+    ? [benchmarkCandidate, ...satelliteCandidates]
+    : satelliteCandidates;
   if (riskCandidates.length === 0) riskAllocation = 0;
   const defensiveCount = Math.max(1, config.maxPositions - riskCandidates.length);
   let defensiveCandidates = selectDefensiveCandidates(
@@ -642,11 +786,27 @@ export function buildStableV2Allocation(input: {
     stage === 'hard',
   );
 
-  let riskWeights = cappedInverseVolWeights(
-    riskCandidates,
-    riskAllocation,
-    config.maxTacticalWeightPct,
-  );
+  const buildRiskWeights = (totalRiskWeight: number): Map<string, number> => {
+    if (totalRiskWeight <= 0 || riskCandidates.length === 0) return new Map();
+    const benchmarkWeight = benchmarkCandidate && riskCandidates.includes(benchmarkCandidate)
+      ? Math.min(
+          totalRiskWeight,
+          desiredBenchmarkCoreWeight,
+          benchmarkCandidate.history.item.maxWeight,
+        )
+      : 0;
+    const satelliteWeight = Math.max(0, totalRiskWeight - benchmarkWeight);
+    const weights = cappedInverseVolWeights(
+      satelliteCandidates,
+      satelliteWeight,
+      config.maxTacticalWeightPct,
+    );
+    if (benchmarkWeight > 0) {
+      weights.set(ETF_STABLE_V2_BENCHMARK_SYMBOL, benchmarkWeight);
+    }
+    return weights;
+  };
+  let riskWeights = buildRiskWeights(riskAllocation);
   const allocatedRisk = [...riskWeights.values()].reduce((sum, value) => sum + value, 0);
   let defensiveWeights = cappedInverseVolWeights(
     defensiveCandidates,
@@ -666,11 +826,7 @@ export function buildStableV2Allocation(input: {
     }
     const volatilityScale = clamp(config.targetPortfolioVolPct / estimatedVol, 0, 1);
     riskAllocation *= volatilityScale;
-    riskWeights = cappedInverseVolWeights(
-      riskCandidates,
-      riskAllocation,
-      config.maxTacticalWeightPct,
-    );
+    riskWeights = buildRiskWeights(riskAllocation);
     const nextRisk = [...riskWeights.values()].reduce((sum, value) => sum + value, 0);
     defensiveWeights = cappedInverseVolWeights(
       defensiveCandidates,
@@ -709,6 +865,7 @@ export function buildStableV2Allocation(input: {
       .reduce((sum, target) => sum + target.targetWeight, 0),
     drawdownPct,
     drawdownStage: stage,
+    controlDrawdownPct,
     targetPortfolioVolPct: config.targetPortfolioVolPct,
     estimatedPortfolioVolPct: estimatedVol,
     targets,
@@ -1119,7 +1276,12 @@ function simulateStablePortfolio(input: {
   let pending: PendingAllocation | null = null;
   let cash = input.config.initialCapital;
   let peakEquity = input.config.initialCapital;
-  let previousStage: StableV2Allocation['drawdownStage'] = 'normal';
+  let riskControl: StableV2RiskControlState = {
+    stage: 'normal',
+    stageDays: 0,
+    recoveryDays: 0,
+    anchorPeakEquity: input.config.initialCapital,
+  };
   let daysSinceSignal = Number.POSITIVE_INFINITY;
   let totalTradingCost = 0;
   let turnoverAmount = 0;
@@ -1147,7 +1309,24 @@ function simulateStablePortfolio(input: {
     let equity = portfolioValue(cash, positions, tradeDate);
     peakEquity = Math.max(peakEquity, equity);
     const currentDrawdown = peakEquity > 0 ? ((equity - peakEquity) / peakEquity) * 100 : 0;
-    const currentStage = drawdownStage(currentDrawdown, input.config);
+    const marketCandidates = input.histories
+      .map((history) => scoreCandidate(history, tradeDate, input.config))
+      .filter((candidate): candidate is StableV2Candidate => candidate != null);
+    const marketRegime = resolveRegime(marketCandidates);
+    const nextRiskControl = advanceStableV2RiskControl({
+      state: riskControl,
+      equity,
+      recoveryEligible: marketRegime === 'bull' || marketRegime === 'neutral',
+      config: input.config,
+    });
+    const currentStage = nextRiskControl.stage;
+    const stageChanged = nextRiskControl.changed;
+    riskControl = {
+      stage: nextRiskControl.stage,
+      stageDays: nextRiskControl.stageDays,
+      recoveryDays: nextRiskControl.recoveryDays,
+      anchorPeakEquity: nextRiskControl.anchorPeakEquity,
+    };
     let stopTriggered = false;
     for (const position of positions.values()) {
       if (!isStableRiskAsset(position.history.item.assetClass)) continue;
@@ -1165,7 +1344,6 @@ function simulateStablePortfolio(input: {
     }
 
     daysSinceSignal += 1;
-    const stageChanged = currentStage !== previousStage;
     const shouldSignal =
       dateIndex < input.allDates.length - 1
       && pending == null
@@ -1179,6 +1357,8 @@ function simulateStablePortfolio(input: {
         histories: input.histories,
         signalDate: tradeDate,
         drawdownPct: currentDrawdown,
+        controlDrawdownPct: nextRiskControl.controlDrawdownPct,
+        drawdownStageOverride: currentStage,
         excludedSymbols: excluded,
         config: input.config,
       });
@@ -1200,6 +1380,7 @@ function simulateStablePortfolio(input: {
             ) * 100,
           ),
           drawdownPct: round(currentDrawdown),
+          controlDrawdownPct: round(nextRiskControl.controlDrawdownPct),
           drawdownStage: allocation.drawdownStage,
           estimatedPortfolioVolPct:
             allocation.estimatedPortfolioVolPct == null
@@ -1214,8 +1395,6 @@ function simulateStablePortfolio(input: {
         daysSinceSignal = 0;
       }
     }
-    previousStage = currentStage;
-
     equity = portfolioValue(cash, positions, tradeDate);
     const invested = [...positions.values()].reduce(
       (sum, position) => sum + markPosition(position, tradeDate),
@@ -1673,11 +1852,15 @@ export async function runEtfStableV2Backtest(
       volTargetPct: config.targetPortfolioVolPct,
       targetPortfolioVolPct: config.targetPortfolioVolPct,
       maxTacticalWeightPct: config.maxTacticalWeightPct * 100,
+      benchmarkCoreWeightPct: config.benchmarkCoreWeightPct * 100,
       drawdownGuardPct: [
         config.drawdownSoftPct,
         config.drawdownDefensivePct,
         config.drawdownHardPct,
       ],
+      hardMinimumDays: config.hardMinimumDays,
+      recoveryConfirmDays: config.recoveryConfirmDays,
+      recoveryStepDays: config.recoveryStepDays,
       commissionRate: config.commissionRate,
       slippageRate: config.slippageRate,
       minimumCommission: config.minimumCommission,
@@ -1692,7 +1875,8 @@ export async function runEtfStableV2Backtest(
       'Stable V2 使用 20/60/120 日多周期动量和波动率调整评分。',
       '所有信号在 T 日收盘后生成，统一按 T+1 开盘价并计入滑点、佣金和最低佣金执行。',
       '风险资产按市场广度分为牛市/中性/弱市/熊市四档，并叠加 -6%/-9%/-12% 回撤分级。',
-      '同一风险集群最多一只，战术主题总权重不超过 20%，其余配置黄金、国债或货币 ETF。',
+      `硬风控至少维持 ${config.hardMinimumDays} 个交易日；市场恢复至牛市/中性并连续确认 ${config.recoveryConfirmDays} 日后，按每 ${config.recoveryStepDays} 日一级的节奏从硬风控逐级恢复。绩效回撤仍按真实历史峰值统计，风险控制另用独立锚点避免现金仓永久锁死。`,
+      `同一风险集群最多一只，战术主题总权重不超过 20%；牛市中沪深300核心目标权重为 ${config.benchmarkCoreWeightPct * 100}%，中性市场减半，其余配置海外、行业、黄金、国债或货币 ETF。`,
       loaded.usedLocalCsv
         ? '行情优先使用本地前复权 ETF 日线 CSV。'
         : '本次由调用方注入行情或使用远端日线。',

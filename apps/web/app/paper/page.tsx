@@ -66,6 +66,31 @@ type StockBacktestManualCheckProgress = {
   elapsedMs: number;
 };
 
+type CapitalReadiness = {
+  decision: 'not_ready' | 'eligible_for_small_tranche';
+  canAcceptRealCapital: boolean;
+  allowedInitialCapitalTranchePct: number;
+  minimumRemainingTradingDays: number;
+  estimatedEarliestReviewDate: string;
+  blockers: string[];
+  gates: {
+    historical: { passed: boolean; annualizedReturnPct: number | null; maxDrawdownPct: number | null };
+    data: { passed: boolean; latestTradeDate: string | null; dataAgeDays: number | null };
+    shadowExecution: { passed: boolean; validDays: number; requiredDays: number; averageAbsGapPct: number | null };
+    paperExecution: { passed: boolean; tradingDays: number; requiredTradingDays: number; tradeCount: number; requiredTrades: number };
+    observedRisk: { passed: boolean; maxDrawdownPct: number | null; limitPct: number };
+    reviewDiscipline: { passed: boolean; weeklyReviewCount: number; requiredWeeklyReviews: number };
+  };
+  dualSleeveLedger: {
+    tradingDays: number;
+    orderCount: number;
+    rebalanceCount: number;
+    totalValue: number;
+    returnPct: number;
+    maxDrawdownPct: number | null;
+  };
+};
+
 type StockBacktestManualCheckStreamEvent =
   | StockBacktestManualCheckProgress
   | { type: 'result'; result: StockBacktestManualCheckResult }
@@ -165,7 +190,21 @@ function fmtElapsed(ms: number) {
   return `${minutes}m ${rest}s`;
 }
 
+function fmtDate(value: string | null | undefined) {
+  if (!value) return '—';
+  const key = value.replace(/-/g, '').slice(0, 8);
+  return key.length === 8
+    ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`
+    : value;
+}
+
+function progressPct(current: number, required: number) {
+  if (required <= 0) return 100;
+  return Math.min(100, Math.max(0, (current / required) * 100));
+}
+
 function formatTradeSource(trade: Trade) {
+  if (trade.note?.includes('长青一号 V3') || trade.note?.includes('长青一号 Stable V2')) return '长青一号';
   if (trade.note?.includes('ETF 正T')) return 'ETF 正T';
   if (trade.note?.includes('ETF 动量')) return 'ETF 动量';
   if (trade.note?.startsWith('monitor-watchlist:')) return '消息雷达';
@@ -305,6 +344,7 @@ function buildDailyTradeGroups(
   }
 
   const bucketOrder: DailyTradeBucketKey[] = [
+    'etf-evergreen',
     'etf',
     'etf-t-plus',
     'stock',
@@ -349,6 +389,7 @@ function bucketLabel(bucket: PaperBucket) {
 }
 
 function bucketShortLabel(bucket: PaperBucketKey) {
+  if (bucket === 'etf-evergreen') return '长青一号';
   if (bucket === 'etf') return 'ETF';
   if (bucket === 'etf-t-plus') return '正T';
   if (bucket === 'stock') return '雷达股';
@@ -359,6 +400,7 @@ function bucketShortLabel(bucket: PaperBucketKey) {
 function isPaperBucketKey(value: unknown): value is PaperBucketKey {
   return (
     value === 'etf' ||
+    value === 'etf-evergreen' ||
     value === 'etf-t-plus' ||
     value === 'stock' ||
     value === 'stock-backtest' ||
@@ -387,9 +429,10 @@ export default function PaperTradingPage() {
   const [dual, setDual] = useState<DualPaperPayload | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [equity, setEquity] = useState<EquityPoint[]>([]);
-  const [activeBucket, setActiveBucket] = useState<PaperBucket>('etf');
+  const [activeBucket, setActiveBucket] = useState<PaperBucket>('etf-evergreen');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [capitalReadiness, setCapitalReadiness] = useState<CapitalReadiness | null>(null);
   const [manualCheckRunning, setManualCheckRunning] = useState(false);
   const [manualCheckResult, setManualCheckResult] =
     useState<StockBacktestManualCheckResult | null>(null);
@@ -407,7 +450,7 @@ export default function PaperTradingPage() {
     }
     try {
       const bucketQuery = `&bucket=${activeBucket}`;
-      const [accountRes, tradesRes, equityRes] = await Promise.all([
+      const [accountRes, tradesRes, equityRes, readinessRes] = await Promise.all([
         fetch('/api/paper', { cache: 'no-store' }),
         fetch(
           `/api/paper/trades?limit=200${bucketQuery}`,
@@ -416,11 +459,16 @@ export default function PaperTradingPage() {
         fetch(`/api/paper/equity?limit=90${bucketQuery}`, {
           cache: 'no-store',
         }),
+        fetch('/api/paper/capital-readiness', { cache: 'no-store' }),
       ]);
 
       const accountJson = await accountRes.json();
       if (!accountRes.ok) throw new Error(accountJson.error ?? '加载失败');
       setDual(normalizeDualPaperPayload(accountJson));
+
+      if (readinessRes.ok) {
+        setCapitalReadiness((await readinessRes.json()) as CapitalReadiness);
+      }
 
       const equityJson = await equityRes.json();
       setEquity(
@@ -512,7 +560,7 @@ export default function PaperTradingPage() {
   }, [load]);
 
   const view = useMemo(() => {
-    if (!dual?.etf || !dual?.etfTPlus || !dual?.stock || !dual?.combined) return null;
+    if (!dual?.etf || !dual?.etfEvergreen || !dual?.etfTPlus || !dual?.stock || !dual?.combined) return null;
     return resolvePaperView(dual, activeBucket);
   }, [dual, activeBucket]);
 
@@ -523,6 +571,30 @@ export default function PaperTradingPage() {
   const positionCount = view?.positions?.length ?? 0;
   const strategyStatusItems = useMemo(() => {
     if (!view) return [];
+    if (activeBucket === 'etf-evergreen') {
+      return [
+        {
+          label: '验证状态',
+          value: capitalReadiness?.gates.historical.passed
+            ? '历史通过 · 影子观察中'
+            : '历史验证未通过',
+        },
+        {
+          label: '真实资金',
+          value: capitalReadiness?.canAcceptRealCapital
+            ? `首批上限 ${capitalReadiness.allowedInitialCapitalTranchePct}%`
+            : '当前不可投入',
+        },
+        {
+          label: '最少剩余',
+          value: `${capitalReadiness?.minimumRemainingTradingDays ?? '—'} 个有效交易日`,
+        },
+        {
+          label: '最早复核估算',
+          value: capitalReadiness?.estimatedEarliestReviewDate ?? '等待首日证据',
+        },
+      ];
+    }
     if (activeBucket === 'etf') {
       return [
         {
@@ -560,7 +632,61 @@ export default function PaperTradingPage() {
       ];
     }
     return [];
-  }, [activeBucket, view]);
+  }, [activeBucket, capitalReadiness, view]);
+  const readinessRows = useMemo(() => {
+    if (!capitalReadiness) return [];
+    const { gates } = capitalReadiness;
+    return [
+      {
+        key: 'historical',
+        label: '历史验证',
+        passed: gates.historical.passed,
+        value: `年化 ${gates.historical.annualizedReturnPct?.toFixed(2) ?? '—'}% · 回撤 ${gates.historical.maxDrawdownPct?.toFixed(2) ?? '—'}%`,
+        progress: gates.historical.passed ? 100 : 0,
+      },
+      {
+        key: 'data',
+        label: '数据质量',
+        passed: gates.data.passed,
+        value: `行情 ${fmtDate(gates.data.latestTradeDate)} · 延迟 ${gates.data.dataAgeDays ?? '—'} 天`,
+        progress: gates.data.passed ? 100 : 0,
+      },
+      {
+        key: 'shadow',
+        label: 'T+1 影子执行',
+        passed: gates.shadowExecution.passed,
+        value: `${gates.shadowExecution.validDays}/${gates.shadowExecution.requiredDays} 日 · 平均跳空 ${gates.shadowExecution.averageAbsGapPct?.toFixed(2) ?? '—'}%`,
+        progress: progressPct(gates.shadowExecution.validDays, gates.shadowExecution.requiredDays),
+      },
+      {
+        key: 'paper',
+        label: '双袖套模拟',
+        passed: gates.paperExecution.passed,
+        value: `${gates.paperExecution.tradingDays}/${gates.paperExecution.requiredTradingDays} 日 · ${gates.paperExecution.tradeCount}/${gates.paperExecution.requiredTrades} 笔`,
+        progress: Math.min(
+          progressPct(gates.paperExecution.tradingDays, gates.paperExecution.requiredTradingDays),
+          progressPct(gates.paperExecution.tradeCount, gates.paperExecution.requiredTrades),
+        ),
+      },
+      {
+        key: 'risk',
+        label: '观察风险',
+        passed: gates.observedRisk.passed,
+        value: `回撤 ${gates.observedRisk.maxDrawdownPct?.toFixed(2) ?? '—'}% · 红线 ${gates.observedRisk.limitPct}%`,
+        progress: gates.observedRisk.maxDrawdownPct == null ? 0 : 100,
+      },
+      {
+        key: 'review',
+        label: '复盘纪律',
+        passed: gates.reviewDiscipline.passed,
+        value: `${gates.reviewDiscipline.weeklyReviewCount}/${gates.reviewDiscipline.requiredWeeklyReviews} 周`,
+        progress: progressPct(
+          gates.reviewDiscipline.weeklyReviewCount,
+          gates.reviewDiscipline.requiredWeeklyReviews,
+        ),
+      },
+    ];
+  }, [capitalReadiness]);
   const dailyEquityRows = useMemo(
     () => buildDailyEquityRows(equity ?? []),
     [equity],
@@ -578,7 +704,7 @@ export default function PaperTradingPage() {
     <main className="page page--list">
       <PageHeader
         title="模拟操盘"
-        description="五个分仓独立统计：ETF 动量、ETF 正T、雷达股票、回测策略、回测策略+新闻。成交按真实盘口（买=卖一、卖=买一）。"
+        description="ETF 与股票分仓独立统计；长青一号专注 ETF，当前按 T+1 价格证据运行双袖套影子账本。"
       />
 
       <div className="paper-bucket-tabs" role="tablist" aria-label="模拟分仓">
@@ -648,6 +774,111 @@ export default function PaperTradingPage() {
                   <strong>{item.value}</strong>
                 </div>
               ))}
+            </section>
+          )}
+
+          {activeBucket === 'etf-evergreen' && capitalReadiness && (
+            <section className="pane-card paper-readiness" aria-labelledby="capital-readiness-title">
+              <div className="paper-readiness-head">
+                <div>
+                  <h3 id="capital-readiness-title" className="pane-card-title">
+                    真实资金准入
+                  </h3>
+                  <p className="muted paper-readiness-copy">
+                    六道门全部通过后，才允许投入计划资金的 10%。当前仅运行 ETF 影子计划与双袖套虚拟账本。
+                  </p>
+                </div>
+                <span
+                  className={`paper-readiness-decision${
+                    capitalReadiness.canAcceptRealCapital
+                      ? ' paper-readiness-decision--ready'
+                      : ''
+                  }`}
+                >
+                  {capitalReadiness.canAcceptRealCapital ? '允许首批小额资金' : '暂不接受真实资金'}
+                </span>
+              </div>
+
+              <div className="paper-readiness-summary">
+                <div>
+                  <span>最少还需</span>
+                  <strong>{capitalReadiness.minimumRemainingTradingDays} 个有效交易日</strong>
+                </div>
+                <div>
+                  <span>最早复核估算</span>
+                  <strong>{capitalReadiness.estimatedEarliestReviewDate}</strong>
+                </div>
+                <div>
+                  <span>双袖套账本</span>
+                  <strong>
+                    {capitalReadiness.dualSleeveLedger.tradingDays} 日 ·{' '}
+                    {capitalReadiness.dualSleeveLedger.orderCount} 笔
+                  </strong>
+                </div>
+                <div>
+                  <span>虚拟净值</span>
+                  <strong>
+                    {fmtMoney(capitalReadiness.dualSleeveLedger.totalValue)} ·{' '}
+                    {fmtSignedPct(capitalReadiness.dualSleeveLedger.returnPct)}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="paper-readiness-gates" aria-label="资金准入六道门">
+                {readinessRows.map((item) => (
+                  <div className="paper-readiness-gate" key={item.key}>
+                    <div className="paper-readiness-gate-line">
+                      <span className={item.passed ? 'paper-gate-pass' : 'paper-gate-wait'}>
+                        {item.passed ? '通过' : '观察'}
+                      </span>
+                      <strong>{item.label}</strong>
+                      <small>{item.value}</small>
+                    </div>
+                    <div className="paper-readiness-track" aria-hidden>
+                      <span style={{ width: `${item.progress}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {view.shadowPlan && (
+                <div className="paper-shadow-targets">
+                  <div className="paper-shadow-targets-head">
+                    <div>
+                      <h4>下一交易日 ETF 影子目标</h4>
+                      <span>
+                        信号 {fmtDate(view.shadowPlan.signalDate)} · 执行{' '}
+                        {fmtDate(view.shadowPlan.executionDate)}
+                      </span>
+                    </div>
+                    <strong>
+                      主动现金 {view.shadowPlan.cashReservePct?.toFixed(2) ?? '—'}%
+                    </strong>
+                  </div>
+                  <div className="table-scroll-wrap">
+                    <table className="candidate-table paper-shadow-table">
+                      <thead>
+                        <tr>
+                          <th>代码</th>
+                          <th>ETF</th>
+                          <th>袖套</th>
+                          <th>目标权重</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {view.shadowPlan.targets.map((target) => (
+                          <tr key={`${target.symbol}-${target.assetClass ?? ''}`}>
+                            <td>{target.symbol}</td>
+                            <td>{target.name}</td>
+                            <td>{target.assetClass?.split(':')[0] ?? '组合'}</td>
+                            <td className="paper-num">{target.targetWeightPct.toFixed(2)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -766,7 +997,9 @@ export default function PaperTradingPage() {
             )}
             {!(view.positions?.length) ? (
               <div className="empty-state">
-                {activeBucket === 'etf'
+                {activeBucket === 'etf-evergreen'
+                  ? '长青一号暂无真实模拟持仓。ETF 影子目标与增长/防守双袖套虚拟账本正在并行累计，六道资金门全部通过前不会自动下单。'
+                  : activeBucket === 'etf'
                   ? 'ETF 仓暂无持仓。交易时段内每 30 分钟自动监听，条件满足即按动量轮动调仓。'
                   : activeBucket === 'etf-t-plus'
                     ? 'ETF 正T仓暂无持仓。先用 etf-t-plus-init 从 ETF 仓同步一次底仓，之后交易时段每 30 分钟观察自身持仓的正T机会。'

@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-07-10T07:49:31.913Z",
+  "generatedAt": "2026-07-10T08:23:36.347Z",
   "weekStart": "2026-07-04",
   "weekEnd": "2026-07-10",
   "paper": {
-    "currentValue": 48192,
+    "currentValue": 100000,
     "stableStartedAt": "2026-07-10",
-    "stableBaselineValue": 48192,
+    "stableBaselineValue": 100000,
     "stableCumulativeReturnPct": 0,
-    "accountCumulativeReturnPct": -3.62,
+    "accountCumulativeReturnPct": 0,
     "weekReturnPct": 0,
     "weekMaxDrawdownPct": null,
     "currentDrawdownPct": 0,
-    "accountCurrentDrawdownPct": -6.23,
+    "accountCurrentDrawdownPct": 0,
     "tradeCount": 0,
     "missingReasonCount": 0
   },
@@ -42,8 +42,7 @@
   },
   "observations": [
     "Stable V2 今日刚建立独立基线，尚未形成首个切换后收盘快照；本期只记录起点，不评价收益。",
-    "组合已触发至少一级回撤保护，应核对下一次计划是否降低风险资产权重。",
-    "Stable V2 复盘从切换日单独建立资产基线，旧策略损益只作为账户背景，不计入 V2 收益。",
+    "Stable V2 复盘只读取长青一号独立仓，不混入旧 ETF 仓的持仓、成交或历史损益。",
     "历史累计交易成本较高，本周应重点核对是否发生无必要的小额再平衡。"
   ],
   "lessons": [
@@ -52,7 +51,7 @@
     "只有重复出现且能在历史固定场景中复现的问题，才进入参数候选清单。"
   ],
   "nextActions": [
-    "下次运行前核对回撤档位、现金/国债目标权重与实际持仓是否一致。",
+    "继续观察风险资产实际权重是否围绕目标权重运行。",
     "保持成交理由字段完整，累积可用于归因的样本。",
     "月底比较过去 4 份周复盘，提炼重复问题并建立一次带 changeset 的验证实验。"
   ],

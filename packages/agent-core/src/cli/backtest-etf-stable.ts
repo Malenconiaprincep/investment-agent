@@ -108,7 +108,7 @@ function renderReport(input: {
   const topAttribution = result.attribution.bySymbol.slice(0, 6);
   const bottomAttribution = result.attribution.bySymbol.slice(-4).reverse();
   return [
-    `# ETF Stable V2 历史回测（${result.startDate} ~ ${result.endDate}）`,
+    `# 长青一号（ETF Stable V2）历史回测（${result.startDate} ~ ${result.endDate}）`,
     '',
     '> 本报告使用 T 日收盘信号、T+1 开盘执行，包含滑点、佣金、最低佣金和整手约束。历史结果仅是策略验证，不构成收益保证。',
     '',
@@ -121,7 +121,7 @@ function renderReport(input: {
     '',
     '## 核心指标',
     '',
-    '| 指标 | Stable V2 | 沪深300ETF基准 |',
+    '| 指标 | 长青一号（Stable V2） | 沪深300ETF基准 |',
     '| --- | ---: | ---: |',
     `| 累计收益 | ${pct(metrics.totalReturnPct)} | ${pct(result.benchmark?.finalReturnPct)} |`,
     `| 复合年化 | ${pct(metrics.annualizedReturnPct)} | — |`,

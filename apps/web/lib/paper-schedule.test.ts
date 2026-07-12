@@ -20,13 +20,14 @@ function payload(overrides: Partial<DualPaperPayload['etf']> = {}): DualPaperPay
 
   return {
     etf: { ...bucket, ...overrides },
+    etfEvergreen: { ...bucket, bucket: 'etf-evergreen' as const },
     etfTPlus: { ...bucket, bucket: 'etf-t-plus' as const },
     stock: { ...bucket, bucket: 'stock' as const },
     stockBacktest: { ...bucket, bucket: 'stock-backtest' as const },
     stockBacktestNews: { ...bucket, bucket: 'stock-backtest-news' as const },
     combined: {
-      totalValue: 500_000,
-      initialCash: 500_000,
+      totalValue: 600_000,
+      initialCash: 600_000,
       returnPct: 0,
       tradeDate: '2026-07-09',
       isTradingSession: true,
@@ -83,5 +84,20 @@ describe('paper schedule enrichment', () => {
 
     expect(enriched.etf.lastRebalanceDate).toBe('2026-06-29');
     expect(enriched.etf.nextRebalanceDate).toBe('2026-07-13');
+  });
+
+  it('enriches the Evergreen schedule independently from the legacy ETF bucket', async () => {
+    const data = payload({ lastRebalanceDate: '2026-06-29' });
+    data.etfEvergreen = {
+      ...data.etfEvergreen,
+      tradeDate: '2026-07-09',
+      lastRebalanceDate: null,
+    };
+
+    const enriched = await enrichPaperScheduleFields(data);
+
+    expect(enriched.etf.nextRebalanceDate).toBe('2026-07-13');
+    expect(enriched.etfEvergreen.nextRebalanceDate).toBe('2026-07-09');
+    expect(enriched.etfEvergreen.lastRebalanceDate).toBeNull();
   });
 });

@@ -54,6 +54,7 @@ describe('backtest args', () => {
     expect(getBacktestArgsFromSearchParams(params)).toEqual([
       'etf-momentum',
       '365',
+      '--next-open',
       '--from=2025-01-01',
       '--to=2025-12-31',
       '--capital=100000',
@@ -85,6 +86,23 @@ describe('backtest args', () => {
       '--capital=100000',
       '--rebalance=20',
       '--vol-target=12',
+    ]);
+  });
+
+  it('passes Evergreen V3 dates and capital to the agent-core CLI', () => {
+    const params = new URLSearchParams({
+      strategy: 'etf-evergreen',
+      startDate: '2014-01-01',
+      endDate: '2026-07-10',
+      initialCapital: '200000',
+    });
+
+    expect(getBacktestArgsFromSearchParams(params)).toEqual([
+      'etf-evergreen',
+      String(365 * 10),
+      '--from=2014-01-01',
+      '--to=2026-07-10',
+      '--capital=200000',
     ]);
   });
 });

@@ -27,7 +27,7 @@ export const ETF_STABLE_V2_UNIVERSE: ReadonlyArray<StableEtfUniverseItem> = [
     name: '沪深300ETF',
     assetClass: 'equity_core',
     riskCluster: 'china_large_cap',
-    maxWeight: 0.35,
+    maxWeight: 0.6,
   },
   {
     exchangeCode: 'sh513500',

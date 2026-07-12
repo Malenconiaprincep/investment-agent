@@ -13,6 +13,7 @@ import {
   BUCKET_INITIAL_CASH,
   BUCKET_LABELS,
   BUCKET_MAX_POSITIONS,
+  ETF_EVERGREEN_BUCKET,
   ETF_MOMENTUM_REBALANCE_DAYS,
   ETF_T_PLUS_BUCKET,
   PAPER_BUCKETS,
@@ -90,7 +91,34 @@ export type PaperBucketState = {
   bucket: PaperBucket;
   lastRebalanceDate: string | null;
   cooldownUntil: Record<string, string>;
+  shadowPlan: PaperShadowPlan | null;
   updatedAt: string;
+};
+
+export type PaperShadowPlan = {
+  strategy: string;
+  signalDate: string;
+  executionDate: string;
+  generatedAt: string;
+  cashReservePct?: number;
+  sleeves?: Record<string, {
+    rebalanceDays: number;
+    stopLossPct: number;
+    stopCooldownDays: number;
+    targets: Array<{
+      symbol: string;
+      name: string;
+      targetWeightPct: number;
+      assetClass?: string;
+    }>;
+  }>;
+  targets: Array<{
+    symbol: string;
+    name: string;
+    targetWeightPct: number;
+    assetClass?: string;
+    reason?: string;
+  }>;
 };
 
 export type PaperAutoRun = {
@@ -282,8 +310,12 @@ async function migrateBucketSchema(db: Client): Promise<void> {
     bucket TEXT PRIMARY KEY,
     last_rebalance_date TEXT,
     cooldown_json TEXT,
+    shadow_plan_json TEXT,
     updated_at TEXT NOT NULL
   )`);
+  if (!(await columnExists(db, 'paper_bucket_state', 'shadow_plan_json'))) {
+    await db.execute(`ALTER TABLE paper_bucket_state ADD COLUMN shadow_plan_json TEXT`);
+  }
 
   for (const bucket of PAPER_BUCKETS) {
     const existing = await db.execute({
@@ -998,7 +1030,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
     isTradingSession: (await import('./trading-calendar.js')).isTradingSession(),
   };
 
-  if (bucket === 'etf') {
+  if (bucket === 'etf' || bucket === ETF_EVERGREEN_BUCKET) {
     const state = await getPaperBucketState(bucket);
     return {
       ...summary,
@@ -1009,6 +1041,7 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
       }),
       nextTradeDate: getNextTradeDateLabel(),
       rebalanceDays: ETF_MOMENTUM_REBALANCE_DAYS,
+      shadowPlan: bucket === ETF_EVERGREEN_BUCKET ? state.shadowPlan : null,
     };
   }
 
@@ -1023,18 +1056,20 @@ export async function getPaperAccountSummary(bucket: PaperBucket = 'stock') {
 }
 
 export async function getPaperDualSummary() {
-  const [etf, etfTPlus, stock, stockBacktest, stockBacktestNews] = await Promise.all([
+  const [etf, etfEvergreen, etfTPlus, stock, stockBacktest, stockBacktestNews] = await Promise.all([
     getPaperAccountSummary('etf'),
+    getPaperAccountSummary(ETF_EVERGREEN_BUCKET),
     getPaperAccountSummary(ETF_T_PLUS_BUCKET),
     getPaperAccountSummary('stock'),
     getPaperAccountSummary('stock-backtest'),
     getPaperAccountSummary('stock-backtest-news'),
   ]);
-  const buckets = [etf, etfTPlus, stock, stockBacktest, stockBacktestNews];
+  const buckets = [etf, etfEvergreen, etfTPlus, stock, stockBacktest, stockBacktestNews];
   const totalInitial = buckets.reduce((sum, item) => sum + item.account.initialCash, 0);
   const totalValue = buckets.reduce((sum, item) => sum + item.totalValue, 0);
   return {
     etf,
+    etfEvergreen,
     etfTPlus,
     stock,
     stockBacktest,
@@ -1345,6 +1380,7 @@ export async function getPaperBucketState(
       bucket,
       lastRebalanceDate: null,
       cooldownUntil: {},
+      shadowPlan: null,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -1355,6 +1391,9 @@ export async function getPaperBucketState(
     cooldownUntil: row.cooldown_json
       ? (JSON.parse(String(row.cooldown_json)) as Record<string, string>)
       : {},
+    shadowPlan: row.shadow_plan_json
+      ? (JSON.parse(String(row.shadow_plan_json)) as PaperShadowPlan)
+      : null,
     updatedAt: String(row.updated_at),
   };
 }
@@ -1363,6 +1402,7 @@ export async function savePaperBucketState(input: {
   bucket: PaperBucket;
   lastRebalanceDate?: string | null;
   cooldownUntil?: Record<string, string>;
+  shadowPlan?: PaperShadowPlan | null;
 }): Promise<PaperBucketState> {
   const db = await getDb();
   const current = await getPaperBucketState(input.bucket);
@@ -1373,19 +1413,22 @@ export async function savePaperBucketState(input: {
         ? input.lastRebalanceDate
         : current.lastRebalanceDate,
     cooldownUntil: input.cooldownUntil ?? current.cooldownUntil,
+    shadowPlan: input.shadowPlan !== undefined ? input.shadowPlan : current.shadowPlan,
     updatedAt: new Date().toISOString(),
   };
   await db.execute({
-    sql: `INSERT INTO paper_bucket_state (bucket, last_rebalance_date, cooldown_json, updated_at)
-          VALUES (?, ?, ?, ?)
+    sql: `INSERT INTO paper_bucket_state (bucket, last_rebalance_date, cooldown_json, shadow_plan_json, updated_at)
+          VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(bucket) DO UPDATE SET
             last_rebalance_date = excluded.last_rebalance_date,
             cooldown_json = excluded.cooldown_json,
+            shadow_plan_json = excluded.shadow_plan_json,
             updated_at = excluded.updated_at`,
     args: [
       next.bucket,
       next.lastRebalanceDate,
       JSON.stringify(next.cooldownUntil),
+      next.shadowPlan ? JSON.stringify(next.shadowPlan) : null,
       next.updatedAt,
     ],
   });
